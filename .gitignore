@@ -1,0 +1,10 @@
+dist/
+__pycache__/
+*.pyc
+# Files and Settings apps are not finished yet; kept out of the repo until they are.
+src/harbor/files*.py
+src/harbor/settings*.py
+tests/test_files.py
+tests/test_settings.py
+# Reference screenshots of a third-party OS, local only.
+docs/reference/

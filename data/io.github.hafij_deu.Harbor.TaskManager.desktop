@@ -1,0 +1,21 @@
+[Desktop Entry]
+Type=Application
+Name=Harbor Task Manager
+GenericName=Task Manager
+Comment=See running apps and processes, performance, startup apps and services
+Exec=harbor-taskmgr
+Icon=io.github.hafij_deu.Harbor.TaskManager
+Terminal=false
+Categories=GTK;System;Monitor;
+Keywords=task manager;process;kill;cpu;memory;performance;startup;services;end task;
+StartupNotify=true
+SingleMainWindow=true
+Actions=performance;details;
+
+[Desktop Action performance]
+Name=Performance
+Exec=harbor-taskmgr --page performance
+
+[Desktop Action details]
+Name=Details
+Exec=harbor-taskmgr --page details
