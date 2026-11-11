@@ -7,6 +7,7 @@ import threading
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango
 
 from . import files_core as fc
+from . import files_icons
 from . import files_menus as fm
 from . import files_sidebar as fsb
 from .common import greeting, human_size, user_display_name
@@ -31,9 +32,9 @@ def _label(text="", *classes, xalign=0.0, wrap=False, ellipsize=True, selectable
 def _image(icon, size):
     img = Gtk.Image(pixel_size=size)
     if isinstance(icon, Gio.Icon):
-        img.set_from_gicon(icon)
+        img.set_from_gicon(files_icons.themed_gicon(icon))
     elif icon:
-        img.set_from_icon_name(icon)
+        img.set_from_icon_name(files_icons.themed(icon))
     return img
 
 
@@ -133,7 +134,8 @@ class HomePage(Gtk.ScrolledWindow):
         _Clicks(self.tiles, lambda x, y: self.tiles.get_child_at_pos(x, y),
                 self._tile_menu, lambda c: win.open_location(c.location, new_tab=True))
         outer.append(self.tiles)
-        outer.append(section_label("Recent"))
+        self.recent_title = section_label("Recent")
+        outer.append(self.recent_title)
         head = Gtk.Box(spacing=12, css_classes=["hbf-recent-head"])
         head.append(_label("Name", "hb-dim", "hb-small", hexpand=True))
         head.append(_label("Location", "hb-dim", "hb-small", width_request=300))
@@ -185,22 +187,50 @@ class HomePage(Gtk.ScrolledWindow):
             child.path = q["path"]
             child.set_tooltip_text(q["path"])
             self.tiles.append(child)
-        self.recent.remove_all()
-        items = []
+        show = bool(self.win.app.settings.get("show_recent"))
+        self.recent_title.set_visible(show)
+        if not show:
+            self._recent_gen = getattr(self, "_recent_gen", 0) + 1
+            for w in (self.recent, self.recent_head, self.recent_empty):
+                w.set_visible(False)
+            return
+        cand = []
         for info in self.rm.get_items():
             uri = info.get_uri()
             if not uri.startswith("file:"):
                 continue
-            path = Gio.File.new_for_uri(uri).get_path()
-            if not path or not os.path.exists(path):
-                continue
             dt = info.get_visited() or info.get_modified()
-            items.append((dt.to_unix() if dt else 0, uri, path, info))
-        items.sort(key=lambda t: t[0], reverse=True)
-        for ts, uri, path, info in items[:25]:
+            cand.append((dt.to_unix() if dt else 0, uri, info))
+        cand.sort(key=lambda t: t[0], reverse=True)
+        self._recent_gen = getattr(self, "_recent_gen", 0) + 1
+        gen = self._recent_gen
+
+        def work():
+            # os.path.exists can hang on a dead mount: keep it off the main loop
+            out = []
+            for ts, uri, info in cand:
+                path = Gio.File.new_for_uri(uri).get_path()
+                if path and os.path.exists(path):
+                    out.append((ts, uri, path, info))
+                    if len(out) >= 25:
+                        break
+            return out
+
+        def done(res):
+            if gen == self._recent_gen and not isinstance(res, Exception):
+                self._fill_recent(res)
+        fc.run_in_thread(work, done)
+
+    def _fill_recent(self, items):
+        self.recent.remove_all()
+        for ts, uri, path, info in items:
             row = Gtk.ListBoxRow()
             box = Gtk.Box(spacing=12, css_classes=["hbf-recent-row"])
-            icon = info.get_gicon() or Gio.ThemedIcon.new("text-x-generic")
+            if files_icons.modern():
+                icon = Gio.ThemedIcon.new(files_icons.icon_for_type(
+                    info.get_mime_type() or "", os.path.basename(path)))
+            else:
+                icon = info.get_gicon() or Gio.ThemedIcon.new("text-x-generic")
             box.append(_image(icon, 20))
             box.append(_label(info.get_display_name() or os.path.basename(path), hexpand=True))
             box.append(_label(pretty_dir(os.path.dirname(path)), "hb-dim", width_request=300))
@@ -533,7 +563,7 @@ class PropertiesDialog(Adw.Dialog):
         name = info.get_display_name() or g.get_basename()
         if g.get_uri().rstrip("/") == "trash:":
             name = "Trash"
-        self._header(info.get_icon() or "text-x-generic", name)
+        self._header(files_icons.item_gicon(info, g.get_path(), is_dir) or "text-x-generic", name)
         self._group()
         desc = "File folder" if is_dir else (Gio.content_type_get_description(ct) if ct else "File")
         if info.get_is_symlink():

@@ -50,7 +50,7 @@ Download `harbor_<version>_all.deb` from the
 [releases](https://github.com/Hafij-DEU/harbor/releases) and run:
 
 ```bash
-sudo apt install ./harbor_0.3.0_all.deb
+sudo apt install ./harbor_0.4.0_all.deb
 ```
 
 Then open **Harbor Files** or **Harbor Task Manager** from the app menu,

@@ -209,15 +209,16 @@ class Operations:
         return bool(formats and (formats.contain_mime_type(COPIED_MIME)
                                  or formats.contain_mime_type(URI_MIME)))
 
-    def paste(self, dest_dir, on_done=None):
+    def read_paths(self, cb):
+        """cb(cut, paths) with what is on the clipboard (ours or another app's)."""
         if self.clipboard.is_local() and self.internal:
             cut, paths = self.internal
-            self._do_paste(cut, paths, dest_dir, on_done)
+            cb(cut, list(paths))
             return
 
-        def got(cb, res):
+        def got(clip, res):
             try:
-                stream, mime = cb.read_finish(res)
+                stream, mime = clip.read_finish(res)
             except GLib.Error:
                 self.win.notify_toast("Nothing to paste")
                 return
@@ -232,11 +233,31 @@ class Operations:
                 cut, paths = fc.parse_copied_files(data)
                 if mime == URI_MIME:
                     cut = False
-                self._do_paste(cut, paths, dest_dir, on_done)
+                cb(cut, paths)
             out.splice_async(stream, Gio.OutputStreamSpliceFlags.CLOSE_SOURCE
                              | Gio.OutputStreamSpliceFlags.CLOSE_TARGET,
                              GLib.PRIORITY_DEFAULT, None, spliced)
         self.clipboard.read_async([COPIED_MIME, URI_MIME], GLib.PRIORITY_DEFAULT, None, got)
+
+    def paste(self, dest_dir, on_done=None):
+        self.read_paths(lambda cut, paths: self._do_paste(cut, paths, dest_dir, on_done))
+
+    def paste_shortcuts(self, dest_dir, on_done=None):
+        """Paste shortcut: a symlink in dest_dir for every copied item."""
+        def go(_cut, paths):
+            made, errors = [], []
+            for p in paths:
+                if not os.path.lexists(p):
+                    continue
+                try:
+                    made.append(fc.create_shortcut(p, dest_dir))
+                except OSError as e:
+                    errors.append("%s: %s" % (os.path.basename(p), e.strerror or e))
+            if errors:
+                self.win.notify_toast("Can't create shortcut: " + errors[0], timeout=5)
+            if on_done and made:
+                on_done(made)
+        self.read_paths(go)
 
     def _do_paste(self, cut, paths, dest_dir, on_done):
         paths = [p for p in paths if os.path.lexists(p)]

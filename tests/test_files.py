@@ -709,3 +709,327 @@ def test_settings_validation(tmp_path):
     with open(p, "w") as f:
         f.write("[1, 2]")
     assert fc.Settings(p).get("view") == "details"
+
+
+# ------------------------------------------------------------------ right-click path (round 2 bug)
+
+class _Pt:
+    def __init__(self, x, y):
+        self.x, self.y = x, y
+
+
+class _W:
+    """Widget stand-in: compute_point / translate_coordinates in several shapes."""
+
+    def __init__(self, mode):
+        self.mode = mode
+
+    def compute_point(self, target, p):
+        if self.mode == "compute":
+            return True, _Pt(p.x + 10, p.y + 20)
+        if self.mode == "compute-fail":
+            return False, None
+        raise AttributeError("no compute_point")
+
+    def translate_coordinates(self, target, x, y):
+        if self.mode in ("old3", "compute-fail"):
+            return True, x + 1, y + 2
+        if self.mode == "new2":
+            return x + 3, y + 4
+        raise TypeError("broken")
+
+
+@pytest.mark.parametrize("mode,want", [("compute", (15, 26)), ("old3", (6, 8)),
+                                       ("compute-fail", (6, 8)), ("new2", (8, 10)),
+                                       ("broken", (5, 6))])
+def test_widget_point_fallbacks(mode, want):
+    from harbor.files_view import widget_point
+    assert widget_point(_W(mode), None, 5, 6) == want
+
+
+class _Gesture:
+    def __init__(self, button):
+        self.button = button
+        self.state = None
+
+    def get_current_button(self):
+        return self.button
+
+    def set_state(self, state):
+        self.state = state
+
+
+class _Sel:
+    def __init__(self):
+        self.cleared = 0
+
+    def unselect_all(self):
+        self.cleared += 1
+
+
+class _FakeView:
+    """Enough of FolderView for the real _on_click to run headless."""
+
+    def __init__(self):
+        self.selection = _Sel()
+        self.selected = []
+        self.emitted = []
+
+    def selected_items(self):
+        return list(self.selected)
+
+    def select_item(self, item, extend=False):
+        self.selected = [item]
+
+    def emit(self, *args):
+        self.emitted.append(args)
+
+
+class _Picked:
+    def __init__(self, item=None, css="label"):
+        self._hb_item = item
+        self.css = css
+
+    def get_css_name(self):
+        return self.css
+
+    def get_parent(self):
+        return None
+
+
+class _ListWidget(_W):
+    def __init__(self, picked):
+        super().__init__("new2")      # the PyGObject shape that crashed 0.3.0
+        self.picked = picked
+
+    def pick(self, x, y, flags):
+        return self.picked
+
+
+def test_right_click_handler_emits_context_menu():
+    from harbor.files_view import FolderView
+    item = object()
+    fv, lw, g = _FakeView(), _ListWidget(_Picked(item)), _Gesture(3)
+    FolderView._on_click(fv, g, 1, 40.0, 50.0, lw)
+    assert fv.selected == [item]
+    assert fv.emitted == [("context-menu", 43.0, 54.0, item)]
+    assert g.state is not None
+    # empty area: selection cleared, menu still shown with item None
+    fv, lw = _FakeView(), _ListWidget(_Picked(None))
+    FolderView._on_click(fv, _Gesture(3), 1, 1.0, 2.0, lw)
+    assert fv.selection.cleared == 1 and fv.emitted == [("context-menu", 4.0, 6.0, None)]
+    # middle click opens in a new tab
+    fv = _FakeView()
+    FolderView._on_click(fv, _Gesture(2), 1, 1.0, 2.0, _ListWidget(_Picked(item)))
+    assert fv.emitted == [("middle-click", item)]
+
+
+# ------------------------------------------------------------------ round 2 (0.4.0)
+
+def test_icon_mapping_and_bundled_files():
+    from harbor import files_icons as fi
+    assert fi.icon_for_type("application/octet-stream", "noext") == fi.FILE
+    assert fi.icon_for_type("", "backup.tar.gz") == "harbor-file-archive"
+    assert fi.icon_for_type("application/pdf") != fi.FILE
+    assert fi.icon_for_type("image/png") != fi.FILE
+    assert fi.icon_for_type("", "photo.JPG") == fi.icon_for_type("image/jpeg")
+    assert fi.icon_name_for("inode/directory", "x", is_dir=True).startswith("harbor-folder")
+    assert set(fi.THEMED.values()) <= set(fi.ALL_ICONS)
+    svgs = {}
+    for dirpath, _d, files in os.walk(os.path.join(ROOT, "data", "icons", "hicolor")):
+        for f in files:
+            if f.startswith("harbor-") and f.endswith(".svg"):
+                svgs[f[:-4]] = os.path.join(dirpath, f)
+    missing = [n for n in fi.ALL_ICONS if n not in svgs]
+    assert not missing, missing
+    for path in svgs.values():
+        with open(path) as f:
+            assert f.read(200).lstrip().startswith(("<svg", "<?xml"))
+    old = fi.MODE
+    try:
+        fi.MODE = "modern"
+        assert fi.themed("user-trash-symbolic") == "harbor-trash"
+        assert fi.themed("edit-copy-symbolic") == "edit-copy-symbolic"
+        fi.MODE = "system"
+        assert fi.themed("user-trash-symbolic") == "user-trash-symbolic"
+    finally:
+        fi.MODE = old
+
+
+def test_settings_round2_defaults(tmp_path):
+    s = fc.Settings(str(tmp_path / "files.json"))
+    assert s.get("open_to") == "thispc"
+    assert fc.start_location(s) == fc.THIS_PC
+    assert s.get("style") == "win11" and s.get("icons") == "modern"
+    assert s.get("menu_style") == "win11" and s.get("command_bar") == "win11"
+    assert s.get("nav_pane") is True
+    s.set("open_to", "home")
+    assert fc.start_location(fc.Settings(str(tmp_path / "files.json"))) == fc.HOME_PAGE
+    p = tmp_path / "bad.json"
+    p.write_text('{"open_to": "mars", "style": "neon", "command_bar": 3}')
+    s = fc.Settings(str(p))
+    assert s.get("open_to") == "thispc" and s.get("style") == "win11"
+    assert s.get("command_bar") == "win11"
+
+
+def test_options_choices_match_settings():
+    from harbor import files_options
+    assert files_options._check_choices()
+
+
+def test_fm1_targets(tmp_path):
+    a, b = str(tmp_path / "a b"), str(tmp_path / "c")
+    for d in (a, b):
+        os.makedirs(d)
+    uri = "file://" + a.replace(" ", "%20")
+    assert fc.fm1_targets("ShowFolders", [uri, "", b]) == [
+        (fc.location_for(a), None), (fc.location_for(b), None)]
+    f1, f2, f3 = os.path.join(a, "1.txt"), os.path.join(a, "2.txt"), os.path.join(b, "3")
+    got = fc.fm1_targets("ShowItems", ["file://" + f1.replace(" ", "%20"), f2, f3])
+    assert got == [(fc.location_for(a), [f1, f2]), (fc.location_for(b), [f3])]
+    assert fc.fm1_targets("ShowItemProperties", [f1]) == [(fc.location_for(f1), None)]
+    assert fc.fm1_targets("ShowFolders", []) == []
+    assert fc.fm1_targets("ShowFolders", ["sftp://host/dir"]) == [("sftp://host/dir", None)]
+    with pytest.raises(ValueError):
+        fc.fm1_targets("Explode", [uri])
+
+
+def test_default_file_manager_helpers():
+    assert fc.default_fm_query_argv() == ["xdg-mime", "query", "default", "inode/directory"]
+    assert fc.default_fm_set_argv(fc.FILES_DESKTOP) == [
+        "xdg-mime", "default", "io.github.hafij_deu.Harbor.Files.desktop", "inode/directory"]
+    assert fc.default_fm_state(fc.FILES_DESKTOP + "\n") == "harbor"
+    assert fc.default_fm_state("org.gnome.Nautilus.desktop\n") == "other"
+    assert fc.default_fm_state("") == "unknown" and fc.default_fm_state(None) == "unknown"
+    desktop = os.path.join(ROOT, "data", "io.github.hafij_deu.Harbor.Files.desktop")
+    text = open(desktop).read()
+    assert "Exec=harbor-files %U" in text and "inode/directory" in text
+
+
+def test_filemanager1_never_installs_a_service_file():
+    for dirpath, _d, files in os.walk(ROOT):
+        if ".git" in dirpath or "node_modules" in dirpath:
+            continue
+        assert not any(f.endswith(".service") and "FileManager1" in f for f in files)
+    build = open(os.path.join(ROOT, "build-deb.sh")).read()
+    assert "dbus-1/services" not in build
+
+
+def test_shortcut_names_and_create(tmp_path):
+    taken = {"report - Shortcut.pdf"}
+    assert fc.shortcut_name("report.pdf", lambda n: False) == "report - Shortcut.pdf"
+    assert fc.shortcut_name("report.pdf", lambda n: n in taken) == "report - Shortcut (2).pdf"
+    assert fc.shortcut_name("Music", lambda n: False, is_dir=True) == "Music - Shortcut"
+    target = tmp_path / "doc.txt"
+    target.write_text("x")
+    out = tmp_path / "out"
+    out.mkdir()
+    p1 = fc.create_shortcut(str(target), str(out))
+    p2 = fc.create_shortcut(str(target), str(out))
+    assert os.path.basename(p1) == "doc - Shortcut.txt"
+    assert os.path.basename(p2) == "doc - Shortcut (2).txt"
+    assert os.readlink(p1) == str(target) and os.path.islink(p2)
+    named = fc.create_shortcut(str(target), str(out), name="doc.txt")
+    assert os.path.basename(named) == "doc.txt" and os.path.islink(named)
+    assert target.read_text() == "x"            # target untouched
+
+
+def test_send_to_targets(tmp_path):
+    home = str(tmp_path)
+    t = fc.send_to_targets(home=home, desktop=home + "/Desktop", documents=home + "/Documents",
+                           removable=[("USB", "/media/u/USB"), ("Bad", None)])
+    assert t[0] == ("Compressed (zipped) folder", "zip", None)
+    assert ("Desktop (create shortcut)", "link", home + "/Desktop") in t
+    assert ("Documents", "copy", home + "/Documents") in t
+    assert ("USB", "copy", "/media/u/USB") in t and not any(x[0] == "Bad" for x in t)
+    # XDG dirs that fall back to $HOME are not offered
+    assert fc.send_to_targets(home=home, desktop=home, documents=home + "/") == [t[0]]
+
+
+def test_preview_kind():
+    pk = fc.preview_kind
+    assert pk("inode/directory", "x", is_dir=True) == "folder"
+    assert pk("image/png", "a.png") == "image"
+    assert pk("image/vnd.djvu", "a.djvu") != "image"
+    assert pk("application/pdf", "a.pdf") == "pdf" and pk("", "A.PDF") == "pdf"
+    assert pk("text/plain", "a.txt") == "text"
+    assert pk("application/json", "a.json") == "text"
+    assert pk("application/x-shellscript", "a.sh") == "text"
+    assert pk("video/mp4", "a.mp4") == "video" and pk("audio/ogg", "a.ogg") == "audio"
+    assert pk("font/ttf", "a.ttf") == "font" and pk("", "a.otf") == "font"
+    assert pk("application/zip", "a.zip") == "none"
+    assert pk("application/octet-stream", "blob") == "none"
+    assert pk("application/octet-stream", "x.jpg") == "image"
+
+
+def test_read_text_preview(tmp_path):
+    p = tmp_path / "t.txt"
+    p.write_bytes(b"hello\xffworld\x00!")
+    text, cut = fc.read_text_preview(str(p))
+    assert not cut and text == "hello�world�!"
+    big = tmp_path / "big.txt"
+    big.write_bytes("é".encode() * (fc.PREVIEW_TEXT_LIMIT // 2 + 10))
+    text, cut = fc.read_text_preview(str(big))
+    assert cut and len(text.encode()) <= fc.PREVIEW_TEXT_LIMIT and "�" not in text
+    assert fc.PREVIEW_TEXT_LIMIT == 64 * 1024
+
+
+def test_pdf_argv_ends_options_before_path():
+    from harbor.files_preview import pdf_argv
+    argv = pdf_argv("-evil.pdf", "/tmp/x/page", 320)
+    assert argv[0] == "pdftoppm" and "-singlefile" in argv
+    assert argv[argv.index("--") + 1] == "-evil.pdf" and argv[-1] == "/tmp/x/page"
+    assert argv[argv.index("-scale-to") + 1] == "320"
+    assert argv[argv.index("-f") + 1] == "1" and argv[argv.index("-l") + 1] == "1"
+
+
+def test_arg_to_location_file_uri(tmp_path):
+    from harbor.files import arg_to_location
+    d = tmp_path / "x y"
+    d.mkdir()
+    f = d / "a b.txt"
+    f.write_text("1")
+    uri = "file://" + str(d).replace(" ", "%20")
+    assert arg_to_location(uri) == (fc.location_for(str(d)), None)
+    assert arg_to_location(uri + "/a%20b.txt") == (fc.location_for(str(d)), str(f))
+    assert arg_to_location("file:///tmp/x%20y") == (fc.location_for("/tmp/x y"), None)
+
+
+def _menu_actions():
+    from harbor import files_menus as fm
+    sels = [[_sel(content_type="text/plain")], [_sel(is_dir=True, content_type="inode/directory")],
+            [_sel(archive=True, content_type="application/zip")], [_sel(), _sel()]]
+    out = set()
+    for kind in ("folder", "search", "trash"):
+        for sel in sels:
+            out |= fm.actions_in(fm.win11_item_menu(kind, sel, can_paste=True))
+            out |= fm.actions_in(fm.classic_item_menu(
+                kind, sel, can_paste=True, send_to=fc.send_to_targets(home="/h", desktop="/h/D")))
+        out |= fm.actions_in(fm.win11_background_menu(kind, True, "file:///tmp"))
+        out |= fm.actions_in(fm.classic_background_menu(kind, True, "file:///tmp"))
+    out |= fm.actions_in(fm.location_menu("move-to", [("Desktop", "/h/D", "user-desktop")]))
+    out |= fm.actions_in(fm.location_menu("copy-to", [("Desktop", "/h/D", "user-desktop")]))
+    return out
+
+
+def test_ribbon_and_menus_share_action_rules():
+    from harbor import files, files_ribbon
+    known = set(files.ACTION_RULES) | files.UNGATED_ACTIONS
+    ribbon = files_ribbon.actions()
+    menus = _menu_actions()
+    assert ribbon - known == set(), ribbon - known
+    assert menus - known == set(), menus - known
+    # the clipboard / organize buttons are gated by the same rules as the menus
+    for a in ("cut", "copy", "paste", "delete", "rename", "compress", "paste-shortcut"):
+        assert a in ribbon and a in files.ACTION_RULES
+    assert {"more-options", "send-to", "create-shortcut", "move-to", "copy-to",
+            "move-to-choose", "copy-to-choose"} <= menus
+    assert files_ribbon.TABS == ("File", "Home", "Share", "View")
+    assert files_ribbon.menu_keys() == {"move-to", "copy-to", "new", "open-with", "sort"}
+
+
+def test_new_accels_registered():
+    from harbor import files
+    src = open(files.__file__).read()
+    for accel in ('"<Alt>p"', '"<Control>F1"', "Shift"):
+        assert accel.lower() in src.lower(), accel

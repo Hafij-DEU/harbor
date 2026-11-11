@@ -51,7 +51,9 @@ def sort_menu():
 
 def view_menu():
     return menu(section(*[item(lab, "win.view", key) for key, lab in VIEW_LABELS]),
-                section(item("Details pane", "win.details-pane"),
+                section(item("Navigation pane", "win.nav-pane"),
+                        item("Preview pane", "win.preview-pane"),
+                        item("Details pane", "win.details-pane"),
                         item("Hidden items", "win.show-hidden"),
                         item("File name extensions", "win.show-ext")))
 
@@ -65,6 +67,7 @@ def more_menu(pin_label="Pin to Quick access"):
                         item("Copy path", "win.copy-path")),
                 section(item("Undo", "win.undo")),
                 section(item("Properties", "win.properties"),
+                        item("Options", "win.options"),
                         item("About Harbor Files", "win.about")))
 
 
@@ -173,3 +176,165 @@ def recent_menu(uri):
                 section(item("Copy as path", "win.copy-path-at", uri),
                         item("Remove from recent", "win.forget-recent", uri)),
                 section(item("Properties", "win.properties-at", uri)))
+
+
+# ---------------------------------------------------------------------- Windows 11 / classic menus
+
+def verb(label, action, icon, target=None):
+    """Menu item shown as an icon button in a "horizontal-buttons" section."""
+    mi = item(label, action, target)
+    mi.set_attribute_value("verb-icon", GLib.Variant("s", icon))
+    return mi
+
+
+def button_row(*items):
+    """Section rendered as a row of icon buttons (Windows 11 menu top row)."""
+    sec = Gio.MenuItem.new_section(None, section(*items))
+    sec.set_attribute_value("display-hint", GLib.Variant("s", "horizontal-buttons"))
+    return sec
+
+
+def _with_row(row, *sections):
+    m = Gio.Menu()
+    if row is not None:
+        m.append_item(row)
+    for s in sections:
+        if s is not None and s.get_n_items():
+            m.append_section(None, s)
+    return m
+
+
+def more_options_section():
+    return section(item("Show more options", "win.more-options",
+                        icon="view-more-horizontal-symbolic"))
+
+
+def win11_item_menu(kind, sel, can_paste=False, pinned=False):
+    """Windows 11 item menu: icon row, the common commands, Show more options."""
+    if kind == "trash":
+        return item_menu(kind, sel, can_paste, pinned)
+    st = fc.command_states(kind, sel, can_paste=can_paste)
+    n = len(sel)
+    one = sel[0] if n == 1 else {}
+    row = button_row(
+        verb("Cut", "win.cut", "edit-cut-symbolic") if st["cut"] else None,
+        verb("Copy", "win.copy", "edit-copy-symbolic") if st["copy"] else None,
+        verb("Rename", "win.rename", "document-edit-symbolic") if st["rename"] else None,
+        verb("Copy path", "win.copy-path", "insert-link-symbolic") if st["copy-path"] else None,
+        verb("Delete", "win.delete", "user-trash-symbolic") if st["delete"] else None,
+    )
+    s1 = section(item("Open", "win.open", icon="document-open-symbolic"))
+    if st["open-with"]:
+        s1.append_submenu("Open with", open_with_menu(one.get("content_type", "")))
+    s1b = section(
+        item("Open in new tab", "win.open-tab", icon="tab-new-symbolic")
+        if st["open-new-tab"] else None,
+        item("Open in new window", "win.open-window", icon="window-new-symbolic")
+        if st["open-new-tab"] else None,
+        item("Open file location", "win.open-location-of") if kind == "search" else None,
+    )
+    s2 = section(
+        item("Compress to ZIP file", "win.compress", icon="package-x-generic-symbolic")
+        if st["compress"] else None,
+        item("Extract all…", "win.extract") if st["extract"] else None,
+        item("Copy as path", "win.copy-path") if st["copy-path"] else None,
+        item("Unpin from Quick access" if pinned else "Pin to Quick access", "win.pin-toggle",
+             icon="starred-symbolic") if st["pin"] and n == 1 else None,
+        item("Paste into folder", "win.paste-into", icon="edit-paste-symbolic")
+        if n == 1 and one.get("is_dir") and one.get("local") and can_paste else None,
+        item("Properties", "win.properties", icon="document-properties-symbolic"),
+    )
+    return _with_row(row, s1, s1b, s2, more_options_section())
+
+
+def win11_background_menu(kind, can_paste=False, location=None, pinned=False):
+    m = background_menu(kind, can_paste, location, pinned)
+    if kind == "folder":
+        m.append_section(None, more_options_section())
+    return m
+
+
+def send_to_menu(targets):
+    """Send to submenu from fc.send_to_targets()."""
+    m = Gio.Menu()
+    for label, kind, dest in targets:
+        m.append_item(item(label, "win.send-to", kind if dest is None else "%s:%s" % (kind, dest)))
+    return m
+
+
+def classic_item_menu(kind, sel, can_paste=False, pinned=False, send_to=()):
+    """Windows 10 style item menu (Show more options / Shift+F10)."""
+    if kind == "trash":
+        return item_menu(kind, sel, can_paste, pinned)
+    st = fc.command_states(kind, sel, can_paste=can_paste)
+    n = len(sel)
+    one = sel[0] if n == 1 else {}
+    folder_one = n == 1 and one.get("is_dir") and one.get("local")
+    s1 = section(
+        item("Open", "win.open"),
+        item("Open in new window", "win.open-window") if st["open-new-tab"] else None,
+        item("Open file location", "win.open-location-of") if kind == "search" else None,
+        item("Unpin from Quick access" if pinned else "Pin to Quick access", "win.pin-toggle")
+        if st["pin"] and n == 1 else None,
+    )
+    if st["open-with"]:
+        s1.append_submenu("Open with", open_with_menu(one.get("content_type", "")))
+    if folder_one:
+        s1.append_item(item("Open in Terminal", "win.terminal-sel"))
+    s2 = Gio.Menu()
+    if st["copy"] and send_to:
+        s2.append_submenu("Send to", send_to_menu(send_to))
+    s3 = section(
+        item("Cut", "win.cut") if st["cut"] else None,
+        item("Copy", "win.copy") if st["copy"] else None,
+        item("Paste", "win.paste-into") if folder_one and can_paste else None,
+    )
+    s4 = section(
+        item("Create shortcut", "win.create-shortcut") if st["copy"] else None,
+        item("Delete", "win.delete") if st["delete"] else None,
+        item("Rename", "win.rename") if st["rename"] else None,
+    )
+    s5 = section(item("Properties", "win.properties"))
+    return menu(s1, s2, s3, s4, s5)
+
+
+def classic_background_menu(kind, can_paste=False, location=None, pinned=False):
+    """Windows 10 style menu for the empty area of a folder."""
+    if kind != "folder":
+        return background_menu(kind, can_paste, location, pinned)
+    s1 = Gio.Menu()
+    s1.append_submenu("View", view_menu())
+    s1.append_submenu("Sort by", sort_menu())
+    s1.append_item(item("Refresh", "win.refresh"))
+    s2 = section(item("Paste", "win.paste"), item("Paste shortcut", "win.paste-shortcut"))
+    s3 = section(item("Open in Terminal", "win.terminal"))
+    s4 = Gio.Menu()
+    s4.append_submenu("New", new_menu())
+    s5 = section(item("Properties", "win.properties-at", location) if location else None)
+    return menu(s1, s2, s3, s4, s5)
+
+
+def location_menu(action, places):
+    """Move to / Copy to submenu: Quick access folders + Choose location…"""
+    m = Gio.Menu()
+    m.append_section(None, section(*[item(label, "win." + action, path,
+                                          icon=icon) for label, path, icon in places]))
+    m.append_section(None, section(item("Choose location…", "win.%s-choose" % action)))
+    return m
+
+
+def actions_in(model):
+    """Every action name (without "win.") used in a menu model, submenus included."""
+    out = set()
+
+    def walk(m):
+        for i in range(m.get_n_items()):
+            a = m.get_item_attribute_value(i, "action", GLib.VariantType.new("s"))
+            if a is not None:
+                out.add(a.unpack().split(".", 1)[-1])
+            for link in ("section", "submenu"):
+                sub = m.get_item_link(i, link)
+                if sub is not None:
+                    walk(sub)
+    walk(model)
+    return out

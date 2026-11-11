@@ -5,6 +5,7 @@ import os
 from gi.repository import Gdk, Gio, GLib, GObject, Gtk
 
 from . import files_core as fc
+from . import files_icons
 from .common import NavList
 
 USER_DIRS = (
@@ -89,9 +90,9 @@ class SideList(NavList):
         box.append(Gtk.Box(css_classes=["hb-nav-pill"], valign=Gtk.Align.CENTER))
         img = Gtk.Image(pixel_size=18)
         if isinstance(icon, Gio.Icon):
-            img.set_from_gicon(icon)
+            img.set_from_gicon(files_icons.themed_gicon(icon))
         else:
-            img.set_from_icon_name(icon)
+            img.set_from_icon_name(files_icons.themed(icon))
         box.append(img)
         lab = Gtk.Label(label=text, xalign=0, hexpand=True, css_classes=["hb-nav-label"],
                         ellipsize=3)
@@ -149,7 +150,8 @@ class Sidebar(Gtk.Box):
         try:
             self._trash_mon = Gio.File.new_for_uri(fc.TRASH_URI).monitor_directory(
                 Gio.FileMonitorFlags.NONE, None)
-            self._trash_mon.connect("changed", lambda *_: self.update_trash())
+            self._trash_mon.set_rate_limit(500)
+            self._trash_mon.connect("changed", lambda *_: self.queue_trash_update())
         except GLib.Error:
             pass
         self.current = None
@@ -213,6 +215,15 @@ class Sidebar(Gtk.Box):
         if self.current:
             self.sync(self.current)
 
+    def queue_trash_update(self):
+        # emptying a big trash fires one event per item: coalesce them
+        if not getattr(self, "_trash_id", 0):
+            def run():
+                self._trash_id = 0
+                self.update_trash()
+                return False
+            self._trash_id = GLib.timeout_add(300, run)
+
     def update_trash(self):
         g = Gio.File.new_for_uri(fc.TRASH_URI)
 
@@ -227,8 +238,8 @@ class Sidebar(Gtk.Box):
                 row = self.list.rows.get("trash")
                 if row is not None:
                     img = row.get_child().get_first_child().get_next_sibling()
-                    img.set_from_icon_name("user-trash-full-symbolic" if full
-                                           else "user-trash-symbolic")
+                    img.set_from_icon_name(files_icons.themed(
+                        "user-trash-full-symbolic" if full else "user-trash-symbolic"))
         g.query_info_async("trash::item-count", Gio.FileQueryInfoFlags.NONE,
                            GLib.PRIORITY_DEFAULT, None, done)
 

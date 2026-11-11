@@ -7,15 +7,18 @@ and shares one selection between the details and the icon views.
 
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk, Pango  # noqa: E402
+gi.require_version("Graphene", "1.0")
+from gi.repository import Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gtk, Pango  # noqa: E402
 
 from . import files_core as fc  # noqa: E402
+from . import files_icons  # noqa: E402
 from .common import human_size  # noqa: E402
 
 ATTRS = ",".join((
@@ -31,6 +34,17 @@ ICON_SIZES = {"large": (96, 124), "medium": (56, 96)}  # icon px, tile width
 
 _THUMBS = ThreadPoolExecutor(max_workers=2, thread_name_prefix="hb-thumb")
 THUMB_MAX_BYTES = 25 * 1024 * 1024
+
+
+_TYPE_DESC = {}
+
+
+def type_description(ct):
+    """Gio.content_type_get_description, cached (it reads shared-mime-info each call)."""
+    d = _TYPE_DESC.get(ct)
+    if d is None:
+        d = _TYPE_DESC[ct] = Gio.content_type_get_description(ct) or ct
+    return d
 
 
 class FileItem(GObject.Object):
@@ -53,10 +67,10 @@ class FileItem(GObject.Object):
         if self.is_dir:
             self.type_desc = "File folder"
         elif ct:
-            self.type_desc = Gio.content_type_get_description(ct) or ct
+            self.type_desc = type_description(ct)
         else:
             self.type_desc = "File"
-        self.icon = info.get_icon()
+        self.icon = files_icons.item_gicon(info, self.path, self.is_dir)
         self.hidden = bool(
             (info.has_attribute("standard::is-hidden") and info.get_is_hidden())
             or (info.has_attribute("standard::is-backup") and info.get_is_backup()))
@@ -68,6 +82,17 @@ class FileItem(GObject.Object):
         self.texture = None
         self.thumb_state = 0  # 0 untried, 1 loading, 2 done
         self.cells = []        # bound cell widgets (for refreshes / rename popover)
+        self._keys = {}        # sort keys per field, built once (sorting calls back a lot)
+
+    def sort_key(self, field):
+        k = self._keys.get(field)
+        if k is None:
+            if field == "name":
+                k = fc.natural_key(self.name)
+            else:
+                k = fc.sort_key(field, self.name, self.is_dir, self.mtime, self.type_desc, self.size)
+            self._keys[field] = k
+        return k
 
     @property
     def is_image(self):
@@ -115,6 +140,33 @@ def find_item_widget(widget, root):
             return None
         w = w.get_parent()
     return None
+
+
+def widget_point(src, target, x, y):
+    """(x, y) of point (x, y) of src in target's coordinates.
+
+    Uses Gtk.Widget.compute_point (GTK >= 4.12). translate_coordinates is
+    deprecated and its return shape differs between PyGObject versions, so it
+    is only a fallback and both shapes are accepted. Never raises: falls back
+    to the input point.
+    """
+    try:
+        res = src.compute_point(target, Graphene.Point().init(x, y))
+        ok, pt = res if isinstance(res, tuple) else (res is not None, res)
+        if ok and pt is not None:
+            return pt.x, pt.y
+    except (AttributeError, TypeError):
+        pass
+    try:
+        res = src.translate_coordinates(target, x, y)
+        if isinstance(res, tuple):
+            if len(res) == 3 and res[0]:
+                return res[1], res[2]
+            if len(res) == 2:
+                return res[0], res[1]
+    except (AttributeError, TypeError):
+        pass
+    return x, y
 
 
 class FolderView(Gtk.Box):
@@ -256,7 +308,10 @@ class FolderView(Gtk.Box):
         box = cell.get_child()
         box._hb_item = item
         item.cells.append(box)
-        box.img.set_from_gicon(item.icon) if item.icon else box.img.set_from_icon_name("text-x-generic")
+        if item.icon:
+            box.img.set_from_gicon(item.icon)
+        else:
+            box.img.set_from_icon_name(files_icons.themed("text-x-generic"))
         box.lab.set_label(self.label_for(item))
         box.set_opacity(0.55 if item.hidden else 1.0)
 
@@ -313,7 +368,7 @@ class FolderView(Gtk.Box):
         elif item.icon:
             box.img.set_from_gicon(item.icon)
         else:
-            box.img.set_from_icon_name("text-x-generic")
+            box.img.set_from_icon_name(files_icons.themed("text-x-generic"))
 
     def _thumb_done(self, item, fut, gen):
         item.thumb_state = 2
@@ -387,11 +442,7 @@ class FolderView(Gtk.Box):
 
     def _field_sorter(self, field):
         def cmp(a, b, *_):
-            if field == "name":
-                ka, kb = fc.natural_key(a.name), fc.natural_key(b.name)
-            else:
-                ka = fc.sort_key(field, a.name, a.is_dir, a.mtime, a.type_desc, a.size)
-                kb = fc.sort_key(field, b.name, b.is_dir, b.mtime, b.type_desc, b.size)
+            ka, kb = a.sort_key(field), b.sort_key(field)
             return (ka > kb) - (ka < kb)
         return cmp
 
@@ -429,6 +480,20 @@ class FolderView(Gtk.Box):
             for box in list(item.cells):
                 if hasattr(box, "lab"):
                     box.lab.set_label(self.label_for(item))
+
+    def refresh_icons(self):
+        """Icons setting changed: re-pick every item's icon and update shown cells."""
+        for item in self.items_all():
+            item.icon = files_icons.item_gicon(item.info, item.path, item.is_dir)
+            for box in list(item.cells):
+                if not hasattr(box, "img"):
+                    continue
+                if item.texture is not None and box.img.get_pixel_size() > 32:
+                    continue
+                box.img.set_from_gicon(item.icon)
+
+    def items_all(self):
+        return [self.store.get_item(i) for i in range(self.store.get_n_items())]
 
     def set_show_hidden(self, value):
         self.show_hidden = value
@@ -480,6 +545,9 @@ class FolderView(Gtk.Box):
         self.by_uri = {}
         self.store.remove_all()
         self._set_column_mode(mode)
+        # search results keep arriving: sort them a chunk per frame instead of
+        # re-sorting the whole list in one go every time a batch lands
+        self.sort_model.set_incremental(mode == "search")
         self.filter.changed(Gtk.FilterChange.DIFFERENT)
 
     def load(self, gfile, mode="folder"):
@@ -620,6 +688,9 @@ class FolderView(Gtk.Box):
 
     # ------------------------------------------------------------ search
 
+    SEARCH_FLUSH_MS = 200      # hand results to the UI at most this often
+    SEARCH_FLUSH_MAX = 250     # and at most this many per main-loop turn
+
     def search(self, root, query, show_hidden=False):
         self._reset("search")
         self.gfile = Gio.File.new_for_path(root)
@@ -628,21 +699,37 @@ class FolderView(Gtk.Box):
         stop = threading.Event()
         self._search_stop = stop
         gen = self._gen
+        pending = []           # (gfile, info, location) from the worker
+        lock = threading.Lock()
+        state = {"done": False}
 
         def worker():
-            batch = []
             for path in fc.search_walk(root, query, stop, show_hidden):
                 g = Gio.File.new_for_path(path)
                 try:
                     info = g.query_info(ATTRS, Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, None)
                 except GLib.Error:
                     continue
-                batch.append((g, info, os.path.dirname(path)))
-                if len(batch) >= 40:
-                    GLib.idle_add(self._search_batch, batch, gen, False)
-                    batch = []
-            GLib.idle_add(self._search_batch, batch, gen, True)
-        threading.Thread(target=worker, daemon=True).start()
+                ct = info.get_content_type() or ""
+                if ct:
+                    type_description(ct)   # warm the cache off the main thread
+                with lock:
+                    pending.append((g, info, os.path.dirname(path)))
+            with lock:
+                state["done"] = True
+
+        def flush():
+            if gen != self._gen:
+                return False
+            with lock:
+                batch = pending[:self.SEARCH_FLUSH_MAX]
+                del pending[:self.SEARCH_FLUSH_MAX]
+                final = state["done"] and not pending
+            self._search_batch(batch, gen, final)
+            return not final
+
+        GLib.timeout_add(self.SEARCH_FLUSH_MS, flush)
+        threading.Thread(target=worker, daemon=True, name="hb-search").start()
 
     def _search_batch(self, batch, gen, final):
         if gen != self._gen:
@@ -657,8 +744,9 @@ class FolderView(Gtk.Box):
         if final:
             self.loading = False
             self._search_stop = None
-        self._update_empty()
-        self.emit("contents-changed")
+        if items or final:
+            self._update_empty()
+            self.emit("contents-changed")
         return False
 
     # ------------------------------------------------------------ state
@@ -784,8 +872,8 @@ class FolderView(Gtk.Box):
                 self.select_item(item)
         else:
             self.selection.unselect_all()
-        ok, px, py = view.translate_coordinates(self, x, y)
-        self.emit("context-menu", px if ok else x, py if ok else y, item)
+        px, py = widget_point(view, self, x, y)
+        self.emit("context-menu", px, py, item)
 
 
 def _in_header(widget, root):
@@ -819,10 +907,27 @@ def pick_drop_action(drop, dest, files=None):
     return Gdk.DragAction.COPY if actions & Gdk.DragAction.COPY else 0
 
 
+_FS_IDS = {}          # uri -> (time, filesystem id); drag motion asks many times a second
+_FS_TTL = 30.0
+
+
+def _fs_id(g, flags):
+    uri = g.get_uri()
+    now = time.monotonic()
+    hit = _FS_IDS.get(uri)
+    if hit and now - hit[0] < _FS_TTL:
+        return hit[1]
+    info = g.query_info("id::filesystem", flags, None)
+    fid = info.get_attribute_string("id::filesystem")
+    if len(_FS_IDS) > 512:
+        _FS_IDS.clear()
+    _FS_IDS[uri] = (now, fid)
+    return fid
+
+
 def same_filesystem(a, b):
     try:
-        ia = a.query_info("id::filesystem", Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, None)
-        ib = b.query_info("id::filesystem", Gio.FileQueryInfoFlags.NONE, None)
-        return ia.get_attribute_string("id::filesystem") == ib.get_attribute_string("id::filesystem")
+        return _fs_id(a, Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS) == \
+            _fs_id(b, Gio.FileQueryInfoFlags.NONE)
     except GLib.Error:
         return False

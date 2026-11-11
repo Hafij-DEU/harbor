@@ -44,6 +44,20 @@ PALETTES = {
         shadow="rgba(0,0,0,0.10)", heat1="rgba(255,210,0,0.16)", heat2="rgba(255,170,0,0.28)",
         heat3="rgba(255,110,40,0.36)",
     ),
+    # "System" look (Harbor Files > Options > Style): every colour comes from
+    # the libadwaita / system theme, Harbor keeps only its layout.
+    "system": dict(
+        window="var(--window-bg-color)", sidebar="var(--sidebar-bg-color)",
+        surface="var(--view-bg-color)", card="var(--card-bg-color)",
+        card_hover="alpha(currentColor,0.05)", card_active="alpha(currentColor,0.08)",
+        border="var(--border-color)", divider="var(--border-color)",
+        text="var(--window-fg-color)", dim="alpha(currentColor,0.62)",
+        faint="alpha(currentColor,0.42)", nav_hover="alpha(currentColor,0.07)",
+        nav_sel="alpha(currentColor,0.10)", entry="var(--view-bg-color)",
+        entry_border="var(--border-color)", shadow="alpha(black,0.15)",
+        heat1="rgba(255,210,0,0.16)", heat2="rgba(255,170,0,0.28)",
+        heat3="rgba(255,110,40,0.36)",
+    ),
 }
 
 CSS = string.Template("""
@@ -125,6 +139,7 @@ class _Theme:
     def __init__(self):
         self.provider = Gtk.CssProvider()
         self.extra = []
+        self.style = "harbor"      # "harbor" (own colours) or "system"
         self.manager = Adw.StyleManager.get_default()
         self.manager.connect("notify::dark", lambda *_: self.reload())
 
@@ -133,7 +148,15 @@ class _Theme:
         return self.manager.get_dark()
 
     def palette(self):
+        if self.style == "system":
+            return PALETTES["system"]
         return PALETTES["dark" if self.dark else "light"]
+
+    def set_style(self, style):
+        style = "system" if style == "system" else "harbor"
+        if style != self.style:
+            self.style = style
+            self.reload()
 
     def reload(self):
         pal = self.palette()

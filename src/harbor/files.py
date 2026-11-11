@@ -1,6 +1,7 @@
 """Harbor Files: a Windows 11 File Explorer style file manager for GNOME."""
 
 import os
+import threading
 import sys
 import time
 
@@ -12,6 +13,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from . import common  # noqa: E402
 from . import files_core as fc  # noqa: E402
+from . import files_icons  # noqa: E402
 from . import files_menus as fm  # noqa: E402
 from . import files_sidebar as fsb  # noqa: E402
 from .common import HarborWindow, apply_theme  # noqa: E402
@@ -103,6 +105,20 @@ ACTION_RULES = {
     "open-with-app": "open-with", "compress": "compress", "extract": "extract",
     "pin-toggle": "pin", "select-all": "select-all", "select-none": "select-none",
     "invert-selection": "invert-selection", "copy-path": "copy-path",
+    "open-window": "open-new-tab", "create-shortcut": "copy", "send-to": "copy",
+    "move-to": "cut", "copy-to": "copy", "move-to-choose": "cut", "copy-to-choose": "copy",
+    "paste-shortcut": "paste",
+}
+
+# Window actions that are always available (no selection rule): the ribbon
+# and the menus may only use actions listed here or in ACTION_RULES.
+UNGATED_ACTIONS = {
+    "new-window", "terminal", "options", "close-window", "properties", "open-with",
+    "nav-pane", "preview-pane", "details-pane", "view", "sort", "sort-order", "show-ext",
+    "show-hidden", "more-options", "ribbon-toggle", "refresh", "paste-into", "terminal-sel",
+    "open-location-of", "properties-at", "terminal-at", "copy-path-at", "pin-at", "unpin",
+    "open-location", "open-location-tab", "open-uri", "open-uri-location", "forget-recent",
+    "empty-trash", "about", "new-tab", "undo", "sb-mount", "sb-eject", "sb-unmount",
 }
 
 
@@ -193,6 +209,32 @@ popover.hbf-rename > contents { padding: 4px; }
 list.hbf-apps { background: transparent; }
 list.hbf-apps > row { border-radius: 5px; }
 .hbf-prop-name { font-size: 16px; font-weight: 600; }
+
+.hbf-ribbon { background: $surface; border-bottom: 1px solid $divider; }
+.hbf-ribbon-tabs { padding: 0 8px; border-bottom: 1px solid $divider; }
+button.hbf-ribbon-tab { background: none; border-radius: 0; min-height: 26px; padding: 2px 14px;
+    font-size: 12.5px; box-shadow: none; border-bottom: 2px solid transparent; }
+button.hbf-ribbon-tab:hover { background: $nav_hover; }
+button.hbf-ribbon-tab:checked { background: none; color: var(--accent-color);
+    border-bottom-color: var(--accent-bg-color); }
+button.hbf-ribbon-file { background: var(--accent-bg-color); color: var(--accent-fg-color); }
+button.hbf-ribbon-file:checked { background: var(--accent-bg-color);
+    color: var(--accent-fg-color); }
+.hbf-ribbon-page { padding: 4px 6px 0 6px; min-height: 92px; }
+.hbf-ribbon-group { padding: 0 4px; }
+.hbf-ribbon-caption { font-size: 11px; color: $dim; margin: 2px 0 3px 0; }
+.hbf-ribbon-sep { background: $divider; min-width: 1px; margin: 4px 2px; }
+button.hbf-ribbon-btn, menubutton.hbf-ribbon-btn > button {
+    background: none; border-radius: 3px; box-shadow: none; padding: 2px 6px; font-weight: normal; }
+button.hbf-ribbon-btn:hover, menubutton.hbf-ribbon-btn > button:hover { background: $nav_hover; }
+button.hbf-ribbon-btn:checked { background: $nav_sel; }
+.hbf-ribbon-big { min-width: 54px; }
+.hbf-ribbon-big label { font-size: 12px; }
+.hbf-ribbon-small { min-height: 24px; }
+.hbf-ribbon-small label, checkbutton.hbf-ribbon-check label { font-size: 12px; }
+button.hbf-ribbon-btn:disabled, menubutton.hbf-ribbon-btn > button:disabled { opacity: 0.4; }
+.hbf-preview-text { font-size: 12px; background: transparent; }
+.hbf-preview-text text { background: transparent; }
 """
 
 
@@ -213,11 +255,13 @@ class FilesWindow(HarborWindow):
         self._typeahead = ("", 0.0)
         self._details_id = 0
         self._undo = []
+        self._menu_ctx = None
+        self._options = None
         self._build()
         self.ops = Operations(self)
         self._install_actions()
         self._install_keys()
-        for loc, sel in (locations or [(fc.HOME_PAGE, None)]):
+        for loc, sel in (locations or [(fc.start_location(s), None)]):
             self.open_arg(loc, sel, new_tab=True)
         self.connect("close-request", self._on_close_request)
         self.update_actions()
@@ -309,18 +353,35 @@ class FilesWindow(HarborWindow):
                                             action_name="win.details-pane",
                                             tooltip_text="Show the details pane")
         cmd.append(self.details_btn)
+        prev_box = Gtk.Box(spacing=8)
+        prev_box.append(Gtk.Image(icon_name="view-paged-symbolic", pixel_size=16))
+        prev_box.append(Gtk.Label(label="Preview"))
+        self.preview_btn = Gtk.ToggleButton(child=prev_box, css_classes=["hb-tool"],
+                                            action_name="win.preview-pane",
+                                            tooltip_text="Show the preview pane (Alt+P)")
+        cmd.append(self.preview_btn)
+        self.cmdbar = cmd
         self.toolbar.add_top_bar(cmd)
+        self.ribbon = None
+        self.ribbon_slot = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.toolbar.add_top_bar(self.ribbon_slot)
+        self._apply_command_bar()
 
-        # body: sidebar | tabs | details pane
+        # body: sidebar | tabs | details pane | preview pane
         from .files_pages import DetailsPane
+        from .files_preview import PreviewPane
         self.sidebar = fsb.Sidebar(self)
         self.sidebar.connect("open", lambda _s, loc, nt: self.open_location(loc, nt))
+        self.sidebar.set_visible(bool(self.settings.get("nav_pane")))
         self.details = DetailsPane(self)
+        self.preview = PreviewPane(self)
         self.details.set_visible(bool(self.settings.get("details_pane")))
+        self.preview.set_visible(bool(self.settings.get("preview_pane")))
         body = Gtk.Box(css_classes=["hbf-body"])
         body.append(self.sidebar)
         body.append(self.tab_view)
         body.append(self.details)
+        body.append(self.preview)
         self.set_body(body)
 
         # status bar with the operations area
@@ -348,7 +409,7 @@ class FilesWindow(HarborWindow):
                 for i in range(self.tab_view.get_n_pages())]
 
     def new_tab(self, location=None, select=True):
-        tab = Tab(self, location or fc.HOME_PAGE)
+        tab = Tab(self, location or fc.start_location(self.settings))
         page = self.tab_view.append(tab)
         tab.page = page
         tab.connect("changed", self._on_tab_changed)
@@ -378,7 +439,7 @@ class FilesWindow(HarborWindow):
         if tab.page is None:
             return
         tab.page.set_title(tab.title())
-        tab.page.set_icon(Gio.ThemedIcon.new(tab.icon()))
+        tab.page.set_icon(Gio.ThemedIcon.new(files_icons.themed(tab.icon())))
         tab.page.set_tooltip(tab.folder_path() or tab.title())
 
     def _on_tab_changed(self, tab):
@@ -570,20 +631,72 @@ class FilesWindow(HarborWindow):
                           on_done=lambda job: tab.view.select_paths(job.copied)
                           if dest.equal(tab.view.gfile or dest) else None)
 
-    def on_context_menu(self, tab, x, y, item):
+    def on_context_menu(self, tab, x, y, item, classic=None):
+        """Right-click menu. classic=None follows Settings > Right-click menu;
+        True is "Show more options" / Shift+F10."""
         self.update_actions()
         kind = tab.kind()
+        if classic is None:
+            classic = self.settings.get("menu_style") == "classic"
+        self._menu_ctx = (tab, x, y, item)
+        can_paste = self.ops.can_paste()
         if item is None:
             path = tab.folder_path()
             pinned = bool(path) and fsb.is_pinned(self.settings, path)
-            m = fm.background_menu(kind, self.ops.can_paste(), tab.location, pinned)
+            build = fm.classic_background_menu if classic else fm.win11_background_menu
+            m = build(kind, can_paste, tab.location, pinned)
         else:
             items = tab.view.selected_items() or [item]
             one = items[0]
             pinned = len(items) == 1 and one.is_dir and bool(one.path) \
                 and fsb.is_pinned(self.settings, one.path)
-            m = fm.item_menu(kind, sel_dicts(items), self.ops.can_paste(), pinned)
-        self.popup_menu(tab.view, x, y, m)
+            if classic:
+                m = fm.classic_item_menu(kind, sel_dicts(items), can_paste, pinned,
+                                         send_to=self.send_to_targets())
+            else:
+                m = fm.win11_item_menu(kind, sel_dicts(items), can_paste, pinned)
+        return self.popup_menu(tab.view, x, y, m)
+
+    def more_options(self):
+        """Windows 11 menu > Show more options: the classic menu at the same spot."""
+        ctx = self._menu_ctx
+        if self._popover is not None:
+            self._popover.popdown()
+        if ctx is None:
+            return
+        tab, x, y, item = ctx
+        if tab is not self.tab():
+            return
+        GLib.idle_add(lambda: (self.on_context_menu(tab, x, y, item, classic=True), False)[1])
+
+    def menu_at_selection(self, classic=None):
+        """Keyboard menu (Shift+F10 / Menu key) for the selection or the folder."""
+        tab = self.tab()
+        if tab is None or tab.kind() in ("home", "thispc"):
+            return None
+        sel = tab.view.selected_items()
+        w = tab.view.get_width() or 600
+        if sel:
+            return self.on_context_menu(tab, min(w - 40, 160), 70, sel[0], classic=classic)
+        return self.on_context_menu(tab, min(w - 40, 420), 220, None, classic=classic)
+
+    def send_to_targets(self):
+        removable = []
+        try:
+            for m in self.sidebar.vm.get_mounts():
+                root = m.get_root()
+                p = root.get_path() if root is not None else None
+                if p and (m.can_eject() or m.can_unmount()) and not m.is_shadowed():
+                    removable.append((fsb.mount_label(m), p))
+        except (AttributeError, GLib.Error):
+            pass
+        return fc.send_to_targets(
+            fc.home_dir(), GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP),
+            GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOCUMENTS), removable)
+
+    def location_places(self):
+        """Move to / Copy to: Quick access folders (label, path, icon)."""
+        return [(q["label"], q["path"], q["icon"]) for q in fsb.quick_access(self.settings)]
 
     def _on_header_sort(self, tab):
         if tab is not self.tab():
@@ -639,13 +752,15 @@ class FilesWindow(HarborWindow):
         self.status_label.set_label(text)
 
     def _queue_details(self):
-        if not self.details.get_visible() or self._details_id:
+        if self._details_id or not (self.details.get_visible() or self.preview.get_visible()):
             return
 
         def run():
             self._details_id = 0
             if self.details.get_visible():
                 self.details.update(self.tab())
+            if self.preview.get_visible():
+                self.preview.update(self.tab())
             return False
         self._details_id = GLib.timeout_add(80, run)
 
@@ -741,6 +856,23 @@ class FilesWindow(HarborWindow):
                        self._set_ext)
         self._stateful("details-pane", GLib.Variant("b", bool(s.get("details_pane"))),
                        self._set_details)
+        self._stateful("preview-pane", GLib.Variant("b", bool(s.get("preview_pane"))),
+                       self._set_preview)
+        self._stateful("nav-pane", GLib.Variant("b", bool(s.get("nav_pane"))), self._set_nav)
+        A("open-window", self.open_window)
+        A("more-options", self.more_options)
+        A("create-shortcut", self.create_shortcut)
+        A("paste-shortcut", self.paste_shortcut)
+        A("send-to", self.send_to, "s")
+        A("move-to", lambda p: self.transfer_to(p, move=True), "s")
+        A("copy-to", lambda p: self.transfer_to(p, move=False), "s")
+        A("move-to-choose", lambda: self.choose_and_transfer(move=True))
+        A("copy-to-choose", lambda: self.choose_and_transfer(move=False))
+        A("options", self.show_options)
+        A("close-window", self.close)
+        A("ribbon-toggle", self.toggle_ribbon)
+        A("context-menu", lambda: self.menu_at_selection())
+        A("context-menu-classic", lambda: self.menu_at_selection(classic=True))
 
     def _with_tab(self, fn):
         tab = self.tab()
@@ -829,9 +961,108 @@ class FilesWindow(HarborWindow):
             t.view.set_show_extensions(bool(value))
 
     def _set_details(self, value):
-        self.settings.set("details_pane", bool(value))
-        self.details.set_visible(bool(value))
+        value = bool(value)
+        self.settings.data["details_pane"] = value
+        if value and self.preview.get_visible():
+            self._set_state("preview-pane", GLib.Variant("b", False))
+            self.settings.data["preview_pane"] = False
+            self.preview.set_visible(False)
+            self.preview.reset()
+        self.settings.save()
+        self.details.set_visible(value)
         self._queue_details()
+
+    def _set_preview(self, value):
+        """The preview pane and the details pane share one slot (like Explorer)."""
+        value = bool(value)
+        self.settings.data["preview_pane"] = value
+        if value and self.details.get_visible():
+            self._set_state("details-pane", GLib.Variant("b", False))
+            self.settings.data["details_pane"] = False
+            self.details.set_visible(False)
+        self.settings.save()
+        self.preview.set_visible(value)
+        if not value:
+            self.preview.reset()
+        self._queue_details()
+
+    def _set_nav(self, value):
+        self.settings.set("nav_pane", bool(value))
+        self.sidebar.set_visible(bool(value))
+
+    # ------------------------------------------------------------ look / options
+    def _apply_command_bar(self):
+        ribbon = self.settings.get("command_bar") == "ribbon"
+        if ribbon and self.ribbon is None:
+            from .files_ribbon import Ribbon
+            self.ribbon = Ribbon(self.ribbon_menus(), bool(self.settings.get("ribbon_collapsed")),
+                                 on_collapse=lambda c: self.settings.set("ribbon_collapsed", c))
+            self.ribbon_slot.append(self.ribbon)
+        self.cmdbar.set_visible(not ribbon)
+        self.ribbon_slot.set_visible(ribbon)
+
+    def ribbon_menus(self):
+        def open_with():
+            tab, items = self._sel()
+            ct = items[0].content_type if len(items) == 1 and not items[0].is_dir else ""
+            return fm.open_with_menu(ct) if ct else fm.menu(fm.section(
+                fm.item("Choose another app…", "win.open-with-other")))
+        return {"move-to": lambda: fm.location_menu("move-to", self.location_places()),
+                "copy-to": lambda: fm.location_menu("copy-to", self.location_places()),
+                "new": fm.new_menu, "open-with": open_with, "sort": fm.sort_menu}
+
+    def toggle_ribbon(self):
+        if self.ribbon is not None and self.ribbon_slot.get_visible():
+            self.ribbon.set_collapsed(not self.ribbon.collapsed, notify=True)
+
+    def show_options(self):
+        from .files_options import OptionsDialog
+        dlg = OptionsDialog(self)
+        self._options = dlg
+        dlg.connect("closed", lambda *_: setattr(self, "_options", None))
+        dlg.present(self)
+        return dlg
+
+    def apply_setting(self, key, value):
+        """Options dialog: store a setting and apply it live in every window."""
+        if key in ("show_extensions", "show_hidden"):
+            action = "show-ext" if key == "show_extensions" else "show-hidden"
+            for w in self.app.files_windows():
+                w.lookup_action(action).change_state(GLib.Variant("b", bool(value)))
+            return
+        if self.settings.get(key) == value:
+            return
+        self.settings.set(key, value)
+        if key in ("style", "icons"):
+            self.app.apply_look()
+        elif key == "command_bar":
+            for w in self.app.files_windows():
+                w._apply_command_bar()
+                w.update_actions()
+        elif key == "show_recent":
+            for w in self.app.files_windows():
+                for t in w.tabs():
+                    if t.home_page is not None:
+                        t.home_page.queue_refresh()
+
+    def refresh_look(self):
+        """Icons or style changed: re-pick every icon this window shows."""
+        self.sidebar.rebuild()
+        if self.tab() is not None:
+            self.sidebar.sync(self.tab().location)
+        for t in self.tabs():
+            t.view.refresh_icons()
+            self._sync_page(t)
+            if t.home_page is not None:
+                t.home_page.refresh()
+            if getattr(t, "thispc_page", None) is not None:
+                t.thispc_page.refresh()
+        if self.ribbon is not None:
+            self.ribbon.refresh_icons()
+        self.details.update(self.tab()) if self.details.get_visible() else None
+        if self.preview.get_visible():
+            self.preview.reset()
+            self.preview.update(self.tab())
 
     # ------------------------------------------------------------ commands
     def _focus_search(self):
@@ -945,6 +1176,86 @@ class FilesWindow(HarborWindow):
         tab, items = self._sel()
         if len(items) == 1 and items[0].is_dir and items[0].path:
             self.ops.paste(items[0].path)
+
+    def paste_shortcut(self):
+        tab = self.tab()
+        dest = tab.folder_path() if tab else None
+        if dest and tab.kind() == "folder":
+            self.ops.paste_shortcuts(dest, on_done=lambda made: tab.view.select_paths(made)
+                                     if made and tab.folder_path() == dest else None)
+
+    def open_window(self):
+        tab, items = self._sel()
+        locs = [(folder_location_of(i), None) for i in items if i.is_dir]
+        if locs:
+            self.app.new_window(locs)
+
+    def _make_shortcuts(self, paths, folder):
+        made, errors = [], []
+        for p in paths:
+            try:
+                made.append(fc.create_shortcut(p, folder))
+            except OSError as e:
+                errors.append("%s: %s" % (os.path.basename(p), e.strerror or e))
+        if errors:
+            self.notify_toast("Can't create the shortcut: %s" % errors[0], timeout=5)
+        return made
+
+    def create_shortcut(self):
+        """Classic menu > Create shortcut: "Name - Shortcut" next to the item."""
+        tab, items = self._sel()
+        paths = [i.path for i in items if i.path]
+        if not paths or tab.kind() != "folder":
+            return
+        folder = tab.folder_path()
+        if not folder:
+            return
+        made = self._make_shortcuts(paths, folder)
+        if made:
+            tab.view.select_paths(made)
+
+    def send_to(self, target):
+        """Send to ▸ — "zip", "link:DIR" (shortcut) or "copy:DIR"."""
+        kind, _sep, dest = target.partition(":")
+        if kind == "zip":
+            self.compress()
+            return
+        tab, items = self._sel()
+        paths = [i.path for i in items if i.path]
+        if not paths or not dest:
+            return
+        if kind == "link":
+            if self._make_shortcuts(paths, dest):
+                self.notify_toast("Shortcut created on %s" % fc.location_title(
+                    fc.location_for(dest), path=dest))
+        elif kind == "copy":
+            self.ops.transfer(paths, dest, move=False)
+
+    def transfer_to(self, dest, move):
+        tab, items = self._sel()
+        paths = [i.path for i in items if i.path]
+        if paths and dest:
+            self.ops.transfer(paths, dest, move=move)
+
+    def choose_and_transfer(self, move):
+        tab, items = self._sel()
+        paths = [i.path for i in items if i.path]
+        if not paths:
+            return
+        dlg = Gtk.FileDialog(title="Move to" if move else "Copy to",
+                             accept_label="Move" if move else "Copy", modal=True)
+        start = tab.folder_path()
+        if start:
+            dlg.set_initial_folder(Gio.File.new_for_path(start))
+
+        def done(d, res):
+            try:
+                folder = d.select_folder_finish(res)
+            except GLib.Error:
+                return      # cancelled
+            if folder is not None and folder.get_path():
+                self.ops.transfer(paths, folder.get_path(), move=move)
+        dlg.select_folder(self, None, done)
 
     def delete(self, permanent=False):
         from .taskmgr_ui import confirm
@@ -1297,6 +1608,12 @@ class FilesWindow(HarborWindow):
         if k == Gdk.KEY_F2 and not mods:
             self.rename()
             return True
+        if k == Gdk.KEY_F10 and shift:
+            self.menu_at_selection(classic=True)
+            return True
+        if k == Gdk.KEY_Menu and not mods:
+            self.menu_at_selection()
+            return True
         if k in (Gdk.KEY_Delete, Gdk.KEY_KP_Delete):
             if not mods:
                 self.delete(False)
@@ -1395,6 +1712,12 @@ class App(Adw.Application):
 
     def do_startup(self):
         Adw.Application.do_startup(self)
+        from . import files_debug
+        files_debug.start_if_enabled()
+        # the first Gio.AppInfo lookup scans every .desktop file; do it off the
+        # main loop so the first right-click ("Open with") does not stall
+        threading.Thread(target=Gio.AppInfo.get_all, daemon=True, name="hb-apps").start()
+        self.apply_look(initial=True)
         apply_theme(CSS)
         here = os.path.dirname(os.path.realpath(__file__))
         theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
@@ -1416,11 +1739,65 @@ class App(Adw.Application):
                 ("win.show-hidden", ["<Control>h"]),
                 ("win.new-folder", ["<Control><Shift>n"]),
                 ("win.properties", ["<Alt>Return"]),
+                ("win.preview-pane", ["<Alt>p"]),
+                ("win.details-pane", ["<Alt><Shift>p"]),
+                ("win.ribbon-toggle", ["<Control>F1"]),
                 ("app.quit", ["<Control>q"])):
             self.set_accels_for_action(action, keys)
         quit_ = Gio.SimpleAction.new("quit", None)
         quit_.connect("activate", lambda *_: [w.close() for w in self.get_windows()])
         self.add_action(quit_)
+        self.fm1 = None
+        if os.environ.get("HARBOR_NO_FILEMANAGER1") != "1":
+            from .files_dbus import FileManager1
+            self.fm1 = FileManager1(self, self.fm1_show)
+            self.fm1.start()
+
+    def files_windows(self):
+        return [w for w in self.get_windows() if isinstance(w, FilesWindow)]
+
+    def apply_look(self, initial=False):
+        """Settings > Style / Icons, at startup and live."""
+        s = self.settings
+        files_icons.MODE = "system" if s.get("icons") == "system" else "modern"
+        theme = common.THEME if common.THEME is not None else apply_theme()
+        theme.set_style("system" if s.get("style") == "system" else "harbor")
+        if not initial:
+            for w in self.files_windows():
+                w.refresh_look()
+
+    def fm1_show(self, method, targets):
+        """org.freedesktop.FileManager1 call (already parsed by fc.fm1_targets)."""
+        win = self.get_active_window()
+        if method == "ShowItemProperties":
+            if win is None:
+                win = self.new_window()
+            for loc, _sel in targets:
+                win.show_properties([_gfile(loc)])
+            win.present()
+            return
+        locs = []
+        for loc, paths in targets:
+            locs.append((loc, paths[0] if paths else None))
+        if not locs:
+            return
+        if win is None:
+            win = self.new_window(locs)
+        else:
+            for loc, sel in locs:
+                win.open_arg(loc, sel, new_tab=True)
+        for (loc, paths), tab in zip(targets, win.tabs()[-len(targets):]):
+            if paths and len(paths) > 1:
+                tab.view.select_paths(paths)
+        win.present()
+
+    def do_shutdown(self):
+        if getattr(self, "fm1", None) is not None:
+            self.fm1.stop()
+        from . import files_debug
+        if files_debug.get() is not None:
+            files_debug.get().stop()
+        Adw.Application.do_shutdown(self)
 
     def new_window(self, locations=None):
         win = FilesWindow(self, locations)

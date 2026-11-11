@@ -32,6 +32,12 @@ if [[ " ${APPS[*]} " == *" taskmgr "* ]]; then
     install -Dm644 data/io.github.hafij_deu.Harbor.policy \
         "$STAGE/usr/share/polkit-1/actions/io.github.hafij_deu.Harbor.policy"
 fi
+if [[ " ${APPS[*]} " == *" files "* ]]; then
+    # Harbor Files' own icon set (harbor-* names), found via the app's icon search path.
+    (cd data/icons && find hicolor -name 'harbor-*.svg') | while read -r f; do
+        install -Dm644 "data/icons/$f" "$STAGE/usr/share/harbor/icons/$f"
+    done
+fi
 echo "apps: ${APPS[*]}"
 install -Dm644 LICENSE "$STAGE/usr/share/doc/$PKG/copyright"
 

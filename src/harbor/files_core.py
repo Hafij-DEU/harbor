@@ -218,8 +218,15 @@ class Settings:
     DEFAULTS = {"pins": [], "view": "details", "icon_size": "large", "show_hidden": False,
                 "sort": "name", "descending": False, "details_pane": False,
                 "show_extensions": True, "width": 1200, "height": 760, "maximized": False,
-                "hidden_defaults": []}
+                "hidden_defaults": [], "open_to": "thispc", "style": "win11",
+                "icons": "modern", "menu_style": "win11", "command_bar": "win11",
+                "preview_pane": False, "ribbon_collapsed": False, "show_recent": True,
+                "nav_pane": True}
     LISTS = ("pins", "hidden_defaults")
+    # settings with a fixed set of values (first one is the default)
+    CHOICES = {"open_to": ("thispc", "home"), "style": ("win11", "system"),
+               "icons": ("modern", "system"), "menu_style": ("win11", "classic"),
+               "command_bar": ("win11", "ribbon")}
 
     def __init__(self, path=None):
         self.path = path or config_path()
@@ -247,6 +254,11 @@ class Settings:
             self.data["icon_size"] = "large"
         if self.data["sort"] not in SORT_FIELDS:
             self.data["sort"] = "name"
+        for k, allowed in self.CHOICES.items():
+            if self.data[k] not in allowed:
+                self.data[k] = allowed[0]
+        if self.data["preview_pane"] and self.data["details_pane"]:
+            self.data["details_pane"] = False     # the two panes share one slot
 
     def save(self):
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
@@ -1051,3 +1063,179 @@ def parent_location(loc):
     if p is None:
         return THIS_PC if loc.startswith("file:") else None
     return p.get_uri()
+
+
+def start_location(settings):
+    """Where a new window / tab opens (Options > General > Open Harbor Files to)."""
+    return HOME_PAGE if settings.get("open_to") == "home" else THIS_PC
+
+
+# ------------------------------------------------------------------ FileManager1 (D-Bus)
+
+def _uri_path(uri):
+    if uri.startswith("/"):
+        return os.path.normpath(uri)
+    g = Gio.File.new_for_uri(uri) if "://" in uri or uri.startswith("file:") \
+        else Gio.File.new_for_path(uri)
+    return g.get_path()
+
+
+def fm1_targets(method, uris):
+    """org.freedesktop.FileManager1 call -> what to open.
+
+    ShowFolders  -> [(folder location, None)], one per folder
+    ShowItems    -> [(parent folder location, [paths to select])], grouped by
+                    parent in the order the parents first appear
+    ShowItemProperties -> [(location, None)] (the window shows Properties)
+    Bad / empty entries are skipped. Non-file URIs are kept as locations.
+    """
+    out = []
+    if method == "ShowItems":
+        groups = {}
+        for u in uris or []:
+            if not isinstance(u, str) or not u.strip():
+                continue
+            p = _uri_path(u.strip())
+            if p:
+                parent = os.path.dirname(p.rstrip("/")) or "/"
+                loc = location_for(parent)
+                if loc not in groups:
+                    groups[loc] = []
+                    out.append((loc, groups[loc]))
+                groups[loc].append(p)
+            else:
+                g = Gio.File.new_for_uri(u.strip())
+                par = g.get_parent()
+                out.append(((par or g).get_uri(), None))
+        return out
+    if method in ("ShowFolders", "ShowItemProperties"):
+        for u in uris or []:
+            if not isinstance(u, str) or not u.strip():
+                continue
+            p = _uri_path(u.strip())
+            out.append((location_for(p) if p else u.strip(), None))
+        return out
+    raise ValueError("unknown FileManager1 method: %s" % method)
+
+
+# ------------------------------------------------------------------ default file manager
+
+FILES_DESKTOP = "io.github.hafij_deu.Harbor.Files.desktop"
+NAUTILUS_DESKTOP = "org.gnome.Nautilus.desktop"
+
+
+def default_fm_query_argv():
+    return ["xdg-mime", "query", "default", "inode/directory"]
+
+
+def default_fm_set_argv(desktop_id):
+    return ["xdg-mime", "default", desktop_id, "inode/directory"]
+
+
+def default_fm_state(query_output, ours=FILES_DESKTOP):
+    """"harbor", "other" or "unknown" from `xdg-mime query default` output."""
+    cur = (query_output or "").strip().splitlines()
+    cur = cur[0].strip() if cur else ""
+    if not cur:
+        return "unknown"
+    return "harbor" if cur == ours else "other"
+
+
+# ------------------------------------------------------------------ Send to / shortcuts
+
+def shortcut_name(name, exists, is_dir=False):
+    """Explorer's "Name - Shortcut", made unique. Files keep their extension
+    at the end ("report - Shortcut.pdf") so the link still opens with the right
+    app; folders get the plain form."""
+    if is_dir:
+        base = "%s - Shortcut" % name
+        return unique_name(base, exists, is_dir=True)
+    stem, ext = split_ext(name)
+    return unique_name("%s - Shortcut%s" % (stem or name, ext), exists)
+
+
+def create_shortcut(target, folder, name=None):
+    """Make a symlink to target in folder; return its path. Never overwrites."""
+    target = os.path.abspath(target)
+    is_dir = os.path.isdir(target)
+    base = name or os.path.basename(target.rstrip("/")) or target
+    link_name = shortcut_name(base, exists_in(folder), is_dir) if name is None \
+        else unique_name(base, exists_in(folder), is_dir)
+    path = os.path.join(folder, link_name)
+    os.symlink(target, path)
+    return path
+
+
+def send_to_targets(home=None, desktop=None, documents=None, removable=()):
+    """Send to submenu entries: [(label, kind, dest)] with kind zip / link / copy."""
+    home = home or home_dir()
+    out = [("Compressed (zipped) folder", "zip", None)]
+    if desktop and os.path.normpath(desktop) != os.path.normpath(home):
+        out.append(("Desktop (create shortcut)", "link", desktop))
+    if documents and os.path.normpath(documents) != os.path.normpath(home):
+        out.append(("Documents", "copy", documents))
+    for label, path in removable:
+        if path:
+            out.append((label, "copy", path))
+    return out
+
+
+# ------------------------------------------------------------------ preview pane
+
+PREVIEW_TEXT_LIMIT = 64 * 1024
+_TEXTISH = ("application/json", "application/xml", "application/javascript",
+            "application/x-shellscript", "application/x-yaml", "application/toml",
+            "application/x-desktop", "application/sql", "application/x-php",
+            "application/x-perl", "application/x-ruby", "application/x-m4",
+            "application/x-wine-extension-ini", "application/x-subrip")
+_TEXT_EXTS = (".txt", ".md", ".log", ".py", ".c", ".h", ".cpp", ".rs", ".go", ".js", ".ts",
+              ".json", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".conf", ".sh", ".css",
+              ".html", ".xml", ".csv", ".rst", ".java", ".kt", ".sql", ".srt", ".desktop")
+_FONT_EXTS = (".ttf", ".otf", ".woff", ".woff2")
+
+
+def preview_kind(content_type, name="", is_dir=False):
+    """What the preview pane shows: folder, image, text, pdf, video, audio, font or none."""
+    if is_dir:
+        return "folder"
+    ct = (content_type or "").lower()
+    low = (name or "").lower()
+    ext = os.path.splitext(low)[1]
+    if ct == "application/pdf" or ext == ".pdf":
+        return "pdf"
+    if ct.startswith("font/") or ct in ("application/x-font-ttf", "application/x-font-otf",
+                                        "application/vnd.ms-opentype") or ext in _FONT_EXTS:
+        return "font"
+    if ct.startswith("image/") and "djvu" not in ct:
+        return "image"
+    if ct.startswith("video/"):
+        return "video"
+    if ct.startswith("audio/"):
+        return "audio"
+    if ct.startswith("text/") or ct in _TEXTISH:
+        return "text"
+    if ct and ct not in ("application/octet-stream", "inode/x-unknown"):
+        try:
+            if Gio.content_type_is_a(ct, "text/plain"):
+                return "text"
+        except TypeError:
+            pass
+        return "none"
+    if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"):
+        return "image"
+    if ext in _TEXT_EXTS:
+        return "text"
+    return "none"
+
+
+def read_text_preview(path, limit=PREVIEW_TEXT_LIMIT):
+    """(text, truncated): the first `limit` bytes as UTF-8 (bad bytes replaced)."""
+    with open(path, "rb") as f:
+        data = f.read(limit + 1)
+    truncated = len(data) > limit
+    data = data[:limit]
+    import codecs
+    # final=not truncated: a multi-byte character cut at the limit is dropped,
+    # not shown as a replacement character
+    text = codecs.getincrementaldecoder("utf-8")("replace").decode(data, final=not truncated)
+    return text.replace("\0", "\ufffd"), truncated
