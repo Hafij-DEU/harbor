@@ -10,11 +10,31 @@ Categories=GTK;System;Monitor;
 Keywords=task manager;process;kill;cpu;memory;performance;startup;services;end task;
 StartupNotify=true
 SingleMainWindow=true
-Actions=performance;details;
+Actions=performance;memory;swap;sweep;files;optimization;details;
 
 [Desktop Action performance]
 Name=Performance
 Exec=harbor-taskmgr --page performance
+
+[Desktop Action memory]
+Name=Memory
+Exec=harbor-taskmgr --page performance:memory
+
+[Desktop Action swap]
+Name=Swap
+Exec=harbor-taskmgr --page performance:swap
+
+[Desktop Action sweep]
+Name=Memory Sweep
+Exec=harbor-taskmgr --page sweep
+
+[Desktop Action files]
+Name=Files in memory
+Exec=harbor-taskmgr --page sweep:files
+
+[Desktop Action optimization]
+Name=Memory optimization
+Exec=harbor-taskmgr --page settings:optimization
 
 [Desktop Action details]
 Name=Details

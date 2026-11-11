@@ -310,6 +310,19 @@ class MemoryDevice(Device):
     kind = "memory"
     graph_caption = "Memory usage"
 
+    # (key, title, hint) of the four big numbers under the composition bar
+    MAIN = (("used", "In use", "Used by apps and the system"),
+            ("avail", "Available", "Free to use right now"),
+            ("cached", "Cached", "Recent files kept for speed; given back when needed"),
+            ("swap", "Swap used", "Moved out of RAM to make room"))
+    # More details: two label/value columns
+    MORE_L = (("total", "Total"), ("committed", "Promised to apps"),
+              ("kernel", "Kernel memory"), ("buffers", "Buffers"), ("shared", "Shared"))
+    MORE_R = (("swaptotal", "Swap size"), ("zcompr", "Compressed size"),
+              ("zused", "zram RAM used"), ("zdisk", "zram disk size"),
+              ("zshare", "zram share of RAM"))
+    ZRAM_KEYS = ("zcompr", "zused", "zdisk", "zshare")
+
     def __init__(self, page):
         super().__init__(page, "memory", "Memory")
 
@@ -322,28 +335,24 @@ class MemoryDevice(Device):
         v.append(cap)
         self.bar = CompositionBar(height=44)
         v.append(self.bar)
-        legend = Gtk.Box(spacing=16, margin_top=6)
-        for cls, text in (("hb-tm-legend-solid", "In use"),
-                          ("hb-tm-legend-cached", "Cached (standby)"),
-                          ("hb-tm-legend-free", "Free")):
+        legend = Gtk.Box(spacing=22, margin_top=7)
+        self.legend = {}
+        for key, cls, text in (("used", "hb-tm-legend-solid", "In use"),
+                               ("cached", "hb-tm-legend-cached", "Cached"),
+                               ("free", "hb-tm-legend-free", "Free")):
             b = Gtk.Box(spacing=6)
             b.append(Gtk.Box(css_classes=["hb-tm-legend", cls], valign=Gtk.Align.CENTER))
-            b.append(label(text, "hb-tm-axis"))
+            b.append(label(text, "hb-tm-legend-name"))
+            val = label("—", "hb-tm-legend-value")
+            b.append(val)
             legend.append(b)
+            self.legend[key] = (text, val)
         v.append(legend)
 
     def build_stats(self, s):
-        s.add_big("used", "In use (Compressed)", 0, 0)
-        s.add_big("avail", "Available", 1, 0)
-        s.add_big("committed", "Committed", 0, 1)
-        s.add_big("cached", "Cached", 1, 1)
-        s.add_big("swap", "Swap in use", 0, 2)
-        s.add_big("kernel", "Kernel memory", 1, 2)
-        s.add_kv("total", "Total")
-        s.add_kv("free", "Free")
-        s.add_kv("buffers", "Buffers")
-        s.add_kv("shared", "Shared")
-        s.add_kv("swaptotal", "Swap size")
+        # The generic StatBlock is not used here; build_after lays out the
+        # simpler memory view.
+        s.box.set_visible(False)
 
     def extend_head(self, head):
         b = Gtk.Button(label="Free up memory", css_classes=["hb-plain"],
@@ -352,27 +361,83 @@ class MemoryDevice(Device):
         b.connect("clicked", lambda *_: self.page.win.show_page("sweep"))
         head.append(b)
 
+    def _big(self, key, title, hint):
+        cell = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1, hexpand=True)
+        cell.append(label(title, "hb-tm-stat-label"))
+        row = Gtk.Box(spacing=5)
+        val = label("—", "hb-tm-stat-value", valign=Gtk.Align.BASELINE_FILL)
+        of = label("", "hb-tm-stat-of", valign=Gtk.Align.BASELINE_FILL)
+        of.set_visible(False)
+        row.append(val)
+        row.append(of)
+        cell.append(row)
+        h = label(hint, "hb-tm-stat-hint", wrap=True, margin_top=2)
+        h.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        h.set_max_width_chars(28)
+        cell.append(h)
+        self.main[key] = (title, val, of)
+        return cell
+
     def build_after(self, v):
-        """Compressed memory (zram): RAM that holds swapped pages, packed."""
-        self.zram_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_top=18)
-        top = Gtk.Box(spacing=8)
-        top.append(label("Compressed memory (zram)", "hb-tm-perf-sub", hexpand=True))
-        self.zram_model = label("", "hb-tm-perf-model", xalign=1)
-        top.append(self.zram_model)
-        self.zram_box.append(top)
-        self.zram_line = label("", "hb-tm-axis", margin_top=2, wrap=True)
+        self.main = {}
+        # four big numbers: two pairs in a flow box, so they sit in one row
+        # when there is room and fold to 2x2 when the window is narrow
+        flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, homogeneous=True,
+                           min_children_per_line=1, max_children_per_line=2,
+                           column_spacing=28, row_spacing=16, margin_top=18,
+                           css_classes=["hb-tm-flat"])
+        for pair in (self.MAIN[:2], self.MAIN[2:]):
+            pb = Gtk.Box(spacing=28, homogeneous=True)
+            for key, title, hint in pair:
+                pb.append(self._big(key, title, hint))
+            flow.append(pb)
+        for child in (flow.get_child_at_index(0), flow.get_child_at_index(1)):
+            child.set_focusable(False)
+        v.append(flow)
+
+        # zram: one short plain-language card
+        self.zram_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3,
+                                margin_top=20, css_classes=["hb-tm-mem-card"])
+        self.zram_box.append(label("Compressed memory", "hb-tm-mem-card-title"))
+        self.zram_line = label("", "hb-tm-mem-card-text", wrap=True, margin_top=2)
+        self.zram_line.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
         self.zram_box.append(self.zram_line)
-        z = self.zram_stats = StatBlock()
-        z.add_big("orig", "Original data", 0, 0)
-        z.add_big("compr", "Compressed size", 1, 0)
-        z.add_big("mem_used", "Memory used", 0, 1)
-        z.add_big("ratio", "Compression ratio", 1, 1)
-        z.add_kv("algo", "Algorithm")
-        z.add_kv("disksize", "Disk size")
-        z.add_kv("devices", "Devices")
-        self.zram_box.append(z.box)
+        self.zram_meta = label("", "hb-tm-stat-hint")
+        self.zram_box.append(self.zram_meta)
         self.zram_box.set_visible(False)
         v.append(self.zram_box)
+
+        # everything else, collapsed
+        self.more_vals = {}
+        cols = Gtk.Box(spacing=40, margin_top=10, margin_start=16, homogeneous=True)
+        self.more_rows = {}
+        for spec in (self.MORE_L, self.MORE_R):
+            g = Gtk.Grid(column_spacing=20, row_spacing=5, valign=Gtk.Align.START)
+            for i, (key, title) in enumerate(spec):
+                k = label(title, "hb-tm-kv-label")
+                val = label("—", "hb-tm-kv-value", xalign=0, hexpand=True,
+                            ellipsize=Pango.EllipsizeMode.END)
+                g.attach(k, 0, i, 1, 1)
+                g.attach(val, 1, i, 1, 1)
+                self.more_vals[key] = (title, val)
+                self.more_rows[key] = (k, val)
+            cols.append(g)
+        self.more = Gtk.Expander(child=cols, css_classes=["hb-tm-more"])
+        self.more.set_label_widget(label("More details", "hb-tm-mem-card-title"))
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_top=14,
+                       css_classes=["hb-tm-mem-card", "hb-tm-more-card"])
+        card.append(self.more)
+        v.append(card)
+
+    def _set(self, lbl, text):
+        if lbl.get_label() != text:
+            lbl.set_label(text)
+
+    def _set_main(self, key, value, of=""):
+        _t, val, ofl = self.main[key]
+        self._set(val, value)
+        self._set(ofl, of)
+        ofl.set_visible(bool(of))
 
     def _zram(self):
         """(original, compressed, memory used) bytes over all zram devices."""
@@ -383,28 +448,43 @@ class MemoryDevice(Device):
     def _update_zram(self, tot):
         zs = self.sys.zram
         self.zram_box.set_visible(bool(zs))
+        for key in self.ZRAM_KEYS:
+            for w in self.more_rows[key]:
+                w.set_visible(bool(zs))
         if not zs:
             return
         orig, comp, used = self._zram()
-        z = self.zram_stats
-        z.set("orig", human_size(orig))
-        z.set("compr", human_size(comp))
-        z.set("ratio", "%.1f\u00d7" % (orig / comp) if comp else "—")
-        z.set("mem_used", human_size(used))
-        z.set("algo", ", ".join(sorted({d["algo"] or "—" for d in zs})))
-        z.set("disksize", gb(sum(d["disksize"] for d in zs)))
-        z.set("devices", ", ".join(d["name"] for d in zs))
-        self.zram_model.set_label("%.1f%% of RAM" % (100 * used / tot))
-        self.zram_line.set_label(
-            "%s of RAM holds %s of swapped memory. That part of \u201cIn use\u201d is "
-            "packed data, not app memory." % (human_size(used), human_size(orig))
-            if orig else "zram is ready but holds nothing yet.")
+        if orig and used:
+            text = ("%s of swapped data is packed into %s of RAM, %.1f× smaller."
+                    % (human_size(orig), human_size(used), orig / used))
+        else:
+            text = "Ready to use. Nothing is packed yet."
+        self._set(self.zram_line, text)
+        algos = sorted({d["algo"] for d in zs if d["algo"]})
+        self._set(self.zram_meta, " · ".join(algos + [d["name"] for d in zs]))
+        mv = self.more_vals
+        self._set(mv["zcompr"][1], human_size(comp))
+        self._set(mv["zused"][1], human_size(used))
+        self._set(mv["zdisk"][1], gb(sum(d["disksize"] for d in zs)))
+        self._set(mv["zshare"][1], "%.1f%%" % (100 * used / tot))
 
     def copy_text(self):
-        text = super().copy_text()
-        if self.view is not None and self.sys.zram:
-            text += "\nCompressed memory (zram)\n" + self.zram_stats.text()
-        return text
+        if self.view is None:
+            return "%s\n" % self.name
+        lines = [self.name, self.model.get_label()]
+        lines += ["%s: %s" % (t, v.get_label()) for t, v in self.legend.values()]
+        for key, _title, _hint in self.MAIN:
+            t, val, of = self.main[key]
+            lines.append("%s: %s" % (t, " ".join(x for x in (val.get_label(),
+                                                             of.get_label()) if x)))
+        zram = bool(self.sys.zram)
+        if zram:
+            lines += ["Compressed memory: " + self.zram_line.get_label(),
+                      "Compressed memory: " + self.zram_meta.get_label()]
+        for key, (t, v) in self.more_vals.items():
+            if zram or key not in self.ZRAM_KEYS:
+                lines.append("%s: %s" % (t, v.get_label()))
+        return "\n".join(lines)
 
     def update_row(self):
         m = self.sys.mem_summary()
@@ -415,24 +495,30 @@ class MemoryDevice(Device):
 
     def update_view(self):
         m = self.sys.mem_summary()
-        s = self.stats
         tot = m["total"] or 1
         self.model.set_label(gb(tot))
         self.top_r.set_label(gb(tot))
         self.graph.set_series(self.sys.mem_hist)
         self.bar.set_parts(m["used"] / tot, m["cached"] / tot)
-        orig, comp, zused = self._zram()
-        s.set("used", "%s (%s)" % (gb(m["used"]), human_size(zused)) if zused else gb(m["used"]))
-        s.set("avail", gb(m["available"]))
-        s.set("committed", "%.1f/%.1f GB" % (m["committed"] / GB, m["commit_limit"] / GB))
-        s.set("cached", gb(m["cached"]))
-        s.set("swap", "%s of %s" % (gb(m["swap_used"]), gb(m["swap_total"])))
-        s.set("kernel", human_size(m["kernel"]))
-        s.set("total", gb(tot))
-        s.set("free", gb(m["free"]))
-        s.set("buffers", human_size(m["buffers"]))
-        s.set("shared", human_size(m["shmem"]))
-        s.set("swaptotal", gb(m["swap_total"]))
+        # legend matches the bar: used, cached, and what is left
+        used = min(m["used"], tot)
+        cached = min(m["cached"], tot - used)
+        self._set(self.legend["used"][1], gb(used))
+        self._set(self.legend["cached"][1], gb(cached))
+        self._set(self.legend["free"][1], gb(max(0, tot - used - cached)))
+        self._set_main("used", gb(m["used"]), "of " + gb(tot))
+        self._set_main("avail", gb(m["available"]))
+        self._set_main("cached", gb(m["cached"]))
+        self._set_main("swap", gb(m["swap_used"]),
+                       "of " + gb(m["swap_total"]) if m["swap_total"] else "")
+        mv = self.more_vals
+        self._set(mv["total"][1], gb(tot))
+        self._set(mv["committed"][1], "%.1f / %.1f GB" % (m["committed"] / GB,
+                                                          m["commit_limit"] / GB))
+        self._set(mv["kernel"][1], human_size(m["kernel"]))
+        self._set(mv["buffers"][1], human_size(m["buffers"]))
+        self._set(mv["shared"][1], human_size(m["shmem"]))
+        self._set(mv["swaptotal"][1], gb(m["swap_total"]))
         self._update_zram(tot)
 
 

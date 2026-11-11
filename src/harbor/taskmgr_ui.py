@@ -51,6 +51,16 @@ columnview.hb-tm > header > button:last-child { border-right: none; }
 .hb-tm-legend-cached { background: alpha(var(--accent-bg-color), 0.2);
     border: 1px solid alpha(var(--accent-bg-color), 0.6); }
 .hb-tm-legend-free { border: 1px solid alpha(var(--accent-bg-color), 0.6); }
+.hb-tm-legend-name { font-size: 12px; color: $dim; }
+.hb-tm-legend-value { font-size: 12px; font-feature-settings: "tnum"; }
+.hb-tm-stat-of { font-size: 13.5px; color: $dim; }
+.hb-tm-stat-hint { font-size: 11.5px; color: $dim; }
+flowbox.hb-tm-flat > flowboxchild { padding: 0; margin: 0; background: none; }
+.hb-tm-mem-card { background: $card; border: 1px solid $border; border-radius: 6px;
+    padding: 12px 16px 13px 16px; }
+.hb-tm-mem-card-title { font-size: 13.5px; font-weight: 600; }
+.hb-tm-mem-card-text { font-size: 13px; }
+.hb-tm-more-card { padding: 9px 14px 10px 10px; }
 .hb-tm-pane { background: $card; border: 1px solid $border; border-radius: 6px; }
 .hb-tm-empty { color: $dim; font-size: 13px; }
 .hb-tm-dialog-key { color: $dim; }
