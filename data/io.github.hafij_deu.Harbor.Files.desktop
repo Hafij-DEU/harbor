@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Name=Harbor Files
+GenericName=File Manager
+Comment=Browse and manage your files in a Windows 11 style file explorer
+Exec=harbor-files %U
+Icon=io.github.hafij_deu.Harbor.Files
+Terminal=false
+Categories=GTK;GNOME;Utility;Core;FileManager;
+MimeType=inode/directory;
+Keywords=files;folder;explorer;file manager;browse;trash;drive;
+StartupNotify=true
+Actions=new-window;
+
+[Desktop Action new-window]
+Name=New Window
+Exec=harbor-files --new-window

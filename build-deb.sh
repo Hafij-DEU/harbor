@@ -56,6 +56,12 @@ Description: Windows 11-style apps for GNOME
  optimization settings for zram, swap file and zswap, a high-memory
  warning, app history, startup apps, users, details with priorities, and
  systemd services. Actions that need root ask through polkit.
+ .
+ Harbor Files: a File Explorer with tabs, a breadcrumb address bar,
+ recursive search, Home and This PC pages, Quick access pins, drives
+ with mount and eject, trash with restore, cut / copy / paste with
+ progress, ZIP compress and safe extract, open with, a details pane and
+ properties. Delete moves to the trash; permanent delete asks first.
 CTL
 cat > "$STAGE/DEBIAN/postinst" <<'SH'
 #!/bin/sh

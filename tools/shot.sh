@@ -2,7 +2,7 @@
 # Render a Harbor app window to PNG in a private headless GNOME Shell.
 #
 #   tools/shot.sh APP OUT.png [--size 1200x780] [--theme dark|light]
-#                 [--do 'python statement' ...] [--delay MS]
+#                 [--do 'python statement' ...] [--delay MS] [--overlay EXPR]
 #
 # APP is files, settings or taskmgr. Each --do runs in order (globals: win,
 # app, Gtk, GLib, Adw) with --delay ms between them, then the window is

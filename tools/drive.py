@@ -15,7 +15,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("Gsk", "4.0")
 gi.require_version("Graphene", "1.0")
-from gi.repository import Adw, GLib, Graphene, Gsk, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, GLib, Graphene, Gsk, Gtk  # noqa: E402
 
 p = argparse.ArgumentParser()
 p.add_argument("app")
@@ -24,12 +24,16 @@ p.add_argument("--size", default="1200x780")
 p.add_argument("--theme", default="dark", choices=["dark", "light"])
 p.add_argument("--do", action="append", default=[])
 p.add_argument("--delay", type=int, default=500)
+p.add_argument("--overlay", default=None,
+               help="python expression giving a popover (or (widget, x, y)) to paint on top; "
+                    "popovers are separate surfaces, so they are not in the window snapshot")
 a = p.parse_args()
 W, H = (int(v) for v in a.size.split("x"))
 
 mod = importlib.import_module("harbor." + a.app)
 application = mod.App()
 state = {"rc": 1}
+ENV = {}
 
 
 def fail(msg):
@@ -38,11 +42,41 @@ def fail(msg):
     return False
 
 
+def paint_overlay(win, snap):
+    target = eval(a.overlay, ENV)
+    if isinstance(target, tuple):
+        widget, x, y = target
+    else:
+        widget = target
+        parent = widget.get_parent()
+        ok, rect = widget.get_pointing_to()
+        if not ok:
+            rect = Gdk.Rectangle()
+        ok, pt = parent.compute_point(win, Graphene.Point().init(rect.x, rect.y + rect.height))
+        x, y = pt.x, pt.y
+    pw, ph = widget.get_width(), widget.get_height()
+    if pw <= 0 or ph <= 0:
+        raise RuntimeError("overlay widget is not mapped")
+    # keep it inside the window like the compositor would
+    x = max(0, min(x, win.get_width() - pw))
+    y = max(0, min(y, win.get_height() - ph))
+    snap.save()
+    snap.translate(Graphene.Point().init(x, y))
+    Gtk.WidgetPaintable.new(widget).snapshot(snap, pw, ph)
+    snap.restore()
+
+
 def render(win):
     w, h = win.get_width(), win.get_height()
     paintable = Gtk.WidgetPaintable.new(win)
     snap = Gtk.Snapshot()
     paintable.snapshot(snap, w, h)
+    if a.overlay:
+        try:
+            paint_overlay(win, snap)
+        except Exception:
+            traceback.print_exc()
+            return fail("overlay failed")
     node = snap.to_node()
     if node is None:
         return fail("no render node (layout not ready)")
@@ -66,7 +100,8 @@ def start():
         return fail("app has no window")
     win.set_default_size(W, H)
     steps = list(a.do)
-    env = {"win": win, "app": application, "Gtk": Gtk, "GLib": GLib, "Adw": Adw}
+    env = ENV
+    env.update({"win": win, "app": application, "Gtk": Gtk, "GLib": GLib, "Adw": Adw})
 
     def step():
         if steps:

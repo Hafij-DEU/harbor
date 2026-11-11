@@ -23,7 +23,26 @@ They follow the GNOME light/dark mode and accent colour.
 Linux has no per-process network speed without root, so the Network column
 shows open connections per process; the total at the top is real.
 
-Files and Settings apps are in progress.
+## Harbor Files
+
+- **Tabs**, back / forward / up, a breadcrumb address bar you can type a
+  path into (Ctrl+L), and search in the current folder (Ctrl+F).
+- **Command bar**: New folder or file, cut, copy, paste, rename, delete,
+  Sort, View (large icons, medium icons, details, hidden items) and a
+  Details pane.
+- **Sidebar**: Home, Quick access pins, This PC with every drive (mount and
+  eject), Network and Trash (restore, empty).
+- **Home** page with Quick access and recent files; **This PC** with
+  used/free bars for each drive.
+- **Right-click menu**: Open, Open with, Open in new tab, Copy as path, Pin
+  to Quick access, Compress to ZIP, Extract all, Open in Terminal and
+  Properties (size counted in the background).
+- Delete sends to the Trash. Permanent delete and Empty trash ask first.
+  Copy and move show progress and ask when a name already exists.
+
+Harbor Files does not make itself your default file manager.
+
+The Settings app is in progress.
 
 ## Install
 
@@ -31,17 +50,18 @@ Download `harbor_<version>_all.deb` from the
 [releases](https://github.com/Hafij-DEU/harbor/releases) and run:
 
 ```bash
-sudo apt install ./harbor_0.2.1_all.deb
+sudo apt install ./harbor_0.3.0_all.deb
 ```
 
-Then open **Harbor Task Manager** from the app menu, or run `harbor-taskmgr`
+Then open **Harbor Files** or **Harbor Task Manager** from the app menu,
+or run `harbor-files [folder]` / `harbor-taskmgr`
 (`harbor-taskmgr --page performance:memory` opens a page directly).
 
 ## Build and test
 
 ```bash
 ./build-deb.sh
-PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider tests/test_taskmgr.py tests/test_taskmgr_sweep.py
+PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider tests/test_files.py tests/test_taskmgr.py tests/test_taskmgr_sweep.py
 tools/shot.sh taskmgr shot.png --do "win.show_page('performance')"
 ```
 
