@@ -715,12 +715,21 @@ fun ConnectScreen(state: AppState) {
     }
 }
 
-/** Scans a Harbor QR code with Google's code scanner (no camera permission), saves the server and opens it. */
+/** Scans a Harbor QR code with Google's code scanner (no camera permission): a PC share is saved and
+ *  opened; a PC pairing code shares this phone with that PC. */
 private fun scanQr(state: AppState) {
     val opts = com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions.Builder()
         .setBarcodeFormats(com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE).build()
     com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(state.ctx, opts).startScan()
         .addOnSuccessListener { code ->
+            val pair = code.rawValue?.let(::parsePairQr)
+            if (pair != null) {
+                // The PC showed "Scan with the phone": share this phone and send it the address + PIN.
+                if (ServerService.state.value == null) { ServerService.error.value = null; ServerService.start(state.ctx) }
+                state.toast("Sharing this phone with the PC…")
+                state.scope.launch { state.toast(pairWithPc(pair) ?: "The PC is opening this phone") }
+                return@addOnSuccessListener
+            }
             val q = code.rawValue?.let(::parseConnectQr)
             if (q == null) { state.toast("Not a Harbor QR code"); return@addOnSuccessListener }
             val old = state.prefs.servers.firstOrNull { it.type == q.type && it.host == q.host && it.port == q.port }

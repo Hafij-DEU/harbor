@@ -58,9 +58,13 @@ shows open connections per process; the total at the top is real.
   in, and Harbor Files for Android connects with no typing. Sharing keeps
   going after you quit Harbor Files; a "Send by Wi-Fi" tray icon shows
   the QR code and PIN, copies the address and stops the share.
-- **Scan phone QR**: hold the QR code from Harbor Files for Android up to
-  the webcam and the phone's files open in a new tab (FTP; the PIN is
-  never saved).
+- **Scan phone QR**: open Harbor Files for Android's storage in a new tab
+  (FTP; the PIN is never saved). Two ways:
+  - *Scan with this PC*: hold the phone's QR code up to the webcam (virtual
+    cameras such as v4l2loopback are skipped).
+  - *Scan with the phone*: the PC shows a one-time code (5 minutes); scan it
+    in Harbor Files › Connect and the phone shares itself and sends its
+    address and PIN back. Needs Harbor Files for Android 0.1.2 or later.
 
 Harbor Files does not make itself your default file manager.
 
