@@ -126,10 +126,14 @@ QUICK = (
     (("button", "New folder", "win.new-folder", "harbor-rb-new-folder", "small"),
      ("menu", "New item", "new", "harbor-rb-new-item", "small")),
 )
+# what the quick line's Share menu holds (so the ribbon does not repeat them)
+SHARE_MENU = (("Zip", "win.compress"), ("Copy path", "win.copy-path"),
+              ("Share over Wi-Fi", "win.share-wifi"), ("Share selected", "win.share-folder"),
+              ("Scan phone QR", "win.scan-phone"))
 # always visible at the right end, whichever tab is open (like Windows 11)
 SIMPLE_END = (
     ("menu", "Sort", "sort", "harbor-rb-sort", "small"),
-    ("menu", "View", "view", "harbor-rb-large-icons", "small"),
+    ("menu", "Share", "share", "harbor-rb-send", "small"),
     ("toggle", "Split", "win.split-view", "harbor-rb-split", "small"),
     ("toggle", "Details", "win.details-pane", "harbor-rb-details-pane", "small"),
     ("toggle", "Preview", "win.preview-pane", "harbor-rb-preview-pane", "small"),
@@ -180,6 +184,8 @@ class Ribbon(Gtk.Box):
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.NONE, vhomogeneous=False)
         first = None
         for name, groups in RIBBON:
+            if self.custom and not self.simplified and not self._custom_groups(groups):
+                continue        # every command of this tab is in the quick line
             b = Gtk.ToggleButton(label=name, css_classes=["hbf-ribbon-tab"]
                                  + (["hbf-ribbon-file"] if name == "File" else []))
             if first is None:
@@ -250,11 +256,7 @@ class Ribbon(Gtk.Box):
         if self.simplified:
             return self._simple_page(groups)
         if self.custom:
-            # the quick line already has these, so the ribbon does not repeat them
-            quick = {e[2] for items in QUICK for e in items} | {e[2] for e in SIMPLE_END}
-            quick.add("win.view")
-            groups = [(c, [e for e in items if e[2] not in quick]) for c, items in groups]
-            groups = [(c, items) for c, items in groups if items]
+            groups = self._custom_groups(groups)
         page = Gtk.Box(css_classes=["hbf-ribbon-page"], spacing=0)
         for i, (caption, items) in enumerate(groups):
             if i:
@@ -292,6 +294,14 @@ class Ribbon(Gtk.Box):
             mb.set_has_frame(False)
             page.append(mb)
         return page
+
+    @staticmethod
+    def _custom_groups(groups):
+        """Ribbon groups minus what the quick line already has (no duplicates)."""
+        quick = {e[2] for items in QUICK for e in items} | {e[2] for e in SIMPLE_END}
+        quick |= {a for _l, a in SHARE_MENU}
+        groups = [(c, [e for e in items if e[2] not in quick]) for c, items in groups]
+        return [(c, items) for c, items in groups if items]
 
     def _quick_line(self):
         """Custom design: most used commands on their own line under the ribbon;
@@ -437,6 +447,8 @@ class Ribbon(Gtk.Box):
         """Rebuild after the icon set changed (cheap: the ribbon is small)."""
         current = self.current()
         for name, groups in RIBBON:
+            if self.custom and not self.simplified and not self._custom_groups(groups):
+                continue        # every command of this tab is in the quick line
             old = self.stack.get_child_by_name(name)
             self.stack.remove(old)
             self.stack.add_named(self._page(groups), name)

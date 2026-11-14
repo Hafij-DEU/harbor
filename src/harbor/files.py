@@ -1488,6 +1488,7 @@ class FilesWindow(HarborWindow):
         self.ribbon_slot.set_visible(ribbon)
 
     def ribbon_menus(self):
+        from .files_ribbon import SHARE_MENU
         def open_with():
             tab, items = self._sel()
             ct = items[0].content_type if len(items) == 1 and not items[0].is_dir else ""
@@ -1496,7 +1497,10 @@ class FilesWindow(HarborWindow):
         return {"move-to": lambda: fm.location_menu("move-to", self.location_places()),
                 "copy-to": lambda: fm.location_menu("copy-to", self.location_places()),
                 "new": fm.new_menu, "open-with": open_with, "sort": fm.sort_menu,
-                "view": fm.view_menu}
+                "view": fm.view_menu,
+                "share": lambda: fm.menu(
+                    fm.section(*(fm.item(lab, act) for lab, act in SHARE_MENU[:2])),
+                    fm.section(*(fm.item(lab, act) for lab, act in SHARE_MENU[2:])))}
 
     def toggle_ribbon(self):
         if self.ribbon is not None and self.ribbon_slot.get_visible():
