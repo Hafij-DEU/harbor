@@ -16,7 +16,7 @@ import threading
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
 
 from . import files_core as fc
-from . import files_icons
+from . import files_icons, files_office
 
 PREVIEW_MAX_IMAGE_BYTES = 64 * 1024 * 1024
 PREVIEW_PX = 640
@@ -76,22 +76,51 @@ def _count(path):
 
 class PreviewPane(Gtk.Box):
     def __init__(self, win):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, width_request=320,
-                         css_classes=["hbf-pane", "hbf-preview"])
+        super().__init__(css_classes=["hbf-pane", "hbf-preview"])
         self.win = win
         self._gen = 0
         self._key = None
         self._fonts_added = set()
+        # drag handle on the left edge: resize the pane, width is remembered
+        handle = Gtk.Box(width_request=6, css_classes=["hbf-preview-handle"])
+        handle.set_cursor(Gdk.Cursor.new_from_name("col-resize"))
+        handle.set_tooltip_text("Drag to resize the preview pane")
+        drag = Gtk.GestureDrag()
+        drag.connect("drag-begin", self._drag_begin)
+        drag.connect("drag-update", self._drag_update)
+        drag.connect("drag-end", self._drag_end)
+        handle.add_controller(drag)
+        self.append(handle)
+        self._drag_start = 0
+        self.set_hexpand(False)
         self.content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, vexpand=True,
-                               margin_start=14, margin_end=14, margin_top=14, margin_bottom=14,
+                               margin_start=8, margin_end=14, margin_top=14, margin_bottom=14,
                                spacing=8)
         # A non-scrolling ScrolledWindow clips and, unlike a Box, does not
-        # report the picture's natural width, so the pane stays 320 px wide
+        # report the picture's natural width, so the pane keeps its set width
         # instead of squeezing the file list.
-        self.append(Gtk.ScrolledWindow(child=self.content, vexpand=True,
+        self.append(Gtk.ScrolledWindow(child=self.content, vexpand=True, hexpand=False,
                                        hscrollbar_policy=Gtk.PolicyType.NEVER,
                                        vscrollbar_policy=Gtk.PolicyType.NEVER,
                                        propagate_natural_width=False))
+        self.set_pane_width(win.settings.get("preview_width"))
+
+    # ------------------------------------------------------------ width
+    def set_pane_width(self, width, save=False):
+        width = fc.clamp_preview_width(width, self.win.get_width() or None)
+        self.set_size_request(width, -1)
+        if save:
+            self.win.settings.set("preview_width", width)
+        return width
+
+    def _drag_begin(self, _g, _x, _y):
+        self._drag_start = self.get_width()
+
+    def _drag_update(self, _g, dx, _dy):
+        self.set_pane_width(self._drag_start - dx)
+
+    def _drag_end(self, _g, dx, _dy):
+        self.set_pane_width(self._drag_start - dx, save=True)
 
     # ------------------------------------------------------------ helpers
     def _clear(self):
@@ -221,6 +250,8 @@ class PreviewPane(Gtk.Box):
                         label="Showing the first %d KB" % (fc.PREVIEW_TEXT_LIMIT // 1024),
                         css_classes=["hb-dim", "hb-small"]))
             self._later(gen, lambda: fc.read_text_preview(path), got_text)
+        elif kind == "office":
+            self._show_office(item, gen, icon)
         elif kind in ("video", "audio"):
             media = Gtk.MediaFile.new_for_file(item.gfile)
             video = Gtk.Video(media_stream=media, autoplay=False, loop=False, vexpand=True,
@@ -253,6 +284,85 @@ class PreviewPane(Gtk.Box):
         else:
             self._message(icon, item.name, "No preview available")
 
+    # ------------------------------------------------------------ office
+    def _show_office(self, item, gen, icon, page=0):
+        okind = fc.office_kind(item.name)
+        settings = self.win.settings
+        if not settings.get("office_preview"):
+            self._message(icon, item.name, "Office previews are off in Settings")
+            return
+        limit = int(settings.get("preview_max_mb") or 0) * 1024 * 1024
+        if limit and (item.size or 0) > limit:
+            self._message(icon, item.name, "Too large to preview")
+            return
+        sp = self._loading()
+        path, mtime, size = item.path, item.mtime, item.size
+
+        def got(res):
+            self.content.remove(sp)
+            res = res or {"kind": "none"}
+            if res["kind"] == "image":
+                try:
+                    tex = Gdk.Texture.new_from_filename(res["png"])
+                except GLib.Error:
+                    tex = None
+                if tex is None:
+                    self._message(icon, item.name, "No preview available")
+                    return
+                pic = Gtk.Picture(paintable=tex, can_shrink=True, vexpand=True,
+                                  content_fit=Gtk.ContentFit.CONTAIN,
+                                  css_classes=["hbf-preview-pic", "hbf-preview-doc"])
+                pic.set_alternative_text(item.name)
+                self.content.append(pic)
+            elif res["kind"] == "table":
+                self.content.append(_table_widget(res.get("rows") or []))
+            elif res["kind"] == "text" and res.get("text"):
+                tv = Gtk.TextView(editable=False, cursor_visible=False,
+                                  wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=6,
+                                  left_margin=6, right_margin=6, css_classes=["hbf-preview-text"])
+                tv.get_buffer().set_text(res["text"])
+                self.content.append(Gtk.ScrolledWindow(child=tv, vexpand=True))
+            else:
+                self._message(icon, item.name, "No preview available")
+                return
+            # page / slide / sheet navigation
+            pages = res.get("pages") or 0
+            sheets = res.get("sheets") or []
+            count = len(sheets) if res["kind"] == "table" else pages
+            cur = res.get("page", page) or 0
+            bar = Gtk.Box(spacing=6, halign=Gtk.Align.CENTER)
+            if count and count > 1:
+                prev = Gtk.Button(icon_name="go-previous-symbolic", sensitive=cur > 0,
+                                  css_classes=["flat"], tooltip_text="Previous")
+                nxt = Gtk.Button(icon_name="go-next-symbolic", sensitive=cur < count - 1,
+                                 css_classes=["flat"], tooltip_text="Next")
+                label = (sheets[cur] if res["kind"] == "table" and cur < len(sheets)
+                         else "%d / %d" % (cur + 1, count))
+                prev.connect("clicked", lambda *_: self._show_office(item, self._clear(),
+                                                                       icon, cur - 1))
+                nxt.connect("clicked", lambda *_: self._show_office(item, self._clear(),
+                                                                      icon, cur + 1))
+                bar.append(prev)
+                bar.append(Gtk.Label(label=label, css_classes=["hb-dim"]))
+                bar.append(nxt)
+            app = files_office.app_for(okind)
+            if app is not None:
+                btn = Gtk.Button(label="Open in %s" % files_office.APP_NAMES[okind],
+                                 css_classes=["pill"])
+                btn.connect("clicked", lambda *_: self._launch(app, item))
+                bar.append(btn)
+            if bar.get_first_child() is not None:
+                self.content.append(bar)
+            self.content.append(Gtk.Label(label=item.name, ellipsize=Pango.EllipsizeMode.MIDDLE,
+                                          css_classes=["hb-dim"]))
+        self._later(gen, lambda: files_office.render(okind, path, mtime, size, page), got)
+
+    def _launch(self, app, item):
+        try:
+            app.launch([item.gfile], None)
+        except GLib.Error as e:
+            common_toast(self.win, "Couldn't open: %s" % e.message)
+
     def _add_font(self, path):
         """Make a font file usable in this process (once); True on success."""
         if path in self._fonts_added:
@@ -265,3 +375,20 @@ class PreviewPane(Gtk.Box):
         if ok:
             self._fonts_added.add(path)
         return bool(ok)
+
+
+def common_toast(win, text):
+    if hasattr(win, "notify_toast"):
+        win.notify_toast(text)
+
+
+def _table_widget(rows):
+    """A small read-only grid for spreadsheet previews."""
+    grid = Gtk.Grid(column_spacing=0, row_spacing=0, css_classes=["hbf-preview-table"])
+    for r, row in enumerate(rows):
+        for c, val in enumerate(row):
+            lab = Gtk.Label(label=str(val), xalign=0, ellipsize=Pango.EllipsizeMode.END,
+                            max_width_chars=14, css_classes=["hbf-cell"] +
+                            (["hbf-cell-head"] if r == 0 else []))
+            grid.attach(lab, c, r, 1, 1)
+    return Gtk.ScrolledWindow(child=grid, vexpand=True, hexpand=True)

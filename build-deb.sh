@@ -13,7 +13,7 @@ trap 'rm -rf "$STAGE"' EXIT
 APPS=()
 for b in bin/harbor-*; do APPS+=("${b#bin/harbor-}"); done
 declare -A ID=([taskmgr]=TaskManager [files]=Files [settings]=Settings)
-for f in src/harbor/__init__.py src/harbor/common.py; do
+for f in src/harbor/__init__.py src/harbor/common.py src/harbor/qr.py; do
     install -Dm644 "$f" "$STAGE/usr/lib/harbor/harbor/$(basename "$f")"
 done
 for a in "${APPS[@]}"; do
@@ -37,6 +37,10 @@ if [[ " ${APPS[*]} " == *" files "* ]]; then
     (cd data/icons && find hicolor -name 'harbor-*.svg') | while read -r f; do
         install -Dm644 "data/icons/$f" "$STAGE/usr/share/harbor/icons/$f"
     done
+    # blank Office files for New > Document / Spreadsheet / Presentation
+    for f in data/templates/*; do
+        install -Dm644 "$f" "$STAGE/usr/share/harbor/templates/$(basename "$f")"
+    done
 fi
 echo "apps: ${APPS[*]}"
 install -Dm644 LICENSE "$STAGE/usr/share/doc/$PKG/copyright"
@@ -48,8 +52,8 @@ Version: $VERSION
 Section: gnome
 Priority: optional
 Architecture: all
-Depends: python3 (>= 3.10), python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1 (>= 1.7), gir1.2-glib-2.0
-Recommends: pkexec, network-manager, zram-tools
+Depends: python3 (>= 3.10), python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1 (>= 1.7), gir1.2-glib-2.0, 7zip
+Recommends: pkexec, network-manager, zram-tools, 7zip-rar, python3-qrcode, gvfs-backends
 Maintainer: Md. Hafijur Rahman <mdhafijur.rahman@ogr.deu.edu.tr>
 Installed-Size: $(du -sk "$STAGE/usr" | cut -f1)
 Description: Windows 11-style apps for GNOME

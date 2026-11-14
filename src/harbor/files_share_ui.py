@@ -1,0 +1,250 @@
+"""Harbor Files: the "Share over Wi-Fi" dialog.
+
+The server object lives on the application (app.share_server), so closing
+the dialog keeps sharing on; it stops with the Stop button, the auto-stop
+timer or when Harbor quits. It never starts by itself.
+"""
+
+import os
+import time
+
+from gi.repository import Adw, Gdk, GLib, Gtk
+
+from . import common
+from . import files_core as fc
+from . import qr
+from .files_share import ShareServer
+
+STOP_LABELS = {15: "15 minutes", 30: "30 minutes", 60: "1 hour", 120: "2 hours", 0: "Never"}
+
+
+def share_folders(settings):
+    return [dict(f) for f in settings.data["share_folders"]]
+
+
+def add_share_folder(settings, path, upload=False):
+    path = os.path.normpath(path)
+    if any(f["path"] == path for f in settings.data["share_folders"]):
+        return False
+    settings.data["share_folders"].append({"path": path, "upload": bool(upload)})
+    settings.save()
+    return True
+
+
+def set_share_upload(settings, path, upload):
+    for f in settings.data["share_folders"]:
+        if f["path"] == path:
+            f["upload"] = bool(upload)
+    settings.save()
+
+
+def remove_share_folder(settings, path):
+    settings.data["share_folders"] = [f for f in settings.data["share_folders"]
+                                      if f["path"] != path]
+    settings.save()
+
+
+def qr_texture(text, scale=6, quiet=4):
+    """QR code as a Gdk texture (no cairo bindings needed)."""
+    m = qr.best_matrix(text)
+    n = len(m) + 2 * quiet
+    side = n * scale
+    rows = []
+    for y in range(n):
+        line = bytearray()
+        for x in range(n):
+            my, mx = y - quiet, x - quiet
+            dark = 0 <= my < len(m) and 0 <= mx < len(m) and m[my][mx]
+            line += (b"\x00\x00\x00" if dark else b"\xff\xff\xff") * scale
+        rows.append(bytes(line) * scale)
+    data = GLib.Bytes.new(b"".join(rows))
+    return Gdk.MemoryTexture.new(side, side, Gdk.MemoryFormat.R8G8B8, data, side * 3), side
+
+
+def qr_picture(text):
+    tex, side = qr_texture(text)
+    pic = Gtk.Picture(paintable=tex, can_shrink=False, halign=Gtk.Align.CENTER)
+    pic.set_size_request(side, side)
+    return pic
+
+
+class ShareDialog(Adw.Dialog):
+    def __init__(self, win, add_path=None):
+        super().__init__(title="Share over Wi-Fi", content_width=520, content_height=680)
+        self.win = win
+        self.app = win.app
+        self.settings = win.app.settings
+        if add_path:
+            add_share_folder(self.settings, add_path)
+        tv = Adw.ToolbarView()
+        tv.add_top_bar(Adw.HeaderBar())
+        self.page = Adw.PreferencesPage()
+        tv.set_content(self.page)
+        self.set_child(tv)
+        self._tick = 0
+        self.connect("closed", lambda *_: self._stop_tick())
+        self.build()
+
+    @property
+    def server(self):
+        return getattr(self.app, "share_server", None)
+
+    def _stop_tick(self):
+        if self._tick:
+            GLib.source_remove(self._tick)
+            self._tick = 0
+
+    # ------------------------------------------------------------ layout
+    def build(self):
+        for g in list(getattr(self, "_groups", [])):
+            self.page.remove(g)
+        self._groups = []
+        self._stop_tick()
+        running = self.server is not None and self.server.running
+        if running:
+            for g in self._status_group():
+                self._add(g)
+        self._add(self._folders_group(running))
+        self._add(self._options_group(running))
+        bar = Adw.PreferencesGroup()
+        btn = Gtk.Button(label="Stop sharing" if running else "Start sharing",
+                         halign=Gtk.Align.CENTER, css_classes=["pill", "destructive-action"
+                                                               if running else "suggested-action"])
+        btn.set_sensitive(running or bool(share_folders(self.settings)))
+        btn.connect("clicked", lambda *_: self.stop() if running else self.start())
+        bar.add(btn)
+        self._add(bar)
+        self.set_focus(btn)          # not the selectable URL label
+
+    def _add(self, g):
+        self.page.add(g)
+        self._groups.append(g)
+
+    def _status_group(self):
+        s = self.server
+        g = Adw.PreferencesGroup(title="Open on your phone or another computer")
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.append(qr_picture(s.url))
+        url = Gtk.Label(label=s.url, selectable=True, css_classes=["title-3"])
+        box.append(url)
+        pin = Gtk.Label(label="PIN  " + " ".join(s.pin), selectable=True,
+                        css_classes=["title-1"])
+        box.append(pin)
+        self.left = Gtk.Label(css_classes=["dim-label"])
+        box.append(self.left)
+        g.add(box)
+        rows = Adw.PreferencesGroup()
+        dav = Adw.ActionRow(title="As a network drive (WebDAV)",
+                            subtitle="%s  ·  user “harbor”, password = PIN" % s.dav_url,
+                            subtitle_selectable=True)
+        rows.add(dav)
+        hint = Adw.ActionRow(
+            title="Can't connect?",
+            subtitle="Both devices must be on the same Wi-Fi. If a firewall is on, allow "
+                     "port %d for your network, e.g. sudo ufw allow from %s/24 to any "
+                     "port %d proto tcp" % (s.port, s.host.rsplit(".", 1)[0] + ".0", s.port),
+            subtitle_selectable=True)
+        rows.add(hint)
+        self._update_left()
+        self._tick = GLib.timeout_add_seconds(20, self._update_left)
+        return g, rows
+
+    def _update_left(self):
+        s = self.server
+        if s is None or not s.running:
+            self._tick = 0
+            return False
+        if s.stops_at:
+            mins = max(0, int((s.stops_at - time.time()) // 60))
+            self.left.set_label("Stops by itself in %d min" % mins if mins else
+                                "Stops in less than a minute")
+        else:
+            self.left.set_label("Runs until you stop it")
+        return True
+
+    def _folders_group(self, running):
+        g = Adw.PreferencesGroup(title="Shared folders",
+                                 description="Only these folders (and what is inside) can be "
+                                             "opened. Hidden files are never shared.")
+        add = Gtk.Button(label="Add folder…", css_classes=["flat"], sensitive=not running)
+        add.connect("clicked", self._pick_folder)
+        g.set_header_suffix(add)
+        folders = share_folders(self.settings)
+        if not folders:
+            g.add(Adw.ActionRow(title="No folders yet", subtitle="Add a folder to share it"))
+        for f in folders:
+            row = Adw.ActionRow(title=os.path.basename(f["path"]) or f["path"],
+                                subtitle=f["path"], sensitive=not running)
+            row.add_prefix(Gtk.Image(icon_name="folder-symbolic"))
+            up = Gtk.Switch(active=f["upload"], valign=Gtk.Align.CENTER,
+                            tooltip_text="Let other devices upload into this folder")
+            up.connect("notify::active",
+                       lambda sw, _p, p=f["path"]: set_share_upload(self.settings, p,
+                                                                     sw.get_active()))
+            row.add_suffix(Gtk.Label(label="Uploads", css_classes=["dim-label"]))
+            row.add_suffix(up)
+            rm = Gtk.Button(icon_name="list-remove-symbolic", valign=Gtk.Align.CENTER,
+                            css_classes=["flat"], tooltip_text="Stop sharing this folder")
+            rm.connect("clicked", lambda _b, p=f["path"]: (
+                remove_share_folder(self.settings, p), self.build()))
+            row.add_suffix(rm)
+            g.add(row)
+        return g
+
+    def _options_group(self, running):
+        g = Adw.PreferencesGroup()
+        keys = list(fc.SHARE_AUTOSTOP)
+        combo = Adw.ComboRow(title="Stop sharing after",
+                             model=Gtk.StringList.new([STOP_LABELS[k] for k in keys]),
+                             sensitive=not running)
+        cur = self.settings.get("share_autostop")
+        combo.set_selected(keys.index(cur) if cur in keys else 1)
+        combo.connect("notify::selected",
+                      lambda c, _p: self.settings.set("share_autostop",
+                                                      keys[c.get_selected()]))
+        g.add(combo)
+        return g
+
+    def _pick_folder(self, *_):
+        fd = Gtk.FileDialog(title="Choose a folder to share")
+
+        def done(d, res):
+            try:
+                g = d.select_folder_finish(res)
+            except GLib.Error:
+                return
+            if g is not None and g.get_path():
+                add_share_folder(self.settings, g.get_path())
+                self.build()
+        fd.select_folder(self.win, None, done)
+
+    # ------------------------------------------------------------ server
+    def start(self):
+        folders = [f for f in share_folders(self.settings) if os.path.isdir(f["path"])]
+        if not folders:
+            return
+        s = self.settings
+        srv = ShareServer(folders, port=s.get("share_port"),
+                          upload_max_mb=s.get("share_upload_max_mb"),
+                          host=None, minutes=s.get("share_autostop"),
+                          on_stop=lambda: GLib.idle_add(self._stopped))
+        if common.DRY_RUN:
+            common.DRY_RUN_LOG.append(["share-start", [f["path"] for f in folders]])
+            return
+        try:
+            srv.start()
+        except OSError as e:
+            self.win.notify_toast("Can't start sharing: %s" % e, timeout=6)
+            return
+        self.app.share_server = srv
+        self.build()
+
+    def stop(self):
+        if self.server is not None:
+            self.server.stop()
+
+    def _stopped(self):
+        self.app.share_server = None
+        self.win.notify_toast("Sharing over Wi-Fi stopped")
+        self.build()
+        return False

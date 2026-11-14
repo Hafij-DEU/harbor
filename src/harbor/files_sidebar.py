@@ -5,6 +5,7 @@ import os
 from gi.repository import Gdk, Gio, GLib, GObject, Gtk
 
 from . import files_core as fc
+from . import files_network as fn
 from . import files_icons
 from .common import NavList
 
@@ -196,6 +197,9 @@ class Sidebar(Gtk.Box):
             add(key, text, icon, loc or ("volume", obj), indent=14)
         if self.has_network:
             add("network", "Network", "network-workgroup-symbolic", fc.NETWORK_URI)
+        for n in self.settings.network_locations():
+            add("net:" + n["url"], fn.display_name(n["url"], n["name"]), fn.icon_for(n["url"]),
+                n["url"], indent=14, tooltip=n["url"])
         lst.add_separator()
         add("trash", "Trash", "user-trash-full-symbolic" if self.trash_full
             else "user-trash-symbolic", fc.TRASH_URI)
@@ -341,6 +345,11 @@ class Sidebar(Gtk.Box):
                 s2.append_item(mi("Unmount", "win.sb-unmount", key))
         if key == "trash":
             s2.append_item(mi("Empty trash", "win.empty-trash"))
+        if key == "network" or key.startswith("net:"):
+            s2.append_item(mi("Add network location…", "win.add-network"))
+        if key.startswith("net:"):
+            s2.append_item(mi("Edit…", "win.net-edit", key[4:]))
+            s2.append_item(mi("Remove from sidebar", "win.net-remove", key[4:]))
         if s2.get_n_items():
             m.append_section(None, s2)
         if isinstance(target, str) and target.startswith("file:"):

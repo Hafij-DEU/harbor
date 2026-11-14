@@ -12,6 +12,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from . import common  # noqa: E402
+from . import files_actions as fa_  # noqa: E402
 from . import files_core as fc  # noqa: E402
 from . import files_icons  # noqa: E402
 from . import files_tint  # noqa: E402
@@ -88,7 +89,9 @@ def sel_dicts(items):
     return [dict(is_dir=i.is_dir, local=bool(i.path), can_rename=i.can("rename"),
                  can_trash=i.can("delete") or i.can("trash"),
                  archive=bool(fc.archive_kind(i.name)) and not i.is_dir,
-                 content_type=i.content_type) for i in items]
+                 content_type=i.content_type, name=i.name,
+                 parent=os.path.basename(os.path.dirname(i.path)) if i.path else "")
+            for i in items]
 
 
 def folder_location_of(item):
@@ -109,7 +112,9 @@ ACTION_RULES = {
     "invert-selection": "invert-selection", "copy-path": "copy-path",
     "open-window": "open-new-tab", "create-shortcut": "copy", "send-to": "copy",
     "move-to": "cut", "copy-to": "copy", "move-to-choose": "cut", "copy-to-choose": "copy",
-    "paste-shortcut": "paste",
+    "paste-shortcut": "paste", "new-doc": "new", "7z": "copy", "duplicate": "copy",
+    "make-executable": "copy", "set-wallpaper": "copy", "customize-folder": "copy",
+    "share-folder": "copy",
 }
 
 # Window actions that are always available (no selection rule): the ribbon
@@ -121,6 +126,7 @@ UNGATED_ACTIONS = {
     "open-location-of", "properties-at", "terminal-at", "copy-path-at", "pin-at", "unpin",
     "open-location", "open-location-tab", "open-uri", "open-uri-location", "forget-recent",
     "empty-trash", "about", "new-tab", "undo", "sb-mount", "sb-eject", "sb-unmount",
+    "copy-name", "add-network", "net-edit", "net-remove", "share-wifi",
 }
 
 
@@ -235,6 +241,10 @@ button.hbf-ribbon-btn:checked { background: $nav_sel; }
 .hbf-ribbon-small { min-height: 24px; }
 .hbf-ribbon-small label, checkbutton.hbf-ribbon-check label { font-size: 12px; }
 button.hbf-ribbon-btn:disabled, menubutton.hbf-ribbon-btn > button:disabled { opacity: 0.4; }
+.hbf-preview-table { background: @view_bg_color; }
+.hbf-cell { padding: 2px 6px; border-right: 1px solid alpha(currentColor, 0.1); border-bottom: 1px solid alpha(currentColor, 0.1); font-size: 11px; }
+.hbf-cell-head { font-weight: bold; }
+.hbf-preview-handle:hover { background: alpha(@accent_color, 0.35); }
 .hbf-preview-text { font-size: 12px; background: transparent; }
 .hbf-preview-text text { background: transparent; }
 """
@@ -853,6 +863,9 @@ class FilesWindow(HarborWindow):
         A("about", lambda: common.about_dialog(self, APP_NAME, ICON,
                                                "A Windows 11 style file manager for GNOME"))
         A("sb-mount", self._sb_mount, "s")
+        A("add-network", lambda: self.add_network_location())
+        A("net-edit", lambda url: self.add_network_location(url), "s")
+        A("net-remove", self._net_remove, "s")
         A("sb-eject", lambda key: self.sidebar.unmount(key, eject=True), "s")
         A("sb-unmount", lambda key: self.sidebar.unmount(key, eject=False), "s")
         view_key = "details" if s.get("view") == "details" else s.get("icon_size")
@@ -881,6 +894,15 @@ class FilesWindow(HarborWindow):
         A("options", self.show_options)
         A("close-window", self.close)
         A("ribbon-toggle", self.toggle_ribbon)
+        A("new-doc", lambda k: fa_.new_doc(self, k), "s")
+        A("7z", lambda w: fa_.sevenzip(self, w), "s")
+        A("duplicate", lambda: fa_.duplicate(self))
+        A("copy-name", lambda: fa_.copy_name(self))
+        A("make-executable", lambda: fa_.make_executable(self))
+        A("set-wallpaper", lambda: fa_.set_wallpaper(self))
+        A("customize-folder", lambda: self.customize_folder())
+        A("share-folder", lambda: self.share_wifi(True))
+        A("share-wifi", lambda: self.share_wifi())
         A("context-menu", lambda: self.menu_at_selection())
         A("context-menu-classic", lambda: self.menu_at_selection(classic=True))
 
@@ -1050,6 +1072,25 @@ class FilesWindow(HarborWindow):
         dlg.connect("closed", lambda *_: setattr(self, "_options", None))
         dlg.present(self)
         return dlg
+
+    def customize_folder(self):
+        _tab, items = self._sel()
+        if len(items) == 1 and items[0].is_dir and items[0].path:
+            from .files_customize import CustomizeDialog
+            CustomizeDialog(self, items[0].gfile).present(self)
+
+    def share_wifi(self, selected=False):
+        """Open the Share over Wi-Fi dialog; with selected, add that folder."""
+        path = None
+        if selected:
+            _tab, items = self._sel()
+            if len(items) == 1 and items[0].is_dir and items[0].path:
+                path = items[0].path
+        from .files_share_ui import ShareDialog
+        ShareDialog(self, add_path=path).present(self)
+
+    def set_preview_width(self, width):
+        self.preview.set_pane_width(width)
 
     def apply_setting(self, key, value):
         """Options dialog: store a setting and apply it live in every window."""
@@ -1578,6 +1619,23 @@ class FilesWindow(HarborWindow):
         self.ops._start("Extracting “%s”" % os.path.basename(archive),
                         lambda j: fc.extract_archive(j, archive, folder), job, done)
 
+    def add_network_location(self, url=""):
+        from .files_network import AddLocationDialog
+        old = {n["url"]: n["name"] for n in self.settings.network_locations()}
+
+        def save(new_url, name):
+            if url and new_url != url:
+                self.settings.remove_network_location(url)
+            self.settings.add_network_location(new_url, name or old.get(url, ""))
+            self.sidebar.rebuild()
+            self.open_location(new_url)
+        AddLocationDialog(save, url, old.get(url, "")).present(self)
+
+    def _net_remove(self, url):
+        if self.settings.remove_network_location(url):
+            self.sidebar.rebuild()
+            self.notify_toast("Removed from the sidebar")
+
     def _sb_mount(self, key):
         t = self.sidebar.targets.get(key)
         if isinstance(t, tuple) and t and t[0] == "volume":
@@ -1896,6 +1954,8 @@ class App(Adw.Application):
         win.present()
 
     def do_shutdown(self):
+        if getattr(self, "share_server", None) is not None:
+            self.share_server.stop()
         if getattr(self, "fm1", None) is not None:
             self.fm1.stop()
         from . import files_debug

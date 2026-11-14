@@ -39,10 +39,27 @@ shows open connections per process; the total at the top is real.
   Properties (size counted in the background).
 - Delete sends to the Trash. Permanent delete and Empty trash ask first.
   Copy and move show progress and ask when a name already exists.
+- **Preview pane** (resizable) for images, text, PDF and Office files. Office
+  previews use Craft Suite or LibreOffice, whichever is installed.
+- **7-Zip**: Add to archive (7z, zip, tar.xz…), Extract here, Extract to
+  folder, and Test archive, from the right-click menu.
+- **Folder colours** follow your accent colour, or pick one per folder with
+  **Customize folder** (colour, icon, emblem, your own picture, Restore
+  default).
+- **Network locations**: add FTP, SFTP, SMB, WebDAV, NFS or AFP addresses to
+  the sidebar. Passwords are asked when you connect and kept by the GNOME
+  keyring if you choose, never in Harbor's settings.
+- **Share over Wi-Fi**: open chosen folders from a phone or another computer
+  in a web browser, or as a WebDAV network drive. A 6-digit PIN protects
+  each session; 5 wrong tries lock it for 5 minutes. Folders are read-only
+  unless you turn uploads on, and uploads never overwrite a file. Sharing
+  never starts by itself and stops after 30 minutes (you can change this).
+  Scan the QR code on your phone to open it.
 
 Harbor Files does not make itself your default file manager.
 
 The Settings app is in progress.
+
 
 ## Install
 

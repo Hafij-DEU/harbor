@@ -40,7 +40,69 @@ def menu(*sections):
 def new_menu():
     return menu(section(item("Folder", "win.new-folder", icon="folder-new-symbolic")),
                 section(item("Text document", "win.new-text", icon="text-x-generic-symbolic"),
+                        item("Markdown document", "win.new-doc", "markdown",
+                             icon="text-x-generic-symbolic"),
+                        item("Word document", "win.new-doc", "docx",
+                             icon="x-office-document-symbolic"),
+                        item("Spreadsheet", "win.new-doc", "xlsx",
+                             icon="x-office-spreadsheet-symbolic"),
+                        item("Presentation", "win.new-doc", "pptx",
+                             icon="x-office-presentation-symbolic"),
                         item("Empty file", "win.new-empty", icon="document-new-symbolic")))
+
+
+def sevenzip_menu(sel):
+    """7-Zip submenu for the selection (sel as in fc.command_states)."""
+    n = len(sel)
+    one = sel[0] if n == 1 else {}
+    arch = n == 1 and bool(one.get("archive"))
+    stem = fa_stem(one.get("name", "")) if arch else ""
+    files = [s for s in sel if not s.get("is_dir")]
+    m = menu(
+        section(item("Open archive", "win.7z", "open") if arch else None,
+                item("Extract files…", "win.7z", "extract-dialog") if arch else None,
+                item("Extract here", "win.7z", "extract-here") if arch else None,
+                item("Extract to “%s/”" % stem, "win.7z", "extract-to") if arch else None,
+                item("Test archive", "win.7z", "test") if arch else None),
+        section(item("Add to archive…", "win.7z", "add-dialog"),
+                item("Add to “%s.7z”" % add_stem(sel), "win.7z", "add-7z"),
+                item("Add to “%s.zip”" % add_stem(sel), "win.7z", "add-zip")),
+        section(item("CRC SHA", "win.7z", "hash") if files else None))
+    return m
+
+
+def fa_stem(name):
+    from . import files_archive
+    return files_archive.archive_stem(name)
+
+
+def add_stem(sel):
+    if len(sel) == 1:
+        name = sel[0].get("name", "") or "Archive"
+        if not sel[0].get("is_dir"):
+            name = name.rsplit(".", 1)[0] if "." in name[1:] else name
+        return name
+    return sel[0].get("parent", "") or "Archive" if sel else "Archive"
+
+
+def extra_section(sel, st):
+    """Duplicate, Copy name, Make executable, Set as wallpaper, Customize folder."""
+    n = len(sel)
+    one = sel[0] if n == 1 else {}
+    ct = (one.get("content_type") or "")
+    return section(
+        item("Duplicate", "win.duplicate", icon="edit-copy-symbolic") if st["copy"] else None,
+        item("Copy name", "win.copy-name") if n else None,
+        item("Make executable", "win.make-executable")
+        if st["copy"] and any(not s.get("is_dir") for s in sel) else None,
+        item("Set as desktop background", "win.set-wallpaper",
+             icon="preferences-desktop-wallpaper-symbolic")
+        if n == 1 and one.get("local") and ct.startswith("image/") else None,
+        item("Customize folder…", "win.customize-folder", icon="folder-symbolic")
+        if n == 1 and one.get("is_dir") and one.get("local") else None,
+        item("Share over Wi-Fi…", "win.share-folder", icon="network-wireless-symbolic")
+        if n == 1 and one.get("is_dir") and one.get("local") else None,
+    )
 
 
 def sort_menu():
@@ -65,6 +127,8 @@ def more_menu(pin_label="Pin to Quick access"):
                 section(item(pin_label, "win.pin-toggle"),
                         item("Open in Terminal", "win.terminal"),
                         item("Copy path", "win.copy-path")),
+                section(item("Add network location…", "win.add-network"),
+                        item("Share over Wi-Fi…", "win.share-wifi")),
                 section(item("Undo", "win.undo")),
                 section(item("Properties", "win.properties"),
                         item("Settings", "win.options"),
@@ -244,7 +308,10 @@ def win11_item_menu(kind, sel, can_paste=False, pinned=False):
         if n == 1 and one.get("is_dir") and one.get("local") and can_paste else None,
         item("Properties", "win.properties", icon="document-properties-symbolic"),
     )
-    return _with_row(row, s1, s1b, s2, more_options_section())
+    s3 = extra_section(sel, st)
+    if st["copy"]:
+        s3.append_submenu("7-Zip", sevenzip_menu(sel))
+    return _with_row(row, s1, s1b, s2, s3, more_options_section())
 
 
 def win11_background_menu(kind, can_paste=False, location=None, pinned=False):
@@ -294,8 +361,11 @@ def classic_item_menu(kind, sel, can_paste=False, pinned=False, send_to=()):
         item("Delete", "win.delete") if st["delete"] else None,
         item("Rename", "win.rename") if st["rename"] else None,
     )
+    if st["copy"]:
+        s2.append_submenu("7-Zip", sevenzip_menu(sel))
+    s4b = extra_section(sel, st)
     s5 = section(item("Properties", "win.properties"))
-    return menu(s1, s2, s3, s4, s5)
+    return menu(s1, s2, s3, s4, s4b, s5)
 
 
 def classic_background_menu(kind, can_paste=False, location=None, pinned=False):
