@@ -1036,3 +1036,20 @@ def test_new_accels_registered():
     src = open(files.__file__).read()
     for accel in ('"<Alt>p"', '"<Control>F1"', "Shift"):
         assert accel.lower() in src.lower(), accel
+
+
+def test_trash_unsupported_drive_is_offered_for_delete(tmp_path):
+    from gi.repository import Gio, GLib
+    touch(str(tmp_path / "a.txt"))
+    touch(str(tmp_path / "b.txt"))
+
+    def trash(g, _c):
+        if g.get_basename() == "a.txt":
+            raise GLib.Error.new_literal(
+                Gio.io_error_quark(), "Unable to find or create trash directory /x/.Trash-1000",
+                Gio.IOErrorEnum.NOT_SUPPORTED)
+        raise GLib.Error.new_literal(Gio.io_error_quark(), "denied",
+                                     Gio.IOErrorEnum.PERMISSION_DENIED)
+    j = fc.trash_paths(fc.Job(), [str(tmp_path / "a.txt"), str(tmp_path / "b.txt")], trash=trash)
+    assert j.no_trash == [str(tmp_path / "a.txt")]
+    assert len(j.errors) == 1 and j.errors[0].startswith("b.txt")

@@ -135,8 +135,35 @@ class Operations:
         if not paths:
             return None
         job = fc.Job()
+
+        def finished(j):
+            if j.no_trash and not j.cancelled:
+                self._offer_delete(j.no_trash, on_done)
+            elif on_done:
+                on_done(j)
         return self._start("Moving %s to the trash" % fc.item_count_text(len(paths)),
-                           lambda j: fc.trash_paths(j, paths), job, on_done)
+                           lambda j: fc.trash_paths(j, paths), job, finished)
+
+    def _offer_delete(self, paths, on_done=None):
+        """This drive has no trash: ask before deleting for good."""
+        n = len(paths)
+        what = ("“%s”" % os.path.basename(paths[0]) if n == 1
+                else fc.item_count_text(n))
+        dlg = Adw.AlertDialog(
+            heading="Can't move to the trash",
+            body=("This drive has no trash. Delete %s permanently? "
+                  "This can't be undone." % what))
+        dlg.add_response("cancel", "Cancel")
+        dlg.add_response("delete", "Delete permanently")
+        dlg.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
+        dlg.set_default_response("cancel")
+        dlg.set_close_response("cancel")
+
+        def resp(_d, r):
+            if r == "delete":
+                self.delete_permanently(paths, on_done)
+        dlg.connect("response", resp)
+        dlg.present(self.win)
 
     def delete_permanently(self, paths, on_done=None):
         if not paths:

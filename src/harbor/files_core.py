@@ -639,6 +639,7 @@ class Job:
         self.errors = []
         self.copied = []      # resulting destination paths
         self.skipped = 0
+        self.no_trash = []    # paths on a drive with no usable trash
 
     def cancel(self):
         self.cancellable.cancel()
@@ -837,6 +838,13 @@ def delete_permanently(job, paths):
     return job
 
 
+def trash_unsupported(err):
+    """True when Gio can't trash on this drive at all (no usable .Trash-UID,
+    e.g. a root-owned NTFS/FAT mount), as opposed to a per-file failure."""
+    return (err.matches(Gio.io_error_quark(), Gio.IOErrorEnum.NOT_SUPPORTED)
+            or "trash directory" in (err.message or ""))
+
+
 def trash_paths(job, paths, trash=None):
     """Move paths to the trash (trash(gfile, cancellable) for tests)."""
     trash = trash or (lambda g, c: g.trash(c))
@@ -848,7 +856,10 @@ def trash_paths(job, paths, trash=None):
             trash(Gio.File.new_for_path(p), job.cancellable)
             job.copied.append(p)
         except GLib.Error as e:
-            job.errors.append("%s: %s" % (os.path.basename(p), e.message))
+            if trash_unsupported(e):
+                job.no_trash.append(p)
+            else:
+                job.errors.append("%s: %s" % (os.path.basename(p), e.message))
         job.done += 1
         job.progress(os.path.basename(p))
     return job
