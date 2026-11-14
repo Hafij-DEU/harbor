@@ -262,7 +262,7 @@ class ThisPCPage(Gtk.ScrolledWindow):
         self.win = win
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_start=28,
                         margin_end=28, margin_top=18, margin_bottom=24)
-        outer.append(section_label("Folders"))
+        outer.append(section_label("Quick access"))
         self.folders = tile_flow()
         self.folders.connect("child-activated", lambda _f, c: win.open_location(c.location))
         _Clicks(self.folders, lambda x, y: self.folders.get_child_at_pos(x, y),
@@ -280,7 +280,12 @@ class ThisPCPage(Gtk.ScrolledWindow):
     def refresh(self):
         self.folders.remove_all()
         home = os.path.normpath(fc.home_dir())
-        for path, lab, icon in [(home, "My files", "user-home")] + fsb.user_dirs():
+        rows = [(home, "My files", "user-home")]
+        for q in fsb.quick_access(self.win.app.settings):
+            p = os.path.normpath(q["path"])
+            if p != home and all(p != r[0] for r in rows):
+                rows.append((p, q["label"], q["icon"]))
+        for path, lab, icon in rows:
             child = Gtk.FlowBoxChild(child=tile(icon, lab, "Stored locally" if path == home
                                                 else pretty_dir(os.path.dirname(path))))
             child.location = fc.location_for(path)

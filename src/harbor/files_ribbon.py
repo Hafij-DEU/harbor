@@ -18,67 +18,67 @@ from . import files_icons
 RIBBON = (
     ("File", (
         ("", (
-            ("button", "Open new window", "win.new-window", "window-new-symbolic", "big"),
-            ("button", "Open in Terminal", "win.terminal", "utilities-terminal-symbolic", "big"),
-            ("button", "Options", "win.options", "preferences-system-symbolic", "big"),
-            ("button", "Close", "win.close-window", "window-close-symbolic", "big"),
+            ("button", "Open new window", "win.new-window", "harbor-rb-window-new", "big"),
+            ("button", "Open in Terminal", "win.terminal", "harbor-rb-terminal", "big"),
+            ("button", "Options", "win.options", "harbor-rb-options", "big"),
+            ("button", "Close", "win.close-window", "harbor-rb-close", "big"),
         )),
     )),
     ("Home", (
         ("Clipboard", (
-            ("button", "Pin to Quick access", "win.pin-toggle", "starred", "big"),
-            ("button", "Copy", "win.copy", "edit-copy-symbolic", "big"),
-            ("button", "Paste", "win.paste", "edit-paste-symbolic", "big"),
-            ("button", "Cut", "win.cut", "edit-cut-symbolic", "small"),
-            ("button", "Copy path", "win.copy-path", "insert-link-symbolic", "small"),
-            ("button", "Paste shortcut", "win.paste-shortcut", "emblem-symbolic-link", "small"),
+            ("button", "Pin to Quick access", "win.pin-toggle", "harbor-rb-pin", "big"),
+            ("button", "Copy", "win.copy", "harbor-rb-copy", "big"),
+            ("button", "Paste", "win.paste", "harbor-rb-paste", "big"),
+            ("button", "Cut", "win.cut", "harbor-rb-cut", "small"),
+            ("button", "Copy path", "win.copy-path", "harbor-rb-link", "small"),
+            ("button", "Paste shortcut", "win.paste-shortcut", "harbor-rb-shortcut", "small"),
         )),
         ("Organize", (
-            ("menu", "Move to", "move-to", "go-next-symbolic", "big"),
-            ("menu", "Copy to", "copy-to", "edit-copy-symbolic", "big"),
-            ("button", "Delete", "win.delete", "user-trash-symbolic", "big"),
-            ("button", "Rename", "win.rename", "document-edit-symbolic", "big"),
+            ("menu", "Move to", "move-to", "harbor-rb-move-to", "big"),
+            ("menu", "Copy to", "copy-to", "harbor-rb-copy-to", "big"),
+            ("button", "Delete", "win.delete", "harbor-rb-delete", "big"),
+            ("button", "Rename", "win.rename", "harbor-rb-rename", "big"),
         )),
         ("New", (
-            ("button", "New folder", "win.new-folder", "folder", "big"),
-            ("menu", "New item", "new", "document-new-symbolic", "small"),
+            ("button", "New folder", "win.new-folder", "harbor-rb-new-folder", "big"),
+            ("menu", "New item", "new", "harbor-rb-new-item", "small"),
         )),
         ("Open", (
-            ("button", "Properties", "win.properties", "document-properties-symbolic", "big"),
-            ("button", "Open", "win.open", "document-open-symbolic", "small"),
-            ("menu", "Open with", "open-with", "system-run-symbolic", "small"),
+            ("button", "Properties", "win.properties", "harbor-rb-properties", "big"),
+            ("button", "Open", "win.open", "harbor-rb-open", "small"),
+            ("menu", "Open with", "open-with", "harbor-rb-open-with", "small"),
         )),
         ("Select", (
-            ("button", "Select all", "win.select-all", "edit-select-all-symbolic", "small"),
-            ("button", "Select none", "win.select-none", "edit-clear-symbolic", "small"),
-            ("button", "Invert selection", "win.invert-selection", "object-flip-horizontal-symbolic",
+            ("button", "Select all", "win.select-all", "harbor-rb-select-all", "small"),
+            ("button", "Select none", "win.select-none", "harbor-rb-select-none", "small"),
+            ("button", "Invert selection", "win.invert-selection", "harbor-rb-invert",
              "small"),
         )),
     )),
     ("Share", (
         ("Send", (
-            ("button", "Zip", "win.compress", "package-x-generic-symbolic", "big"),
-            ("button", "Copy path", "win.copy-path", "insert-link-symbolic", "big"),
+            ("button", "Zip", "win.compress", "harbor-rb-zip", "big"),
+            ("button", "Copy path", "win.copy-path", "harbor-rb-link", "big"),
         )),
         ("Wi-Fi", (
-            ("button", "Share over Wi-Fi", "win.share-wifi", "network-wireless-symbolic", "big"),
-            ("button", "Share selected", "win.share-folder", "send-to-symbolic", "small"),
-            ("button", "Scan phone QR", "win.scan-phone", "camera-photo-symbolic", "small"),
+            ("button", "Share over Wi-Fi", "win.share-wifi", "harbor-rb-wifi", "big"),
+            ("button", "Share selected", "win.share-folder", "harbor-rb-send", "small"),
+            ("button", "Scan phone QR", "win.scan-phone", "harbor-rb-qr", "small"),
         )),
     )),
     ("View", (
         ("Panes", (
-            ("toggle", "Navigation pane", "win.nav-pane", "sidebar-show-symbolic", "big"),
-            ("toggle", "Preview pane", "win.preview-pane", "view-paged-symbolic", "small"),
-            ("toggle", "Details pane", "win.details-pane", "view-dual-symbolic", "small"),
+            ("toggle", "Navigation pane", "win.nav-pane", "harbor-rb-nav-pane", "big"),
+            ("toggle", "Preview pane", "win.preview-pane", "harbor-rb-preview-pane", "small"),
+            ("toggle", "Details pane", "win.details-pane", "harbor-rb-details-pane", "small"),
         )),
         ("Layout", (
-            ("toggle", "Large icons", "win.view", "view-grid-symbolic", "small", "large"),
-            ("toggle", "Medium icons", "win.view", "view-app-grid-symbolic", "small", "medium"),
-            ("toggle", "Details", "win.view", "view-list-symbolic", "small", "details"),
+            ("toggle", "Large icons", "win.view", "harbor-rb-large-icons", "small", "large"),
+            ("toggle", "Medium icons", "win.view", "harbor-rb-medium-icons", "small", "medium"),
+            ("toggle", "Details", "win.view", "harbor-rb-details-view", "small", "details"),
         )),
         ("Current view", (
-            ("menu", "Sort by", "sort", "view-sort-descending-symbolic", "big"),
+            ("menu", "Sort by", "sort", "harbor-rb-sort", "big"),
         )),
         ("Show/hide", (
             ("check", "File name extensions", "win.show-ext"),
@@ -107,8 +107,9 @@ def menu_keys():
 
 
 def _icon(name, size):
-    img = Gtk.Image(pixel_size=size)
-    img.set_from_icon_name(files_icons.themed(name))
+    img = Gtk.Image(pixel_size=size, css_classes=["hbf-ribbon-icon"])
+    # Harbor's own full-colour ribbon set is used as it is, in every icon mode
+    img.set_from_icon_name(name if name.startswith("harbor-rb-") else files_icons.themed(name))
     return img
 
 
@@ -200,6 +201,15 @@ class Ribbon(Gtk.Box):
                         max_width_chars=10 if big else -1)
         lab.set_wrap_mode(Pango.WrapMode.WORD)
         inner.append(lab)
+        if kind == "menu":
+            arrow = Gtk.Image(icon_name="pan-down-symbolic", pixel_size=10,
+                              css_classes=["hbf-ribbon-arrow"])
+            if big:
+                inner.append(arrow)
+            else:
+                lab.set_hexpand(True)
+                lab.set_xalign(0)
+                inner.append(arrow)
         cls = ["hbf-ribbon-btn", "hbf-ribbon-big" if big else "hbf-ribbon-small"]
         if kind == "menu":
             w = Gtk.MenuButton(child=inner, css_classes=cls, always_show_arrow=False)

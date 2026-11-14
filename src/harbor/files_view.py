@@ -8,6 +8,7 @@ and shares one selection between the details and the icon views.
 import os
 import threading
 import time
+import weakref
 from concurrent.futures import ThreadPoolExecutor
 
 import gi
@@ -217,6 +218,24 @@ def widget_point(src, target, x, y):
     return x, y
 
 
+# Items on the clipboard look different: cut ones are faded, copied ones get
+# a dashed outline, so it is clear what Paste will act on.
+CLIP = {"cut": False, "paths": frozenset()}
+_VIEWS = weakref.WeakSet()
+
+
+def set_clip_marks(paths, cut=False):
+    CLIP["cut"], CLIP["paths"] = bool(cut), frozenset(paths or ())
+    for v in list(_VIEWS):
+        v.refresh_clip_marks()
+
+
+def _clip_style(box, item):
+    on = bool(item.path) and item.path in CLIP["paths"]
+    for cls, want in (("hbf-cut", on and CLIP["cut"]), ("hbf-copied", on and not CLIP["cut"])):
+        (box.add_css_class if want else box.remove_css_class)(cls)
+
+
 class FolderView(Gtk.Box):
     """Details/icon view of one location."""
 
@@ -233,6 +252,7 @@ class FolderView(Gtk.Box):
     def __init__(self, show_hidden=False, view="details", icon_size="large"):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.add_css_class("hbf-view")
+        _VIEWS.add(self)
         self.mode = "folder"        # folder | trash | search
         self.gfile = None
         self.show_hidden = show_hidden
@@ -367,6 +387,7 @@ class FolderView(Gtk.Box):
             box.img.set_from_icon_name(files_icons.themed("text-x-generic"))
         box.lab.set_label(self.label_for(item))
         box.set_opacity(0.55 if item.hidden else 1.0)
+        _clip_style(box, item)
 
     def _unbind(self, _f, cell):
         child = cell.get_child()
@@ -407,6 +428,7 @@ class FolderView(Gtk.Box):
         item.cells.append(box)
         box.lab.set_label(self.label_for(item))
         box.set_opacity(0.55 if item.hidden else 1.0)
+        _clip_style(box, item)
         self._set_grid_icon(box, item)
         loader = thumb_loader(item, box.icon_px) if item.thumb_state == 0 else None
         if loader is not None:
@@ -867,6 +889,11 @@ class FolderView(Gtk.Box):
         self.empty.set_visible(text is not None)
         if text:
             self.empty_label.set_label(text)
+
+    def refresh_clip_marks(self):
+        for item in self.items():
+            for box in item.cells:
+                _clip_style(box, item)
 
     def items(self):
         return [self.sort_model.get_item(i) for i in range(self.sort_model.get_n_items())]

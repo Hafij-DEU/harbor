@@ -39,8 +39,8 @@ STARTUP_CHOICES = (
      (("thispc", "This PC"), ("home", "Home"), ("last", "Last folder"))),
 )
 LAYOUT_CHOICES = (
-    ("command_bar", "Command bar", None,
-     (("win11", "Windows 11"), ("ribbon", "Windows 10 ribbon"))),
+    ("density", "Layout density", "Compact fits more rows on screen",
+     (("comfortable", "Comfortable"), ("compact", "Compact"))),
     ("menu_style", "Right-click menu", "Show more options (Shift+F10) always opens the classic one",
      (("win11", "Windows 11"), ("classic", "Classic (Windows 10)"))),
 )
@@ -75,6 +75,8 @@ SWITCHES = {
                                 "Double-click lists a .zip / .7z / .tar here instead of the "
                                 "default app"),
     "folder_sizes": ("Folder sizes", "Fill in the Size column for folders in the background"),
+    "show_storage": ("Storage overview button",
+                     "Small drive button next to the view buttons: total, used and free space"),
     "image_thumbnails": ("Image thumbnails", None),
     "doc_thumbnails": ("Document thumbnails", "Office pages in Large icons (slower)"),
     "office_preview": ("Office preview", None),
@@ -84,6 +86,46 @@ SWITCHES = {
 
 def _all_choices():
     return APPEARANCE_CHOICES + STARTUP_CHOICES + LAYOUT_CHOICES + BEHAVIOUR_CHOICES
+
+
+DESIGNS = (("win11", "Windows 11", "Tabs in the title bar, command bar, rounded"),
+           ("win10", "Windows 10", "Blue title bar, File / Home / Share / View ribbon, flat"),
+           ("win12", "Concept", "Experimental: floating rounded panels and pill controls"))
+ACCENTS = (("#3584e4", "Blue"), ("#2190a4", "Teal"), ("#3a944a", "Green"),
+           ("#c88800", "Yellow"), ("#ed5b00", "Orange"), ("#e62d42", "Red"),
+           ("#d56199", "Pink"), ("#9141ac", "Purple"), ("#6f8396", "Slate"))
+
+
+def design_thumb(value, width=150, height=84):
+    """A tiny drawing of the window made of boxes (no images needed)."""
+    t = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, css_classes=["hbo-thumb"],
+                height_request=height, width_request=width)
+    if value == "win10":
+        t.append(Gtk.Box(css_classes=["hbo-t-blue"]))
+        t.append(Gtk.Box(css_classes=["hbo-t-ribbon"]))
+        t.append(Gtk.Box(css_classes=["hbo-t-row"]))
+    else:
+        tabs = Gtk.Box(css_classes=["hbo-t-tabs"])
+        tabs.append(Gtk.Box(css_classes=["hbo-t-tab"] + (["hbo-t-pill"] if value == "win12" else [])))
+        t.append(tabs)
+        t.append(Gtk.Box(css_classes=["hbo-t-row", "hbo-t-round"]
+                         + (["hbo-t-pill"] if value == "win12" else [])))
+        if value == "win12":
+            t.append(Gtk.Box(css_classes=["hbo-t-cmd", "hbo-t-cmdcard"]))
+        else:
+            t.append(Gtk.Box(css_classes=["hbo-t-cmd"]))
+    if value == "win12":
+        body = Gtk.Box(vexpand=True, spacing=4, css_classes=["hbo-t-float"])
+        body.append(Gtk.Box(css_classes=["hbo-t-side", "hbo-t-card"]))
+        body.append(Gtk.Box(hexpand=True, css_classes=["hbo-t-card"]))
+        t.add_css_class("hbo-thumb-w12")
+    else:
+        body = Gtk.Box(vexpand=True, css_classes=["hbo-t-body"])
+        body.append(Gtk.Box(css_classes=["hbo-t-side"]))
+    t.append(body)
+    if value == "win11":
+        t.add_css_class("hbo-thumb-round")
+    return t
 
 
 def _check_choices():
@@ -144,6 +186,7 @@ class SettingsDialog(Adw.PreferencesDialog):
 
     def _build_appearance(self):
         p = self._page("appearance", "Appearance", "applications-graphics-symbolic")
+        p.add(self._design_group())
         g = Adw.PreferencesGroup(title="Look")
         for spec in APPEARANCE_CHOICES:
             g.add(self._combo(*spec))
@@ -160,7 +203,32 @@ class SettingsDialog(Adw.PreferencesDialog):
         self._sync_custom()
         g.add(self._value_combo("icon_size", "Default icon size", None, ICON_SIZES,
                                 self.s.get("icon_size"), self._set_icon_size))
+        g.add(self._accent_row())
         p.add(g)
+        w = Adw.PreferencesGroup(title="Welcome")
+        row = Adw.ActionRow(title="Welcome tour and setup",
+                            subtitle="See what Harbor Files can do and pick your design again")
+        btn = Gtk.Button(label="Open", valign=Gtk.Align.CENTER)
+        btn.connect("clicked", self._open_welcome)
+        row.add_suffix(btn)
+        row.set_activatable_widget(btn)
+        w.add(row)
+        p.add(w)
+
+    def _open_welcome(self, *_):
+        from . import files_welcome
+        win = self.win
+        self.close()
+        files_welcome.show(win)
+
+    def _accent_row(self):
+        row = Adw.ActionRow(title="Accent colour",
+                            subtitle="Buttons, selection and highlights in Harbor")
+        box = Gtk.Box(spacing=4, valign=Gtk.Align.CENTER)
+        self.accent_btns = accent_swatches(self.s.get("accent"),
+                                           lambda v: self.win.apply_setting("accent", v), box)
+        row.add_suffix(box)
+        return row
 
     def _build_startup(self):
         p = self._page("startup", "Start-up", "media-playback-start-symbolic")
@@ -178,6 +246,7 @@ class SettingsDialog(Adw.PreferencesDialog):
         g.add(self._switch("show_status_bar"))
         g.add(self._switch("share_in_sidebar"))
         g.add(self._switch("folder_sizes"))
+        g.add(self._switch("show_storage"))
         p.add(g)
         g2 = Adw.PreferencesGroup(title="Views")
         g2.add(self._value_combo("start_pane", "Pane at start-up",
@@ -301,8 +370,39 @@ class SettingsDialog(Adw.PreferencesDialog):
         self.rows[key] = row
         return row
 
+    def _design_group(self):
+        g = Adw.PreferencesGroup(title="Interface style",
+                                 description="Changes the whole window layout, not only colours")
+        box = Gtk.Box(spacing=12, homogeneous=True)
+        self.design_btns = {}
+        first = None
+        for value, label, sub in DESIGNS:
+            card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=8,
+                           margin_bottom=8, margin_start=8, margin_end=8)
+            card.append(design_thumb(value))
+            card.append(Gtk.Label(label=label, css_classes=["heading"]))
+            card.append(Gtk.Label(label=sub, css_classes=["dim-label", "caption"], wrap=True,
+                                  justify=Gtk.Justification.CENTER))
+            b = Gtk.ToggleButton(child=card, css_classes=["hbo-design"],
+                                 active=self.s.get("ui_design") == value)
+            if first is None:
+                first = b
+            else:
+                b.set_group(first)
+            b.connect("toggled", lambda w, v=value: w.get_active()
+                      and self.s.get("ui_design") != v and self.win.apply_setting("ui_design", v))
+            self.design_btns[value] = b
+            box.append(b)
+        g.add(box)
+        return g
+
     def sync(self, key, value):
         """Reflect a change made elsewhere (menu, ribbon, keyboard)."""
+        if key == "ui_design":
+            b = self.design_btns.get(value)
+            if b is not None and not b.get_active():
+                b.set_active(True)
+            return
         if key == "descending":
             key, value = "sort_order", "desc" if value else "asc"
         elif key in ("view", "icon_size"):
@@ -398,3 +498,47 @@ class SettingsDialog(Adw.PreferencesDialog):
 
 
 OptionsDialog = SettingsDialog
+
+
+def accent_swatches(current, on_pick, box, size=22):
+    """System + palette + custom colour buttons appended to box.
+    on_pick(value) gets "" (follow GNOME) or "#rrggbb"."""
+    btns = {}
+    first = None
+    current = (current or "").lower()
+
+    def add(value, child, tip):
+        nonlocal first
+        b = Gtk.ToggleButton(child=child, tooltip_text=tip, css_classes=["hbo-swatch"],
+                             active=value == current, valign=Gtk.Align.CENTER)
+        if first is None:
+            first = b
+        else:
+            b.set_group(first)
+        b.connect("toggled", lambda w, v=value: w.get_active() and on_pick(v))
+        btns[value] = b
+        box.append(b)
+        return b
+
+    add("", Gtk.Image(icon_name="emblem-system-symbolic", pixel_size=12), "Follow system")
+    for hexv, name in ACCENTS:
+        dot = Gtk.Box(css_classes=["hbo-dot"], width_request=size - 6, height_request=size - 6)
+        prov = Gtk.CssProvider()
+        prov.load_from_string(".hbo-dot { background: %s; border-radius: 99px; }" % hexv)
+        dot.get_style_context().add_provider(prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        add(hexv, dot, name)
+    custom = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog(with_alpha=False), tooltip_text="Custom",
+                                   valign=Gtk.Align.CENTER, css_classes=["hbo-custom-accent"])
+    rgba = Gdk.RGBA()
+    rgba.parse(current if current and current not in btns else "#9141ac")
+    custom.set_rgba(rgba)
+
+    def picked(w, _p):
+        c = w.get_rgba()
+        value = "#%02x%02x%02x" % (round(c.red * 255), round(c.green * 255), round(c.blue * 255))
+        for b in btns.values():
+            b.set_active(False)
+        on_pick(value)
+    custom.connect("notify::rgba", picked)
+    box.append(custom)
+    return btns

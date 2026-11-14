@@ -324,12 +324,17 @@ class Settings:
                 "share_upload_max_mb": 4096, "share_iface": "", "share_tailscale": False,
                 "share_in_sidebar": False,
                 # 0.5.16
-                "folder_sizes": True}
+                "folder_sizes": True,
+                # 0.5.18
+                "ui_design": "win11", "show_storage": True, "onboarded": False, "accent": "",
+                "density": "comfortable"}
     LISTS = ("pins", "hidden_defaults", "last_tabs")
     # settings with a fixed set of values (first one is the default)
     CHOICES = {"open_to": ("thispc", "home", "last"), "style": ("win11", "system"),
                "icons": ("modern", "system"), "menu_style": ("win11", "classic"),
-               "command_bar": ("win11", "ribbon"), "theme": ("follow", "light", "dark"),
+               "command_bar": ("win11", "ribbon"), "ui_design": ("win11", "win10", "win12"),
+               "density": ("comfortable", "compact"),
+               "theme": ("follow", "light", "dark"),
                "folder_color": ("classic", "accent") + tuple(FOLDER_PALETTE) + ("custom",),
                "click_to_open": ("double", "single"), "group_by": ("none", "type", "date")}
     # renamed keys: old name -> (new name, value map or None)
@@ -364,6 +369,9 @@ class Settings:
         # 0.4.x stored a bool-ish int for preview_max_mb in some builds
         if isinstance(raw.get("preview_max_mb"), float):
             raw["preview_max_mb"] = int(raw["preview_max_mb"])
+        # before 0.5.18 the ribbon was the only Windows 10 piece
+        if "ui_design" not in raw and raw.get("command_bar") == "ribbon":
+            raw["ui_design"] = "win10"
         known = {k: v for k, v in raw.items() if k in cls.DEFAULTS}
         extra = {k: v for k, v in raw.items() if k not in cls.DEFAULTS}
         return known, extra, version

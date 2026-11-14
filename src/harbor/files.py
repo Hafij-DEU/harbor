@@ -9,7 +9,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
 
 from . import common  # noqa: E402
 from . import files_actions as fa_  # noqa: E402
@@ -237,34 +237,135 @@ list.hbf-apps > row { border-radius: 5px; }
 .hbf-prop-name { font-size: 16px; font-weight: 600; }
 
 .hbf-ribbon { background: $surface; border-bottom: 1px solid $divider; }
-.hbf-ribbon-tabs { padding: 0 8px; border-bottom: 1px solid $divider; }
-button.hbf-ribbon-tab { background: none; border-radius: 0; min-height: 26px; padding: 2px 14px;
+.hbf-ribbon-tabs { padding: 0 6px; border-bottom: 1px solid $divider; }
+button.hbf-ribbon-tab { background: none; border-radius: 0; min-height: 26px; padding: 2px 16px;
     font-size: 12px; box-shadow: none; border-bottom: 2px solid transparent; }
 button.hbf-ribbon-tab:hover { background: $nav_hover; }
 button.hbf-ribbon-tab:checked { background: none; color: var(--accent-color);
     border-bottom-color: var(--accent-bg-color); }
-button.hbf-ribbon-file { background: var(--accent-bg-color); color: var(--accent-fg-color); }
-button.hbf-ribbon-file:checked { background: var(--accent-bg-color);
-    color: var(--accent-fg-color); }
-.hbf-ribbon-page { padding: 4px 6px 0 6px; min-height: 92px; }
-.hbf-ribbon-group { padding: 0 4px; }
-.hbf-ribbon-caption { font-size: 11px; color: $dim; margin: 2px 0 3px 0; }
-.hbf-ribbon-sep { background: $divider; min-width: 1px; margin: 4px 2px; }
+button.hbf-ribbon-file, button.hbf-ribbon-file:checked { background: var(--accent-bg-color);
+    color: var(--accent-fg-color); border-bottom-color: transparent; }
+button.hbf-ribbon-file:hover { background: mix(var(--accent-bg-color), white, 0.15); }
+.hbf-ribbon-page { padding: 6px 8px 0 8px; min-height: 96px; }
+.hbf-ribbon-group { padding: 0 6px; }
+.hbf-ribbon-caption { font-size: 11px; color: $dim; margin: 3px 0 4px 0; }
+.hbf-ribbon-sep { background: $divider; min-width: 1px; margin: 4px 2px 6px 2px; }
 button.hbf-ribbon-btn, menubutton.hbf-ribbon-btn > button {
-    background: none; border-radius: 3px; box-shadow: none; padding: 2px 6px; font-weight: normal; }
-button.hbf-ribbon-btn:hover, menubutton.hbf-ribbon-btn > button:hover { background: $nav_hover; }
-button.hbf-ribbon-btn:checked { background: $nav_sel; }
-.hbf-ribbon-big { min-width: 54px; }
+    background: none; border: 1px solid transparent; border-radius: 4px; box-shadow: none;
+    padding: 2px 6px; font-weight: normal; }
+button.hbf-ribbon-btn:hover, menubutton.hbf-ribbon-btn > button:hover {
+    background: alpha(var(--accent-bg-color), 0.10); border-color: alpha(var(--accent-bg-color), 0.35); }
+button.hbf-ribbon-btn:active, menubutton.hbf-ribbon-btn > button:active,
+menubutton.hbf-ribbon-btn > button:checked {
+    background: alpha(var(--accent-bg-color), 0.20); }
+button.hbf-ribbon-btn:checked { background: alpha(var(--accent-bg-color), 0.16);
+    border-color: alpha(var(--accent-bg-color), 0.45); }
+.hbf-ribbon-big { min-width: 58px; padding-top: 4px; }
 .hbf-ribbon-big label { font-size: 12px; }
 .hbf-ribbon-small { min-height: 24px; }
 .hbf-ribbon-small label, checkbutton.hbf-ribbon-check label { font-size: 12px; }
-button.hbf-ribbon-btn:disabled, menubutton.hbf-ribbon-btn > button:disabled { opacity: 0.4; }
+.hbf-ribbon-arrow { opacity: 0.7; }
+button.hbf-ribbon-btn:disabled, menubutton.hbf-ribbon-btn > button:disabled { opacity: 0.5; }
+button.hbf-ribbon-btn:disabled image.hbf-ribbon-icon,
+menubutton.hbf-ribbon-btn > button:disabled image.hbf-ribbon-icon { filter: grayscale(1); }
+.hbf-cut { opacity: 0.45; }
+.hbf-cut, .hbf-copied { outline: 1px dashed alpha(var(--accent-bg-color), 0.9);
+    outline-offset: -1px; border-radius: 4px; }
 .hbf-preview-table { background: @view_bg_color; }
 .hbf-cell { padding: 2px 6px; border-right: 1px solid alpha(currentColor, 0.1); border-bottom: 1px solid alpha(currentColor, 0.1); font-size: 11px; }
 .hbf-cell-head { font-weight: bold; }
 .hbf-preview-handle:hover { background: alpha(@accent_color, 0.35); }
 .hbf-preview-text { font-size: 12px; background: transparent; }
 .hbf-preview-text text { background: transparent; }
+/* ---- Windows 10 design: flat, square, compact ---- */
+window.hbf-win10, window.hbf-win10 > * { border-radius: 0; }
+.hbf-w10-title { background: var(--accent-bg-color); color: var(--accent-fg-color); min-height: 30px; }
+.hbf-w10-title windowcontrols button { border-radius: 0; min-width: 44px; min-height: 30px; padding: 0;
+  margin: 0; background: none; box-shadow: none; color: var(--accent-fg-color); }
+.hbf-w10-title windowcontrols button > image { background: none; box-shadow: none;
+  color: var(--accent-fg-color); }
+.hbf-w10-title windowcontrols button:hover { background: alpha(white, 0.18); }
+.hbf-w10-title windowcontrols button.close:hover { background: #e81123; }
+.hbf-w10-tsep { background: alpha(currentColor, 0.5); min-width: 1px; min-height: 14px; }
+.hbf-w10-tlabel { font-size: 12px; }
+.hbf-win10 .hbf-titlebar { min-height: 30px; padding: 0 4px; background: $surface;
+  border-bottom: 1px solid $divider; }
+.hbf-win10 .hbf-titlebar tabbar tab { border-radius: 0; min-height: 26px; }
+.hbf-win10 .hbf-titlebar tabbar tabbox { padding-top: 2px; }
+.hbf-win10 .hbf-navbar { padding: 4px 6px; border-bottom: 1px solid $divider; }
+.hbf-win10 .hbf-navbar button.hbf-nav { border-radius: 0; min-width: 26px; min-height: 24px; }
+.hbf-win10 .hbf-navbar entry, .hbf-win10 .hbf-navbar .hbf-search,
+.hbf-win10 .hbf-navbar box.linked, .hbf-win10 .hbf-navbar button { border-radius: 0; }
+.hbf-win10 .hbf-navbar entry { min-height: 24px; }
+.hbf-win10 .hbf-ribbon { background: $surface; }
+.hbf-win10 button.hbf-ribbon-tab { border-radius: 0; }
+.hbf-win10 button.hbf-ribbon-file, .hbf-win10 button.hbf-ribbon-file:checked {
+  background: var(--accent-bg-color); color: var(--accent-fg-color); }
+.hbf-win10 .hbf-sidebar list.hb-nav > row { min-height: 24px; border-radius: 0; margin: 0;
+  padding-top: 0; padding-bottom: 0; }
+.hbf-win10 .hbf-sidebar list.hb-nav > row:selected,
+.hbf-win10 .hbf-sidebar list.hb-nav > row:selected:hover {
+  background: alpha(var(--accent-bg-color), 0.22); }
+.hbf-win10 .hbf-sidebar .hb-nav-pill { opacity: 0; }
+.hbf-win10 columnview.hbf-table > listview > row { border-radius: 0; }
+.hbf-win10 columnview.hbf-table > listview > row:selected,
+.hbf-win10 gridview.hbf-grid > child:selected {
+  background: alpha(var(--accent-bg-color), 0.20); box-shadow: inset 0 0 0 1px alpha(var(--accent-bg-color), 0.45); }
+.hbf-win10 gridview.hbf-grid > child { border-radius: 0; }
+.hbf-win10 .hbf-page flowboxchild { border-radius: 0; }
+.hbf-win10 .hbf-statusbar { min-height: 22px; }
+/* ---- settings: interface style cards ---- */
+button.hbo-design { padding: 4px; border-radius: 12px; }
+button.hbo-design:checked { box-shadow: inset 0 0 0 2px var(--accent-bg-color);
+  background: alpha(var(--accent-bg-color), 0.10); }
+.hbo-thumb { background: $window; border: 1px solid $divider; }
+.hbo-thumb-round { border-radius: 8px; }
+.hbo-t-blue { background: var(--accent-bg-color); min-height: 9px; }
+.hbo-t-ribbon { background: $surface; min-height: 22px; border-bottom: 1px solid $divider; }
+.hbo-t-row { background: $entry; min-height: 7px; margin: 3px 6px; border: 1px solid $entry_border; }
+.hbo-t-round { border-radius: 4px; }
+.hbo-t-tabs { padding: 4px 8px 0 8px; min-height: 10px; }
+.hbo-t-tab { background: $surface; min-width: 46px; border-radius: 4px 4px 0 0; }
+.hbo-t-cmd { background: $surface; min-height: 10px; border-bottom: 1px solid $divider; }
+.hbo-t-side { background: $surface; min-width: 34px; border-right: 1px solid $divider; }
+.hbo-thumb-w12 { border-radius: 12px; }
+.hbo-t-pill { border-radius: 99px; }
+.hbo-t-cmdcard { border-radius: 4px; margin: 0 6px 3px 6px; border-bottom: none; }
+.hbo-t-float { padding: 0 6px 6px 6px; }
+.hbo-t-card { background: $surface; border-radius: 6px; border: none; }
+button.hbo-swatch { min-width: 24px; min-height: 24px; padding: 2px; border-radius: 99px; }
+button.hbo-swatch:checked { box-shadow: inset 0 0 0 2px currentColor; background: none; }
+/* ---- storage overview (This PC) ---- */
+.hbf-storage { padding: 4px 0; }
+.hbf-donut-pct { font-size: 20px; font-weight: 700; }
+.hbf-legend-dot { min-width: 10px; min-height: 10px; border-radius: 3px; }
+.hbf-dot-accent { background: var(--accent-bg-color); }
+
+/* Windows 12 concept: floating rounded panels, pill controls (experimental) */
+window.hbf-win12 .hbf-body { background: $window; padding: 0 10px 10px 10px; }
+window.hbf-win12 .hbf-top, window.hbf-win12 .hbf-navbar,
+window.hbf-win12 .hbf-cmdbar { background: $window; border-bottom: none; }
+window.hbf-win12 .hbf-cmdbar { margin: 0 10px 8px 10px; padding: 4px 8px; border-radius: 14px;
+    background: alpha(currentColor, 0.045); }
+window.hbf-win12 .hbf-sidebar { background: alpha(currentColor, 0.035); border: none;
+    border-radius: 16px; margin-right: 8px; padding: 6px 0; }
+window.hbf-win12 .hbf-sidebar list.hb-nav > row { border-radius: 10px; }
+window.hbf-win12 .hbf-pane { background: $surface; border: none; border-radius: 16px;
+    box-shadow: 0 1px 3px alpha(black, 0.14), 0 0 0 1px alpha(currentColor, 0.05); }
+window.hbf-win12 .hbf-address, window.hbf-win12 .hbf-address-box,
+window.hbf-win12 entry, window.hbf-win12 button.hbf-nav { border-radius: 999px; }
+window.hbf-win12 .hbf-status { background: $window; border-top: none; }
+
+/* Compact layout density */
+window.hbf-compact .hbf-sidebar list.hb-nav > row { min-height: 26px; }
+window.hbf-compact columnview > listview > row { min-height: 0; }
+window.hbf-compact columnview > listview > row > cell { padding-top: 1px; padding-bottom: 1px; }
+window.hbf-compact gridview > child { padding: 3px; }
+window.hbf-compact .hbf-cmdbar button.hb-tool, window.hbf-compact .hbf-cmdbar menubutton > button {
+    min-height: 26px; }
+window.hbf-compact .hbf-navbar { padding: 3px 10px; }
+.hbf-dot-free { background: alpha(currentColor, 0.15); }
+.hbf-dot-total { background: alpha(currentColor, 0.45); }
 """
 
 
@@ -324,7 +425,27 @@ class FilesWindow(HarborWindow):
         ctl = Gtk.WindowControls(side=Gtk.PackType.END, decoration_layout=":minimize,maximize,close",
                                  valign=Gtk.Align.START)
         tbox.append(ctl)
-        self.toolbar.add_top_bar(Gtk.WindowHandle(child=tbox))
+        self.tab_icon, self.tab_ctl = icon, ctl
+        self.tab_row = Gtk.WindowHandle(child=tbox)
+        self.tab_view.connect("notify::n-pages", lambda *_: self._sync_tab_row())
+        # every top bar lives in one box so the two designs can reorder them
+        self.top = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, css_classes=["hbf-top"])
+        self.toolbar.add_top_bar(self.top)
+        # Windows 10 title bar: icon | folder name | window buttons
+        w10 = Gtk.Box(css_classes=["hbf-w10-title"], spacing=8)
+        w10.append(Gtk.Image(icon_name=ICON, pixel_size=16, valign=Gtk.Align.CENTER,
+                             margin_start=8))
+        w10.append(Gtk.Box(css_classes=["hbf-w10-tsep"], valign=Gtk.Align.CENTER))
+        self.w10_label = Gtk.Label(xalign=0, hexpand=True, ellipsize=Pango.EllipsizeMode.END,
+                                   css_classes=["hbf-w10-tlabel"])
+        w10.append(self.w10_label)
+        w10.append(Gtk.WindowControls(side=Gtk.PackType.END,
+                                      decoration_layout=":minimize,maximize,close"))
+        self.w10_title = Gtk.WindowHandle(child=w10)
+        self.connect("notify::title", lambda *_: self.w10_label.set_label(
+            (self.get_title() or "").rsplit(" - %s" % APP_NAME, 1)[0]))
+        self.top.append(self.w10_title)
+        self.top.append(self.tab_row)
 
         # 2. navigation row
         nav = Gtk.Box(spacing=4, css_classes=["hbf-navbar"])
@@ -336,11 +457,12 @@ class FilesWindow(HarborWindow):
             return b
         navbtn("go-previous-symbolic", "win.back", "Back (Alt+Left)")
         navbtn("go-next-symbolic", "win.forward", "Forward (Alt+Right)")
-        navbtn("go-up-symbolic", "win.up", "Up (Alt+Up)")
-        navbtn("view-refresh-symbolic", "win.refresh", "Refresh (F5)")
+        self.up_btn = navbtn("go-up-symbolic", "win.up", "Up (Alt+Up)")
+        self.refresh_btn = navbtn("view-refresh-symbolic", "win.refresh", "Refresh (F5)")
         self.address = AddressBar(self)
         self.address.set_margin_start(6)
         nav.append(self.address)
+        self.nav = nav
         self.search = Gtk.SearchEntry(placeholder_text="Search", width_request=260,
                                       css_classes=["hb-search", "hbf-search"], search_delay=400)
         self.search.connect("search-changed", self._on_search_changed)
@@ -350,7 +472,7 @@ class FilesWindow(HarborWindow):
         gear = Gtk.Button(icon_name="emblem-system-symbolic", action_name="win.options",
                           tooltip_text="Settings (Ctrl+,)", css_classes=["hbf-nav"])
         nav.append(gear)
-        self.toolbar.add_top_bar(nav)
+        self.top.append(nav)
 
         # 3. command bar
         from .taskmgr_ui import menu_tool_button, tool_button
@@ -406,10 +528,10 @@ class FilesWindow(HarborWindow):
                                             tooltip_text="Show the preview pane (Alt+P)")
         cmd.append(self.preview_btn)
         self.cmdbar = cmd
-        self.toolbar.add_top_bar(cmd)
+        self.top.append(cmd)
         self.ribbon = None
         self.ribbon_slot = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.toolbar.add_top_bar(self.ribbon_slot)
+        self.top.append(self.ribbon_slot)
         self._apply_command_bar()
 
         # body: sidebar | tabs | details pane | preview pane
@@ -452,6 +574,10 @@ class FilesWindow(HarborWindow):
         vbox.append(self._vt_grid)
         self._sync_view_toggle(self.settings.get("view"))
         status.append(vbox)
+        from .files_storage import storage_button
+        self.storage_btn = storage_button(self._storage_mounts)
+        self.storage_btn.set_visible(bool(self.settings.get("show_storage")))
+        status.append(self.storage_btn)
         self.status_label = Gtk.Label(xalign=0, hexpand=True)
         status.append(self.status_label)
         self.ops_box = Gtk.Box(spacing=8, visible=False)
@@ -1115,6 +1241,14 @@ class FilesWindow(HarborWindow):
         for w in self.app.files_windows():
             w._sync_view_toggle(view)
 
+    def _storage_mounts(self):
+        mounts = ["/"]
+        for _k, _t, _i, _o, loc in self.sidebar.drives():
+            path = Gio.File.new_for_uri(loc).get_path() if loc else None
+            if path and path not in mounts:
+                mounts.append(path)
+        return mounts
+
     def _sync_view_toggle(self, view):
         self._vt_quiet = True
         (self._vt_list if view == "details" else self._vt_grid).set_active(True)
@@ -1187,8 +1321,35 @@ class FilesWindow(HarborWindow):
         self.sidebar.set_visible(bool(value))
 
     # ------------------------------------------------------------ look / options
+    def design(self):
+        d = self.settings.get("ui_design")
+        return d if d in ("win10", "win12") else "win11"
+
+    def _sync_tab_row(self):
+        self.tab_row.set_visible(True)     # every design keeps the tab strip
+
     def _apply_command_bar(self):
-        ribbon = self.settings.get("command_bar") == "ribbon"
+        """Lay out the top of the window for the chosen design.
+        Windows 11: tabs in the title bar, navigation row, command bar.
+        Windows 10: blue title bar, ribbon, navigation row, tab strip."""
+        w10 = self.design() == "win10"
+        ribbon = w10
+        (self.add_css_class if w10 else self.remove_css_class)("hbf-win10")
+        (self.add_css_class if self.design() == "win12" else self.remove_css_class)("hbf-win12")
+        compact = self.settings.get("density") == "compact"
+        (self.add_css_class if compact else self.remove_css_class)("hbf-compact")
+        self.w10_title.set_visible(w10)
+        self.tab_icon.set_visible(not w10)
+        self.tab_ctl.set_visible(not w10)
+        order = ([self.w10_title, self.ribbon_slot, self.nav, self.tab_row, self.cmdbar] if w10
+                 else [self.w10_title, self.tab_row, self.nav, self.cmdbar, self.ribbon_slot])
+        prev = None
+        for w in order:
+            self.top.reorder_child_after(w, prev)
+            prev = w
+        # Windows 10 keeps Refresh at the end of the address bar
+        self.nav.reorder_child_after(self.refresh_btn, self.address if w10 else self.up_btn)
+        self._sync_tab_row()
         if ribbon and self.ribbon is None:
             from .files_ribbon import Ribbon
             self.ribbon = Ribbon(self.ribbon_menus(), bool(self.settings.get("ribbon_collapsed")),
@@ -1299,10 +1460,22 @@ class FilesWindow(HarborWindow):
         elif key == "preview_width":
             for w in wins:
                 w.set_preview_width(int(value))
-        elif key == "command_bar":
+        elif key in ("command_bar", "ui_design"):
+            if key == "ui_design":
+                w10 = value == "win10"
+                self.settings.set("command_bar", "ribbon" if w10 else "win11")
+                self.settings.set("menu_style", "classic" if w10 else "win11")
             for w in self.app.files_windows():
                 w._apply_command_bar()
                 w.update_actions()
+        elif key == "density":
+            for w in wins:
+                w._apply_command_bar()
+        elif key == "accent":
+            self.app.apply_look()
+        elif key == "show_storage":
+            for w in wins:
+                w.storage_btn.set_visible(bool(value))
         elif key == "show_recent":
             for w in self.app.files_windows():
                 for t in w.tabs():
@@ -2094,6 +2267,21 @@ class App(Adw.Application):
             self.fm1 = FileManager1(self, self.fm1_show)
             self.fm1.start()
 
+    def _apply_accent(self, value):
+        """Harbor's own accent colour ("" = follow GNOME)."""
+        value = value if files_tint.valid_hex(value) else None
+        files_tint.ACCENT_OVERRIDE = value
+        if getattr(self, "_accent_css", None) is None:
+            self._accent_css = Gtk.CssProvider()
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(), self._accent_css,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 5)
+        self._accent_css.load_from_string(
+            ":root { --accent-bg-color: %s; --accent-color: %s; }" % (value, value)
+            if value else "")
+        from . import files_appicon
+        GLib.idle_add(lambda: files_appicon.sync(files_tint.accent_hex()) and False)
+
     def files_windows(self):
         return [w for w in self.get_windows() if isinstance(w, FilesWindow)]
 
@@ -2119,6 +2307,7 @@ class App(Adw.Application):
                 sm.connect("notify::accent-color", lambda *_: self._on_accent())
             except TypeError:
                 pass
+        self._apply_accent(s.get("accent"))
         files_icons.COLOR = files_tint.effective_color(
             s.get("folder_color"), s.get("folder_color_custom"), files_tint.accent_hex())
         if files_icons.COLOR and files_icons.MODE == "modern":
@@ -2131,6 +2320,8 @@ class App(Adw.Application):
             w.refresh_look()
 
     def _on_accent(self):
+        from . import files_appicon
+        files_appicon.sync(files_tint.accent_hex())
         if self.settings.get("folder_color") == "accent":
             self.apply_look()
 
@@ -2170,6 +2361,11 @@ class App(Adw.Application):
     def new_window(self, locations=None):
         win = FilesWindow(self, locations)
         win.present()
+        if (not self.settings.get("onboarded") and not getattr(self, "_welcome_shown", False)
+                and os.environ.get("HARBOR_NO_WELCOME") != "1"):
+            self._welcome_shown = True
+            from . import files_welcome
+            GLib.timeout_add(350, lambda: files_welcome.show(win) and False)
         return win
 
     def do_command_line(self, cmdline):

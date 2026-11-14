@@ -284,8 +284,14 @@ def _finish(key, path, done):
     return False
 
 
+ACCENT_OVERRIDE = None   # Harbor's own accent (Settings > Appearance), "#rrggbb"
+
+
 def accent_hex():
-    """The GNOME accent colour (libadwaita 1.6+) as #rrggbb, or None."""
+    """The accent colour as #rrggbb: Harbor's own if set, else GNOME's
+    (libadwaita 1.6+), or None."""
+    if valid_hex(ACCENT_OVERRIDE):
+        return ACCENT_OVERRIDE.lower()
     try:
         from gi.repository import Adw
         rgba = Adw.StyleManager.get_default().get_accent_color_rgba()

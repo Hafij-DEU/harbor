@@ -92,6 +92,8 @@ build() {
         (cd data/icons && find hicolor -name 'harbor-*.svg') | while read -r f; do
             install -Dm644 "data/icons/$f" "$stage/usr/share/harbor/icons/$f"
         done
+        # accent-tinted app icon template (files_appicon)
+        for f in src/harbor/data/*; do install -Dm644 "$f" "$lib/data/$(basename "$f")"; done
         # blank Office files for New > Document / Spreadsheet / Presentation
         for f in data/templates/*; do
             install -Dm644 "$f" "$stage/usr/share/harbor/templates/$(basename "$f")"

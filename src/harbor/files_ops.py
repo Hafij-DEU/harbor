@@ -6,6 +6,7 @@ import threading
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 from . import files_core as fc
+from .files_view import set_clip_marks
 
 COPIED_MIME = "x-special/gnome-copied-files"
 URI_MIME = "text/uri-list"
@@ -24,7 +25,7 @@ class Operations:
         self._tick = None
         self.internal = None   # (cut, [paths]) we put on the clipboard
         self.clipboard = window.get_clipboard()
-        self.clipboard.connect("changed", lambda *_: window.update_actions())
+        self.clipboard.connect("changed", self._clip_changed)
 
     # ------------------------------------------------------------ running
 
@@ -214,8 +215,15 @@ class Operations:
 
     # ------------------------------------------------------------ clipboard
 
+    def _clip_changed(self, *_):
+        if not self.clipboard.is_local():      # another app took the clipboard
+            self.internal = None
+            set_clip_marks(())
+        self.win.update_actions()
+
     def set_clipboard(self, paths, cut):
         self.internal = (cut, list(paths))
+        set_clip_marks(paths, cut)
         gnome = fc.gnome_copied_files(paths, cut).encode()
         provs = [
             Gdk.ContentProvider.new_for_bytes(COPIED_MIME, GLib.Bytes.new(gnome)),
@@ -295,6 +303,7 @@ class Operations:
         def finished(job):
             if cut and not job.cancelled:
                 self.internal = None
+                set_clip_marks(())
                 if self.clipboard.is_local():
                     self.clipboard.set_content(None)
                 self.win.update_actions()
