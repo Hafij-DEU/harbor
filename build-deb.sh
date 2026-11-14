@@ -85,7 +85,8 @@ build() {
         install -Dm644 data/io.github.hafij_deu.Harbor.policy \
             "$stage/usr/share/polkit-1/actions/io.github.hafij_deu.Harbor.policy"
     else
-        install -Dm644 src/harbor/qr.py "$lib/qr.py"
+        # qr: Share over Wi-Fi; taskmgr_ui: shared toolbar buttons and confirm()
+        for f in qr taskmgr_ui; do install -Dm644 "src/harbor/$f.py" "$lib/$f.py"; done
         # Harbor Files' own icon set (harbor-* names), found via the app's icon search path.
         (cd data/icons && find hicolor -name 'harbor-*.svg') | while read -r f; do
             install -Dm644 "data/icons/$f" "$stage/usr/share/harbor/icons/$f"

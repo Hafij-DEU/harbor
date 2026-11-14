@@ -7,7 +7,7 @@ import sys
 import traceback
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "src"))
+sys.path.insert(0, os.environ.get("HB_SRC") or os.path.join(ROOT, "src"))   # HB_SRC: test a built package
 
 import gi  # noqa: E402
 
