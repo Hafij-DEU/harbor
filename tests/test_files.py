@@ -629,7 +629,8 @@ def test_command_states_rules():
     assert st["new"] and st["paste"] and not st["cut"] and not st["rename"] and st["terminal"]
     assert fc.command_states("folder", [], can_paste=True, writable=False)["paste"] is False
     st = fc.command_states("folder", [_sel(), _sel()])
-    assert st["cut"] and st["copy"] and st["delete"] and not st["rename"] and st["compress"]
+    # 0.5.16: several items open the batch rename dialog
+    assert st["cut"] and st["copy"] and st["delete"] and st["rename"] and st["compress"]
     assert not st["open-with"] and not st["extract"]
     st = fc.command_states("folder", [_sel(archive=True)])
     assert st["rename"] and st["extract"] and st["open-with"]

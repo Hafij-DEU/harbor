@@ -31,7 +31,17 @@ ATTRS = ",".join((
 ) + files_icons.METADATA_ATTRS)
 
 # Settings > Preview (set by the window; the view has no settings access)
-OPTIONS = {"image_thumbnails": True, "doc_thumbnails": False, "remote_thumbnails": False}
+OPTIONS = {"image_thumbnails": True, "doc_thumbnails": False, "remote_thumbnails": False,
+           "folder_sizes": True}
+
+
+def size_text(item):
+    """Size column: files always, folders once their background size is in."""
+    if not item.is_dir:
+        return human_size(item.size)
+    if item.dir_size is None:
+        return ""
+    return human_size(item.dir_size) + ("" if item.dir_complete else "+")
 
 ICON_SIZES = {"large": (96, 124), "medium": (56, 96)}  # icon px, tile width
 
@@ -84,6 +94,8 @@ class FileItem(GObject.Object):
         dd = info.get_deletion_date() if info.has_attribute("trash::deletion-date") else None
         self.deleted = dd.to_unix() if dd else 0
         self.location = extra_location
+        self.dir_size = None   # folders: filled in by FolderView.start_sizes()
+        self.dir_complete = False
         self.texture = None
         self.thumb_state = 0  # 0 untried, 1 loading, 2 done
         self.cells = []        # bound cell widgets (for refreshes / rename popover)
@@ -233,6 +245,7 @@ class FolderView(Gtk.Box):
         self._cancel = None
         self._monitor = None
         self._gen = 0
+        self._size_cells = []
         self._search_stop = None
         self.sort_field = "name"
         self.descending = False
@@ -325,8 +338,12 @@ class FolderView(Gtk.Box):
         col("modified", "Date modified", text_setup(),
             text_bind(lambda i: fc.format_time(i.mtime)), width=150, field="modified")
         col("type", "Type", text_setup(), text_bind(lambda i: i.type_desc), width=150, field="type")
-        col("size", "Size", text_setup(1.0),
-            text_bind(lambda i: "" if i.is_dir else human_size(i.size)), width=96, field="size")
+        size_setup = text_setup(1.0)
+
+        def size_cell(f, cell):     # remember size labels so folder sizes can fill in
+            size_setup(f, cell)
+            self._size_cells.append(cell.get_child())
+        col("size", "Size", size_cell, text_bind(size_text), width=96, field="size")
         self._set_column_mode("folder")
 
     def _name_setup(self, _f, cell):
@@ -669,6 +686,37 @@ class FolderView(Gtk.Box):
             self.loading = False
             self._update_empty()
             self.emit("contents-changed")
+            self.start_sizes()
+
+    def start_sizes(self):
+        """Work out folder sizes one by one in a thread (local folders only);
+        a new load or search bumps _gen and stops it."""
+        gen = self._gen
+        if not OPTIONS.get("folder_sizes") or self.mode != "folder" or self.gfile is None:
+            return
+        dirs = [it for it in self.items() if it.is_dir and it.path and not it.remote
+                and it.dir_size is None]
+        if not dirs:
+            return
+
+        def worker():
+            for it in dirs:
+                if gen != self._gen:
+                    return
+                size, complete = fc.dir_size(it.path, cancelled=lambda: gen != self._gen)
+                if size is None:
+                    continue
+                GLib.idle_add(self._size_done, it, size, complete, gen)
+        threading.Thread(target=worker, daemon=True, name="hb-dirsize").start()
+
+    def _size_done(self, item, size, complete, gen):
+        if gen == self._gen:
+            item.dir_size, item.dir_complete = size, complete
+            # the list keeps a row's widget when its item is unchanged, so set the label here
+            for lab in self._size_cells:
+                if getattr(lab, "_hb_item", None) is item:
+                    lab.set_label(size_text(item))
+        return False
 
     def _on_monitor(self, _mon, gfile, other, event, gen):
         if gen != self._gen:

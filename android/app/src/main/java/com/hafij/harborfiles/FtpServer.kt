@@ -34,7 +34,10 @@ class FtpServer(
     private val port: Int,
     private val readOnly: () -> Boolean = { false },
     private val onActivity: () -> Unit = {},
+    deviceName: String = "",
 ) {
+    /** Sent in the 220 greeting so Harbor on the PC can show "Redmi Pad 2". */
+    private val greetingName: String = cleanName(deviceName)
     private var server: ServerSocket? = null
     private val sessions = Collections.synchronizedSet(HashSet<Socket>())
     private val rootPath: String = root.canonicalPath
@@ -106,7 +109,8 @@ class FtpServer(
 
         fun run() {
             sock.soTimeout = 10 * 60_000
-            reply(220, "Harbor Files FTP ready")
+            reply(220, if (greetingName.isEmpty()) "Harbor Files FTP ready"
+                       else "Harbor Files FTP ready ($greetingName)")
             while (true) {
                 val line = try { inp.readLine() } catch (_: SocketTimeoutException) { null } ?: break
                 onActivity()
@@ -292,3 +296,7 @@ class FtpServer(
         }
     }
 }
+
+/** Name safe for one FTP reply line: no brackets or control chars, max 60. */
+internal fun cleanName(name: String): String =
+    name.filter { it >= ' ' && it != '(' && it != ')' }.trim().take(60).trim()

@@ -1,6 +1,7 @@
 """Harbor Files: the navigation pane (Home, Quick access, This PC, drives, Network, Trash)."""
 
 import os
+import re
 from urllib.parse import urlsplit
 
 from gi.repository import Gdk, Gio, GLib, GObject, Gtk
@@ -12,6 +13,7 @@ from .common import NavList
 
 PHONE_CHECK_SECS = 5
 PHONE_MISSES = 2
+PHONE_NAMES = {}    # share uri -> device name the phone sent in its FTP banner
 
 
 def phone_share_addr(uri):
@@ -24,6 +26,20 @@ def phone_share_addr(uri):
     if u.scheme != "ftp" or u.username != "harbor" or not u.hostname:
         return None
     return u.hostname, port or 21
+
+
+def parse_banner(line):
+    """Device name from the Harbor phone's FTP greeting
+    "220 Harbor Files FTP ready (Redmi Pad 2)", else None."""
+    m = re.match(r"220[ -]Harbor Files FTP ready \((.{1,60})\)\s*$", line or "")
+    return m.group(1).strip() or None if m else None
+
+
+def phone_label(uri):
+    addr = phone_share_addr(uri)
+    if addr is None:
+        return None
+    return PHONE_NAMES.get(uri) or "Phone (%s)" % addr[0]
 
 def user_dirs(home=None, xdg=None):
     """[(path, label, icon)] for the user folders that exist, in Explorer order
@@ -99,7 +115,7 @@ class SideList(NavList):
         self.remove_all()
         self.rows = {}
 
-    def add_entry(self, key, text, icon, indent=0, tooltip=None, pinned=False):
+    def add_entry(self, key, text, icon, indent=0, tooltip=None, pinned=False, end=None):
         box = Gtk.Box(spacing=10, margin_start=4 + indent, margin_end=10)
         box.append(Gtk.Box(css_classes=["hb-nav-pill"], valign=Gtk.Align.CENTER))
         img = Gtk.Image(pixel_size=18)
@@ -114,6 +130,11 @@ class SideList(NavList):
         if pinned:
             box.append(Gtk.Image(icon_name="view-pin-symbolic", pixel_size=12,
                                  css_classes=["hbf-pin-mark"]))
+        if end is not None:     # (icon, tooltip, callback): e.g. Disconnect
+            b = Gtk.Button(icon_name=end[0], tooltip_text=end[1], valign=Gtk.Align.CENTER,
+                           css_classes=["flat", "circular", "hbf-side-end"])
+            b.connect("clicked", lambda *_: end[2]())
+            box.append(b)
         row = Gtk.ListBoxRow(child=box)
         row.key = key
         row.label = lab
@@ -200,8 +221,13 @@ class Sidebar(Gtk.Box):
             vol = m.get_volume()
             if vol is not None:
                 seen_vol.add(vol)
+            uri = m.get_root().get_uri()
+            phone = phone_label(uri)
+            if phone:
+                out.append(("mount:%d" % i, phone, Gio.ThemedIcon.new("phone-symbolic"), m, uri))
+                continue
             out.append(("mount:%d" % i, mount_label(m), m.get_symbolic_icon() or m.get_icon(), m,
-                        m.get_root().get_uri()))
+                        uri))
         for i, v in enumerate(self.vm.get_volumes()):
             if v in seen_vol or v.get_mount() is not None or not v.can_mount():
                 continue
@@ -215,8 +241,8 @@ class Sidebar(Gtk.Box):
         self.targets = {}
         self.objects = {}
 
-        def add(key, text, icon, target, indent=0, tooltip=None, pinned=False):
-            lst.add_entry(key, text, icon, indent, tooltip, pinned)
+        def add(key, text, icon, target, indent=0, tooltip=None, pinned=False, end=None):
+            lst.add_entry(key, text, icon, indent, tooltip, pinned, end)
             self.targets[key] = target
         add("home", "Home", "go-home-symbolic", fc.HOME_PAGE)
         lst.add_separator()
@@ -228,7 +254,11 @@ class Sidebar(Gtk.Box):
         add("root", "File System", "drive-harddisk-symbolic", fc.location_for("/"), indent=14)
         for key, text, icon, obj, loc in self.drives():
             self.objects[key] = obj
-            add(key, text, icon, loc or ("volume", obj), indent=14)
+            phone = loc and phone_share_addr(loc)
+            add(key, text, icon, loc or ("volume", obj), indent=14,
+                tooltip="Drop files here to send them to the phone" if phone else None,
+                end=("media-eject-symbolic", "Disconnect",
+                     lambda k=key: self.unmount(k)) if phone else None)
         if self.has_network:
             add("network", "Network", "network-workgroup-symbolic", fc.NETWORK_URI)
         for n in self.settings.network_locations():
@@ -243,8 +273,22 @@ class Sidebar(Gtk.Box):
         if self.current:
             self.sync(self.current)
 
-    def _on_drop(self, _target, value, _x, _y):
-        """Folders dropped on the navigation pane get pinned to Quick access."""
+    def _on_drop(self, _target, value, _x, y):
+        """Files dropped on a phone row are sent to the phone; folders dropped
+        anywhere else on the navigation pane get pinned to Quick access."""
+        row = self.list.get_row_at_y(int(y))
+        loc = self.targets.get(getattr(row, "key", None)) if row is not None else None
+        if isinstance(loc, str) and phone_share_addr(loc):
+            dest = Gio.File.new_for_uri(loc).get_path()
+            paths = [f.get_path() for f in value.get_files() if f.get_path()]
+            if not dest or not paths:
+                self.win.notify_toast("Can't send these files to the phone")
+                return False
+            self.win.ops.transfer(paths, dest, move=False)
+            self.win.notify_toast("Sending %s to %s" % (
+                os.path.basename(paths[0]) if len(paths) == 1 else "%d items" % len(paths),
+                row.label.get_label()))
+            return True
         added = pin_dropped(self.settings, [f.get_path() for f in value.get_files()])
         if not added:
             return False
@@ -337,8 +381,12 @@ class Sidebar(Gtk.Box):
 
             def done(c, res, m=m, uri=uri):
                 try:
-                    c.connect_finish(res).close(None)
+                    conn = c.connect_finish(res)
                     self._phone_miss[uri] = 0
+                    if uri in PHONE_NAMES:
+                        conn.close(None)
+                    else:
+                        self._read_name(conn, uri)
                     return
                 except GLib.Error:
                     pass
@@ -351,6 +399,26 @@ class Sidebar(Gtk.Box):
             if uri not in live:
                 del self._phone_miss[uri]
         return True
+
+    def _read_name(self, conn, uri):
+        """Read the phone's greeting once to learn its name (0.1.4+ phones
+        send "(Model)" in it); older phones keep the "Phone (ip)" label."""
+        data = Gio.DataInputStream.new(conn.get_input_stream())
+
+        def got(d, res):
+            try:
+                line, _n = d.read_line_finish_utf8(res)
+            except GLib.Error:
+                line = None
+            conn.close(None)
+            name = parse_banner(line)
+            PHONE_NAMES[uri] = name or ""
+            if name:
+                self.queue_rebuild()
+                pages = getattr(self.win, "refresh_thispc", None)
+                if pages:
+                    pages()
+        data.read_line_async(GLib.PRIORITY_DEFAULT, None, got)
 
     def _drop_phone(self, mount, uri):
         for tab in self.win.tabs():
@@ -442,7 +510,8 @@ class Sidebar(Gtk.Box):
             if obj is not None and obj.can_eject():
                 s2.append_item(mi("Eject", "win.sb-eject", key))
             if obj is not None and obj.can_unmount():
-                s2.append_item(mi("Unmount", "win.sb-unmount", key))
+                phone = phone_share_addr(self.targets.get(key) or "")
+                s2.append_item(mi("Disconnect" if phone else "Unmount", "win.sb-unmount", key))
         if key == "trash":
             s2.append_item(mi("Empty trash", "win.empty-trash"))
         if key == "network" or key.startswith("net:"):

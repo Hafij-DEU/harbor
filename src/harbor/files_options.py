@@ -74,6 +74,7 @@ SWITCHES = {
     "open_archives_in_harbor": ("Open archives in Harbor",
                                 "Double-click lists a .zip / .7z / .tar here instead of the "
                                 "default app"),
+    "folder_sizes": ("Folder sizes", "Fill in the Size column for folders in the background"),
     "image_thumbnails": ("Image thumbnails", None),
     "doc_thumbnails": ("Document thumbnails", "Office pages in Large icons (slower)"),
     "office_preview": ("Office preview", None),
@@ -176,6 +177,7 @@ class SettingsDialog(Adw.PreferencesDialog):
             g.add(self._combo(*spec))
         g.add(self._switch("show_status_bar"))
         g.add(self._switch("share_in_sidebar"))
+        g.add(self._switch("folder_sizes"))
         p.add(g)
         g2 = Adw.PreferencesGroup(title="Views")
         g2.add(self._value_combo("start_pane", "Pane at start-up",

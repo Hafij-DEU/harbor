@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.provider.Settings
 import androidx.compose.runtime.mutableStateOf
 import java.io.File
 import java.net.Inet4Address
@@ -47,7 +48,8 @@ class ServerService : Service() {
             stopSelf(); return START_NOT_STICKY
         }
         val pin = (100000 + SecureRandom().nextInt(900000)).toString()
-        val s = FtpServer(File(PHONE_ROOT), pin, prefs.ftpPort, { prefs.readOnly }, { lastActivity = System.currentTimeMillis() })
+        val s = FtpServer(File(PHONE_ROOT), pin, prefs.ftpPort, { prefs.readOnly }, { lastActivity = System.currentTimeMillis() },
+            deviceName())
         try {
             s.start()
         } catch (e: Exception) {
@@ -138,4 +140,8 @@ class ServerService : Service() {
             return null
         }
     }
+
+    private fun deviceName(): String =
+        (try { Settings.Global.getString(contentResolver, "device_name") } catch (_: Exception) { null })
+            ?.takeIf { it.isNotBlank() } ?: android.os.Build.MODEL ?: ""
 }

@@ -322,7 +322,9 @@ class Settings:
                 # Share over Wi-Fi (never starts by itself)
                 "share_folders": [], "share_port": 8765, "share_autostop": 30,
                 "share_upload_max_mb": 4096, "share_iface": "", "share_tailscale": False,
-                "share_in_sidebar": False}
+                "share_in_sidebar": False,
+                # 0.5.16
+                "folder_sizes": True}
     LISTS = ("pins", "hidden_defaults", "last_tabs")
     # settings with a fixed set of values (first one is the default)
     CHOICES = {"open_to": ("thispc", "home", "last"), "style": ("win11", "system"),
@@ -883,6 +885,41 @@ def new_item(folder, kind):
     return path
 
 
+def dir_size(path, cancelled=None, budget=5.0, max_entries=300000):
+    """(bytes, complete) of everything under path, staying on its drive and
+    never following symlinks. Stops early (complete=False) after budget
+    seconds or max_entries entries; (None, False) when cancelled."""
+    import time
+    start = time.monotonic()
+    try:
+        dev = os.lstat(path).st_dev
+    except OSError:
+        return None, False
+    total, n, stack = 0, 0, [path]
+    while stack:
+        if cancelled is not None and cancelled():
+            return None, False
+        try:
+            it = os.scandir(stack.pop())
+        except OSError:
+            continue
+        with it:
+            for e in it:
+                n += 1
+                try:
+                    st = e.stat(follow_symlinks=False)
+                    if e.is_dir(follow_symlinks=False):
+                        if st.st_dev == dev:
+                            stack.append(e.path)
+                    else:
+                        total += st.st_size
+                except OSError:
+                    continue
+        if n > max_entries or (budget and time.monotonic() - start > budget):
+            return total, False
+    return total, True
+
+
 def rename_path(path, new_name):
     """Rename in place; refuses bad or existing names (raises ValueError)."""
     folder = os.path.dirname(path)
@@ -1170,7 +1207,7 @@ def command_states(kind, sel, can_paste=False, writable=True, n_items=0):
         "cut": files and local and all(s.get("can_trash", True) for s in sel),
         "copy": files and local,
         "paste": kind == "folder" and writable and can_paste,
-        "rename": files and n == 1 and bool(one.get("can_rename", True)),
+        "rename": files and n > 0 and local and all(s.get("can_rename", True) for s in sel),
         "delete": (files and local) or (kind == "trash" and n > 0),
         "delete-permanent": (files and local) or (kind == "trash" and n > 0),
         "restore": kind == "trash" and n > 0,

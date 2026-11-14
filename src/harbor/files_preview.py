@@ -20,6 +20,7 @@ from . import files_icons, files_office, files_package
 
 PREVIEW_MAX_IMAGE_BYTES = 64 * 1024 * 1024
 PREVIEW_PX = 640
+QUICK_PX = 1600
 PDF_TIMEOUT = 15
 FONT_SAMPLE = "The quick brown fox jumps over the lazy dog\n0123456789 !?&@"
 
@@ -75,12 +76,19 @@ def _count(path):
 
 
 class PreviewPane(Gtk.Box):
-    def __init__(self, win):
-        super().__init__(css_classes=["hbf-pane", "hbf-preview"])
+    def __init__(self, win, quick=False):
+        super().__init__(css_classes=["hbf-quicklook"] if quick else ["hbf-pane", "hbf-preview"])
         self.win = win
         self._gen = 0
         self._key = None
         self._fonts_added = set()
+        self.px = QUICK_PX if quick else PREVIEW_PX
+        if quick:
+            self.content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, vexpand=True,
+                                   hexpand=True, margin_start=14, margin_end=14,
+                                   margin_top=10, margin_bottom=14, spacing=8)
+            self.append(self.content)
+            return
         # drag handle on the left edge: resize the pane, width is remembered
         handle = Gtk.Box(width_request=6, css_classes=["hbf-preview-handle"])
         handle.set_cursor(Gdk.Cursor.new_from_name("col-resize"))
@@ -263,7 +271,9 @@ class PreviewPane(Gtk.Box):
                                                 else "Can't read this folder"))
         elif kind in ("image", "pdf"):
             sp = self._loading()
-            work = (lambda: _image_texture(path)) if kind == "image" else (lambda: _pdf_page(path))
+            px = self.px
+            work = (lambda: _image_texture(path, px)) if kind == "image" else (
+                lambda: _pdf_page(path, px))
 
             def got(pixbuf):
                 self.content.remove(sp)

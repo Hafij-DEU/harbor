@@ -13,8 +13,8 @@ android {
         applicationId = "com.hafij.harborfiles"
         minSdk = 29
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 5
+        versionName = "0.1.4"
     }
 
     signingConfigs {

@@ -184,6 +184,12 @@ searchentry.hbf-search { min-height: 32px; }
 .hbf-pane-title { font-size: 15px; font-weight: 600; }
 .hbf-pane-value { font-size: 13px; }
 .hbf-pin-mark { opacity: 0.55; }
+.hbf-pane { border-top: 2px solid transparent; }
+.hbf-pane-active { border-top-color: var(--accent-color); }
+.hbf-pane-right { border-left: 1px solid alpha(currentColor, 0.12); }
+.hbf-pane-head { padding: 2px 6px 2px 10px; font-size: 0.92em; opacity: 0.85; }
+.hbf-side-end { min-width: 24px; min-height: 24px; padding: 0; opacity: 0.7; }
+.hbf-side-end:hover { opacity: 1; }
 .hbf-viewtoggle button { min-height: 22px; min-width: 26px; padding: 0 4px; border-radius: 4px; }
 .hbf-viewtoggle button:checked { background: $nav_sel; }
 .hbf-pkg { margin: 14px 12px; }
@@ -379,8 +385,12 @@ class FilesWindow(HarborWindow):
         self.more_btn.set_has_frame(False)
         cmd.append(self.more_btn)
         cmd.append(Gtk.Box(hexpand=True))
+        self.split_btn = Gtk.ToggleButton(icon_name="view-dual-symbolic", css_classes=["hb-tool"],
+                                          action_name="win.split-view",
+                                          tooltip_text="Two folders side by side (F3)")
+        cmd.append(self.split_btn)
         det_box = Gtk.Box(spacing=8)
-        det_box.append(Gtk.Image(icon_name="view-dual-symbolic", pixel_size=16))
+        det_box.append(Gtk.Image(icon_name="dialog-information-symbolic", pixel_size=16))
         det_box.append(Gtk.Label(label="Details"))
         self.details_btn = Gtk.ToggleButton(child=det_box, css_classes=["hb-tool"],
                                             action_name="win.details-pane",
@@ -412,7 +422,17 @@ class FilesWindow(HarborWindow):
         self.preview.set_visible(bool(self.settings.get("preview_pane")))
         body = Gtk.Box(css_classes=["hbf-body"])
         body.append(self.sidebar)
-        body.append(self.tab_view)
+        # two panes side by side: the tabs on the left, one extra folder on the right
+        self.split_tab = None
+        self._split_active = False
+        self.split_paned = Gtk.Paned(hexpand=True, vexpand=True, shrink_start_child=False,
+                                     shrink_end_child=False, resize_end_child=True)
+        left = Gtk.Box(hexpand=True, vexpand=True, css_classes=["hbf-pane"])
+        left.append(self.tab_view)
+        self._watch_pane(left, False)
+        self.split_left = left
+        self.split_paned.set_start_child(left)
+        body.append(self.split_paned)
         body.append(self.details)
         body.append(self.preview)
         self.set_body(body)
@@ -447,20 +467,94 @@ class FilesWindow(HarborWindow):
 
     # ------------------------------------------------------------ tabs
     def tab(self):
+        if self.split_tab is not None and self._split_active:
+            return self.split_tab
         page = self.tab_view.get_selected_page()
         return page.get_child() if page is not None else None
 
     def tabs(self):
-        return [self.tab_view.get_nth_page(i).get_child()
-                for i in range(self.tab_view.get_n_pages())]
+        out = [self.tab_view.get_nth_page(i).get_child()
+               for i in range(self.tab_view.get_n_pages())]
+        if self.split_tab is not None:
+            out.append(self.split_tab)
+        return out
+
+    def _wire_tab(self, tab):
+        tab.connect("changed", self._on_tab_changed)
+        tab.view.set_single_click(self.settings.get("click_to_open") == "single")
+        tab.view.cv.get_sorter().connect("changed", lambda *_: self._on_header_sort(tab))
+
+    # ------------------------------------------------------------ two panes
+    def _watch_pane(self, widget, right):
+        """Clicking or focusing a pane makes it the one the toolbar acts on."""
+        focus = Gtk.EventControllerFocus()
+        focus.connect("enter", lambda *_: self._set_active_pane(right))
+        widget.add_controller(focus)
+        click = Gtk.GestureClick(button=0, propagation_phase=Gtk.PropagationPhase.CAPTURE)
+        click.connect("pressed", lambda *_: self._set_active_pane(right))
+        widget.add_controller(click)
+
+    def _set_active_pane(self, right):
+        right = bool(right and self.split_tab is not None)
+        if right == self._split_active:
+            return
+        self._split_active = right
+        self._mark_panes()
+        self._sync_window()
+
+    def _mark_panes(self):
+        on = self.split_tab is not None
+        for w, active in ((self.split_left, not self._split_active),
+                          (getattr(self, "split_right", None), self._split_active)):
+            if w is None:
+                continue
+            if on and active:
+                w.add_css_class("hbf-pane-active")
+            else:
+                w.remove_css_class("hbf-pane-active")
+
+    def toggle_split(self, on=None):
+        on = self.split_tab is None if on is None else on
+        if on and self.split_tab is None:
+            cur = self.tab()
+            tab = Tab(self, (cur.location if cur is not None and cur.location else None)
+                      or fc.start_location(self.settings))
+            self._wire_tab(tab)
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True, vexpand=True,
+                          css_classes=["hbf-pane", "hbf-pane-right"])
+            head = Gtk.Box(spacing=6, css_classes=["hbf-pane-head"])
+            self.split_title = Gtk.Label(xalign=0, hexpand=True, ellipsize=3)
+            head.append(Gtk.Image(icon_name="view-dual-symbolic"))
+            head.append(self.split_title)
+            close = Gtk.Button(icon_name="window-close-symbolic", tooltip_text="Close this pane (F3)",
+                               css_classes=["flat", "circular"])
+            close.connect("clicked", lambda *_: self.toggle_split(False))
+            head.append(close)
+            box.append(head)
+            box.append(tab)
+            self._watch_pane(box, True)
+            self.split_right = box
+            self.split_tab = tab
+            self.split_paned.set_end_child(box)
+            w = self.split_paned.get_width() or self.get_width() or 1000
+            self.split_paned.set_position(max(240, w // 2))
+            self._sync_page(tab)
+            self._split_active = True
+            GLib.idle_add(lambda: (tab.view.focus_view(), False)[1])
+        elif not on and self.split_tab is not None:
+            self.split_tab.view.stop_search()
+            self.split_paned.set_end_child(None)
+            self.split_tab = self.split_right = None
+            self._split_active = False
+        self._set_state("split-view", GLib.Variant("b", self.split_tab is not None))
+        self._mark_panes()
+        self._sync_window()
 
     def new_tab(self, location=None, select=True):
         tab = Tab(self, location or fc.start_location(self.settings))
         page = self.tab_view.append(tab)
         tab.page = page
-        tab.connect("changed", self._on_tab_changed)
-        tab.view.set_single_click(self.settings.get("click_to_open") == "single")
-        tab.view.cv.get_sorter().connect("changed", lambda *_: self._on_header_sort(tab))
+        self._wire_tab(tab)
         self._sync_page(tab)
         if select:
             self.tab_view.set_selected_page(page)
@@ -471,7 +565,9 @@ class FilesWindow(HarborWindow):
 
     def close_tab(self, tab=None):
         tab = tab or self.tab()
-        if tab is not None:
+        if tab is not None and tab is self.split_tab:
+            self.toggle_split(False)
+        elif tab is not None:
             self.tab_view.close_page(tab.page)
 
     def _on_close_page(self, view, page):
@@ -483,6 +579,10 @@ class FilesWindow(HarborWindow):
         return True
 
     def _sync_page(self, tab):
+        if tab is self.split_tab and tab is not None:
+            self.split_title.set_label(tab.title())
+            self.split_title.set_tooltip_text(tab.folder_path() or tab.title())
+            return
         if tab.page is None:
             return
         tab.page.set_title(tab.title())
@@ -495,6 +595,9 @@ class FilesWindow(HarborWindow):
             self._sync_window()
 
     def _on_switch(self):
+        if self._split_active:
+            self._split_active = False
+            self._mark_panes()
         self._sync_window()
 
     def _sync_window(self):
@@ -857,6 +960,10 @@ class FilesWindow(HarborWindow):
         A("paste", self.paste)
         A("paste-into", self.paste_into)
         A("rename", self.rename)
+        A("quick-look", lambda: __import__("harbor.files_quicklook",
+                                          fromlist=["x"]).quick_look(self))
+        A("space-usage", lambda: __import__("harbor.files_space",
+                                           fromlist=["x"]).space_usage(self))
         A("delete", lambda: self.delete(False))
         A("delete-permanent", lambda: self.delete(True))
         A("restore", self.restore)
@@ -909,6 +1016,7 @@ class FilesWindow(HarborWindow):
                        self._set_details)
         self._stateful("preview-pane", GLib.Variant("b", bool(s.get("preview_pane"))),
                        self._set_preview)
+        self._stateful("split-view", GLib.Variant("b", False), lambda on: self.toggle_split(on))
         self._stateful("nav-pane", GLib.Variant("b", bool(s.get("nav_pane"))), self._set_nav)
         A("open-window", self.open_window)
         A("more-options", self.more_options)
@@ -1162,6 +1270,11 @@ class FilesWindow(HarborWindow):
             for w in wins:
                 for t in w.tabs():
                     t.view.set_single_click(value == "single")
+        elif key == "folder_sizes":
+            files_view.OPTIONS[key] = bool(value)
+            for w in wins:
+                for t in w.tabs():
+                    t.view.start_sizes()
         elif key in ("image_thumbnails", "doc_thumbnails", "remote_thumbnails"):
             files_view.OPTIONS[key] = bool(value)
             for w in wins:
@@ -1272,6 +1385,26 @@ class FilesWindow(HarborWindow):
         tab, items = self._sel()
         if len(items) == 1:
             self.start_rename(tab, items[0])
+        elif len(items) > 1:
+            self.batch_rename(tab, items)
+
+    def batch_rename(self, tab, items):
+        from .files_rename import RenameDialog
+        folders = {os.path.dirname(i.path) for i in items if i.path}
+        if len(folders) != 1 or not all(i.path for i in items):
+            self.notify_toast("Pick items from one folder to rename them together", timeout=4)
+            return
+        folder = folders.pop()
+
+        def done(renamed, errors):
+            if renamed:
+                self._undo.append(("rename-batch", renamed, None))
+                tab.view.select_paths([p for p, _o in renamed])
+                self.update_actions()
+                self.notify_toast("Renamed %d items" % len(renamed))
+            if errors:
+                self.notify_toast("Can't rename %d: %s" % (len(errors), errors[0]), timeout=6)
+        RenameDialog(self, folder, [i.name for i in items], done).present(self)
 
     def start_rename(self, tab, item):
         if not item.path:
@@ -1508,6 +1641,12 @@ class FilesWindow(HarborWindow):
                 self.notify_toast("Renamed back to “%s”" % os.path.basename(new))
             except (ValueError, GLib.Error) as e:
                 self.notify_toast("Can't undo: %s" % getattr(e, "message", e), timeout=5)
+        elif kind == "rename-batch":
+            from .files_rename import apply as rename_apply
+            folder = os.path.dirname(a[0][0])
+            _done, errors = rename_apply(folder, [(os.path.basename(p), o) for p, o in a])
+            self.notify_toast("Can't undo: %s" % errors[0] if errors
+                              else "Renamed %d items back" % len(a), timeout=5)
         elif kind == "trash":
             self._undo_trash(a, b)
 
@@ -1791,6 +1930,12 @@ class FilesWindow(HarborWindow):
         if k == Gdk.KEY_BackSpace and not mods:
             tab.up()
             return True
+        if k == Gdk.KEY_space and not mods and in_view:
+            from .files_quicklook import quick_look
+            return quick_look(self)
+        if k == Gdk.KEY_F3 and not mods:
+            self.toggle_split()
+            return True
         if k == Gdk.KEY_F2 and not mods:
             self.rename()
             return True
@@ -1859,7 +2004,8 @@ class FilesWindow(HarborWindow):
             if w > 300 and h > 200:
                 s.data["width"], s.data["height"] = w, h
         s.data["maximized"] = bool(self.is_maximized())
-        locs = [t.location for t in self.tabs() if t.location and not t.search_query]
+        locs = [t.location for t in self.tabs()
+                if t.page is not None and t.location and not t.search_query]
         s.data["last_tabs"] = [fc.strip_url_password(loc) for loc in locs][:20]
         cur = self.tab()
         if cur is not None and cur.location:
