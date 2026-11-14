@@ -133,18 +133,18 @@ UNGATED_ACTIONS = {
 # ---------------------------------------------------------------------- CSS
 
 CSS = """
-.hbf-titlebar { background: $window; padding: 0 0 0 10px; min-height: 34px; }
+.hbf-titlebar { background: $window; padding: 0 0 0 10px; min-height: 46px; }
 .hbf-titlebar tabbar, .hbf-titlebar tabbar > revealer > box {
     background: transparent; box-shadow: none; border: none; padding: 0; }
-.hbf-titlebar tabbar tabbox { padding: 3px 0 0 0; min-height: 0; }
-.hbf-titlebar tabbar tab { border-radius: 8px 8px 0 0; min-height: 30px; padding: 0 6px; margin: 0;
+.hbf-titlebar tabbar tabbox { padding: 4px 0 0 0; min-height: 0; }
+.hbf-titlebar tabbar tab { border-radius: 8px 8px 0 0; min-height: 42px; padding: 0 6px; margin: 0;
     background: transparent; box-shadow: none; }
 .hbf-titlebar tabbar tab:hover { background: $nav_hover; }
 .hbf-titlebar tabbar tab:selected, .hbf-titlebar tabbar tab:selected:hover {
     background: $surface; box-shadow: none; }
 .hbf-titlebar tabbar tab .tab-title { font-size: 13px; }
 .hbf-titlebar tabbar tab button.image-button { min-width: 20px; min-height: 20px; }
-.hbf-titlebar tabbar tabbox > separator { opacity: 0.6; margin-top: 9px; margin-bottom: 6px; }
+.hbf-titlebar tabbar tabbox > separator { opacity: 0.6; margin-top: 13px; margin-bottom: 9px; }
 /* Windows-style caption buttons: flat, wide, square, red close on hover */
 .hbf-titlebar windowcontrols { margin: 0; }
 .hbf-titlebar windowcontrols > button { min-height: 34px; min-width: 52px; padding: 0; margin: 0;
@@ -155,8 +155,8 @@ CSS = """
 .hbf-titlebar windowcontrols > button:active { background: alpha(currentColor, 0.15); }
 .hbf-titlebar windowcontrols > button.close:hover { background: #c42b1c; color: white; }
 .hbf-titlebar windowcontrols > button.close:active { background: #b22a1d; color: white; }
-button.hbf-newtab { min-height: 28px; min-width: 26px; padding: 0; margin: 0 4px; border-radius: 5px; }
-.hbf-titlebar tabbar .end-action, .hbf-titlebar tabbar .start-action { padding: 3px 0 0 0; }
+button.hbf-newtab { min-height: 34px; min-width: 26px; padding: 0; margin: 0 4px; border-radius: 5px; }
+.hbf-titlebar tabbar .end-action, .hbf-titlebar tabbar .start-action { padding: 8px 0 0 0; }
 
 .hbf-navbar { background: $surface; padding: 6px 10px; }
 .hbf-cmdbar { background: $surface; padding: 4px 10px 6px 10px; border-bottom: 1px solid $divider; }
