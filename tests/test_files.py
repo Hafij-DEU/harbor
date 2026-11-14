@@ -937,13 +937,16 @@ def test_shortcut_names_and_create(tmp_path):
 def test_send_to_targets(tmp_path):
     home = str(tmp_path)
     t = fc.send_to_targets(home=home, desktop=home + "/Desktop", documents=home + "/Documents",
-                           removable=[("USB", "/media/u/USB"), ("Bad", None)])
+                           removable=[("USB", "/media/u/USB"), ("Bad", None)],
+                           meshdrop="/opt/MeshDrop/meshdrop-desktop")
     assert t[0] == ("Compressed (zipped) folder", "zip", None)
+    assert t[1] == ("MeshDrop", "meshdrop", "/opt/MeshDrop/meshdrop-desktop")
     assert ("Desktop (create shortcut)", "link", home + "/Desktop") in t
     assert ("Documents", "copy", home + "/Documents") in t
     assert ("USB", "copy", "/media/u/USB") in t and not any(x[0] == "Bad" for x in t)
     # XDG dirs that fall back to $HOME are not offered
-    assert fc.send_to_targets(home=home, desktop=home, documents=home + "/") == [t[0]]
+    assert fc.send_to_targets(home=home, desktop=home, documents=home + "/",
+                              meshdrop="") == [t[0]]
 
 
 def test_preview_kind():

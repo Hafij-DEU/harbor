@@ -1371,12 +1371,28 @@ def create_shortcut(target, folder, name=None):
     return path
 
 
-def send_to_targets(home=None, desktop=None, documents=None, removable=()):
-    """Send to submenu entries: [(label, kind, dest)] with kind zip / link / copy."""
+MESHDROP_EXE = "/opt/MeshDrop/meshdrop-desktop"
+
+
+def meshdrop_exe():
+    """MeshDrop's app (own file-sharing app) if installed, else ""."""
+    import shutil
+    if os.access(MESHDROP_EXE, os.X_OK):
+        return MESHDROP_EXE
+    return shutil.which("meshdrop-desktop") or ""
+
+
+def send_to_targets(home=None, desktop=None, documents=None, removable=(), meshdrop=None):
+    """Send to submenu entries: [(label, kind, dest)] with kind zip / meshdrop /
+    link / copy. meshdrop: app path, "" for none, None to look it up."""
     home = home or home_dir()
     if desktop is None and documents is None:
         desktop, documents = user_folder("Desktop", home), user_folder("Documents", home)
     out = [("Compressed (zipped) folder", "zip", None)]
+    if meshdrop is None:
+        meshdrop = meshdrop_exe()
+    if meshdrop:
+        out.append(("MeshDrop", "meshdrop", meshdrop))
     if desktop and os.path.normpath(desktop) != os.path.normpath(home):
         out.append(("Desktop (create shortcut)", "link", desktop))
     if documents and os.path.normpath(documents) != os.path.normpath(home):

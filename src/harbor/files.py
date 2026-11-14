@@ -1316,7 +1316,7 @@ class FilesWindow(HarborWindow):
             tab.view.select_paths(made)
 
     def send_to(self, target):
-        """Send to ▸ — "zip", "link:DIR" (shortcut) or "copy:DIR"."""
+        """Send to ▸ — "zip", "meshdrop:APP", "link:DIR" (shortcut) or "copy:DIR"."""
         kind, _sep, dest = target.partition(":")
         if kind == "zip":
             self.compress()
@@ -1331,6 +1331,15 @@ class FilesWindow(HarborWindow):
                     fc.location_for(dest), path=dest))
         elif kind == "copy":
             self.ops.transfer(paths, dest, move=False)
+        elif kind == "meshdrop":
+            # same as MeshDrop's own "Send with MeshDrop" script
+            import subprocess
+            try:
+                subprocess.Popen([dest, "--send", *paths], start_new_session=True,
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL)
+            except OSError as e:
+                self.notify_toast("Couldn't start MeshDrop: %s" % e.strerror)
 
     def transfer_to(self, dest, move):
         tab, items = self._sel()
