@@ -1498,9 +1498,8 @@ class FilesWindow(HarborWindow):
                 "copy-to": lambda: fm.location_menu("copy-to", self.location_places()),
                 "new": fm.new_menu, "open-with": open_with, "sort": fm.sort_menu,
                 "view": fm.view_menu,
-                "share": lambda: fm.menu(
-                    fm.section(*(fm.item(lab, act) for lab, act in SHARE_MENU[:2])),
-                    fm.section(*(fm.item(lab, act) for lab, act in SHARE_MENU[2:])))}
+                "share": lambda: fm.menu(fm.section(fm.button_row(
+                    *(fm.verb(lab, act, icon) for lab, act, icon in SHARE_MENU))))}
 
     def toggle_ribbon(self):
         if self.ribbon is not None and self.ribbon_slot.get_visible():
