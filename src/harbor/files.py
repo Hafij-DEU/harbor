@@ -384,6 +384,7 @@ window.hbf-custom button.hbf-ribbon-simple-btn:hover,
 window.hbf-custom menubutton.hbf-ribbon-simple-btn > button:hover {
     background: linear-gradient(180deg, alpha(var(--accent-bg-color), 0.14), alpha(var(--accent-bg-color), 0.07)); }
 window.hbf-custom .hbf-ribbon-row { padding: 4px 8px 6px 8px; }
+window.hbf-custom .hbf-quick-line { border-top: 1px solid alpha(currentColor, 0.07); padding-top: 6px; }
 window.hbf-custom .hbf-ribbon-simple .hbf-ribbon-tabs.hbf-ribbon-tabline { margin: 6px 8px 0 8px; }
 window.hbf-custom .hbf-ribbon-simple .hbf-ribbon-tabs { padding: 0; border: none; }
 window.hbf-custom .hbf-ribbon-simple .hbf-ribbon-page { padding: 0 4px; min-height: 0; }
@@ -1474,14 +1475,14 @@ class FilesWindow(HarborWindow):
         # Windows 10 keeps Refresh at the end of the address bar
         self.nav.reorder_child_after(self.refresh_btn, self.address if w10 else self.up_btn)
         self._sync_tab_row()
-        if self.ribbon is not None and self.ribbon.simplified != custom:
+        if self.ribbon is not None and self.ribbon.custom != custom:
             self.ribbon_slot.remove(self.ribbon)
             self.ribbon = None
         if ribbon and self.ribbon is None:
             from .files_ribbon import Ribbon
             self.ribbon = Ribbon(self.ribbon_menus(), bool(self.settings.get("ribbon_collapsed")),
                                  on_collapse=lambda c: self.settings.set("ribbon_collapsed", c),
-                                 simplified=custom)
+                                 custom=custom)
             self.ribbon_slot.append(self.ribbon)
         self.cmdbar.set_visible(not ribbon)
         self.ribbon_slot.set_visible(ribbon)

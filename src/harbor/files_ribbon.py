@@ -114,6 +114,18 @@ SIMPLE_LABELS = {"win.paste", "win.new-folder", "win.compress",
                  "win.terminal"}
 SIMPLE_MORE = {"win.pin-toggle", "win.copy-path", "win.paste-shortcut", "win.open",
                "win.select-all", "win.select-none", "win.invert-selection", "win.close-window"}
+# Custom design: a standalone line of the most used commands under the ribbon
+QUICK = (
+    (("button", "Cut", "win.cut", "harbor-rb-cut", "small"),
+     ("button", "Copy", "win.copy", "harbor-rb-copy", "small"),
+     ("button", "Paste", "win.paste", "harbor-rb-paste", "small"),
+     ("button", "Rename", "win.rename", "harbor-rb-rename", "small"),
+     ("button", "Delete", "win.delete", "harbor-rb-delete", "small")),
+    (("menu", "Move to", "move-to", "harbor-rb-move-to", "small"),
+     ("menu", "Copy to", "copy-to", "harbor-rb-copy-to", "small")),
+    (("button", "New folder", "win.new-folder", "harbor-rb-new-folder", "small"),
+     ("menu", "New item", "new", "harbor-rb-new-item", "small")),
+)
 # always visible at the right end, whichever tab is open (like Windows 11)
 SIMPLE_END = (
     ("menu", "Sort", "sort", "harbor-rb-sort", "small"),
@@ -150,13 +162,15 @@ def _find_label(w):
 class Ribbon(Gtk.Box):
     """The ribbon. menus: {menu_key: callable() -> Gio.MenuModel}."""
 
-    def __init__(self, menus, collapsed=False, on_collapse=None, simplified=False):
+    def __init__(self, menus, collapsed=False, on_collapse=None, simplified=False,
+                 custom=False):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, css_classes=["hbf-ribbon"]
                          + (["hbf-ribbon-simple"] if simplified else []))
         # simplified (Custom design): tabs and commands share one row, like the
         # Windows 11 command bar, but every ribbon command is still one click away
         self.simplified = bool(simplified)
-        CUSTOM_SET[0] = self.simplified
+        self.custom = bool(custom or simplified)
+        CUSTOM_SET[0] = self.custom
         self.menus = menus
         self.on_collapse = on_collapse
         self.menu_buttons = {}
@@ -224,6 +238,8 @@ class Ribbon(Gtk.Box):
             sw.add_controller(wheel)
         else:
             self.append(self.revealer)
+            if self.custom:
+                self.append(self._quick_line())
         self.collapsed = False
         self.select("Home")
         self.set_collapsed(collapsed and not self.simplified)
@@ -269,6 +285,36 @@ class Ribbon(Gtk.Box):
             mb.set_has_frame(False)
             page.append(mb)
         return page
+
+    def _quick_line(self):
+        """Custom design: most used commands on their own line under the ribbon;
+        it stays when the ribbon is minimized."""
+        line = Gtk.Box(css_classes=["hbf-ribbon-row", "hbf-quick-line"], spacing=8)
+        body = Gtk.Box(spacing=8, valign=Gtk.Align.CENTER)
+        for items in QUICK:
+            body.append(self._cluster(items))
+        sw = Gtk.ScrolledWindow(child=body, hexpand=True,
+                                vscrollbar_policy=Gtk.PolicyType.NEVER,
+                                hscrollbar_policy=Gtk.PolicyType.EXTERNAL,
+                                propagate_natural_height=True)
+        wheel = Gtk.EventControllerScroll(flags=Gtk.EventControllerScrollFlags.BOTH_AXES)
+        wheel.connect("scroll", self._on_wheel, sw)
+        sw.add_controller(wheel)
+        line.append(sw)
+        end = self._cluster(e for e in SIMPLE_END if e[0] != "menu" or e[2] in self.menus)
+        end.add_css_class("hbf-cluster-end")
+        line.append(end)
+        return line
+
+    def _cluster(self, items):
+        box = Gtk.Box(css_classes=["hbf-cluster"], spacing=2, valign=Gtk.Align.CENTER)
+        for e in items:
+            b = self._button(e, simple=True)
+            lab = _find_label(b)
+            if lab is not None and e[1] not in ("Cut", "Copy", "Rename", "Delete"):
+                lab.set_visible(True)
+            box.append(b)
+        return box
 
     def _group(self, caption, items):
         g = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, css_classes=["hbf-ribbon-group"])
