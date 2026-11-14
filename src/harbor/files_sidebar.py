@@ -200,6 +200,8 @@ class Sidebar(Gtk.Box):
         for n in self.settings.network_locations():
             add("net:" + n["url"], fn.display_name(n["url"], n["name"]), fn.icon_for(n["url"]),
                 n["url"], indent=14, tooltip=n["url"])
+        add("wifi-share", "Share over Wi-Fi", "network-wireless-symbolic", ("action", "share"),
+            tooltip="Share files with your phone, show the QR code or scan the phone's code")
         lst.add_separator()
         add("trash", "Trash", "user-trash-full-symbolic" if self.trash_full
             else "user-trash-symbolic", fc.TRASH_URI)
@@ -248,6 +250,11 @@ class Sidebar(Gtk.Box):
 
     def _on_selected(self, _l, key):
         target = self.targets.get(key)
+        if isinstance(target, tuple) and target[0] == "action":
+            # not a place: open the share window and keep the current row lit
+            self.win.share_wifi()
+            GLib.idle_add(lambda: self.sync(self.current) or False)
+            return
         if isinstance(target, tuple):
             self.mount_volume(target[1], new_tab=False)
             return
@@ -304,6 +311,9 @@ class Sidebar(Gtk.Box):
         gesture.set_state(Gtk.EventSequenceState.CLAIMED)
         key = row.key
         target = self.targets.get(key)
+        if isinstance(target, tuple) and target[0] == "action":
+            self._on_selected(None, key)
+            return
         if button == 2:
             if isinstance(target, tuple):
                 self.mount_volume(target[1], new_tab=True)

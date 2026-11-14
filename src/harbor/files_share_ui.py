@@ -264,12 +264,17 @@ class ShareDialog(Adw.Dialog):
                                  description="Only these (and what is inside the folders) can "
                                              "be opened. Hidden files are never shared. "
                                              "Right-click any file in Harbor Files to share it.")
+        btns = Gtk.Box(spacing=4)
         add = Gtk.Button(label="Add folder…", css_classes=["flat"], sensitive=not running)
         add.connect("clicked", self._pick_folder)
-        g.set_header_suffix(add)
+        addf = Gtk.Button(label="Add files…", css_classes=["flat"], sensitive=not running)
+        addf.connect("clicked", self._pick_files)
+        btns.append(add)
+        btns.append(addf)
+        g.set_header_suffix(btns)
         folders = share_folders(self.settings)
         if not folders:
-            g.add(Adw.ActionRow(title="Nothing shared yet", subtitle="Add a folder to share it"))
+            g.add(Adw.ActionRow(title="Nothing shared yet", subtitle="Add a folder or files to share them"))
         for f in folders:
             is_dir = not os.path.isfile(f["path"])
             row = Adw.ActionRow(title=os.path.basename(f["path"]) or f["path"],
@@ -318,6 +323,21 @@ class ShareDialog(Adw.Dialog):
                 add_share_folder(self.settings, g.get_path())
                 self.build()
         fd.select_folder(self.win, None, done)
+
+    def _pick_files(self, *_):
+        fd = Gtk.FileDialog(title="Choose files to share")
+
+        def done(d, res):
+            try:
+                files = d.open_multiple_finish(res)
+            except GLib.Error:
+                return
+            for i in range(files.get_n_items() if files else 0):
+                path = files.get_item(i).get_path()
+                if path:
+                    add_share_folder(self.settings, path)
+            self.build()
+        fd.open_multiple(self.win, None, done)
 
     # ------------------------------------------------------------ server
     def start(self):
