@@ -248,6 +248,12 @@ class Ribbon(Gtk.Box):
     def _page(self, groups):
         if self.simplified:
             return self._simple_page(groups)
+        if self.custom:
+            # the quick line already has these, so the ribbon does not repeat them
+            quick = {e[2] for items in QUICK for e in items} | {e[2] for e in SIMPLE_END}
+            quick.add("win.view")
+            groups = [(c, [e for e in items if e[2] not in quick]) for c, items in groups]
+            groups = [(c, items) for c, items in groups if items]
         page = Gtk.Box(css_classes=["hbf-ribbon-page"], spacing=0)
         for i, (caption, items) in enumerate(groups):
             if i:
