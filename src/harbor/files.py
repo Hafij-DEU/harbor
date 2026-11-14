@@ -1024,7 +1024,6 @@ class FilesWindow(HarborWindow):
             self.settings.data["details_pane"] = False
             self.details.set_visible(False)
         self.settings.save()
-        self.preview_slot.set_visible(value)
         self.preview.set_visible(value)
         if not value:
             self.preview.reset()

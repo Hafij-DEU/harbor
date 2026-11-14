@@ -99,7 +99,9 @@ class PreviewPane(Gtk.Box):
         # A non-scrolling ScrolledWindow clips and, unlike a Box, does not
         # report the picture's natural width, so the pane keeps its set width
         # instead of squeezing the file list.
-        self.append(Gtk.ScrolledWindow(child=self.content, vexpand=True, hexpand=False,
+        # hexpand: fill the whole pane width (the pane itself is hexpand=False,
+        # set explicitly, so this does not make the pane grow).
+        self.append(Gtk.ScrolledWindow(child=self.content, vexpand=True, hexpand=True,
                                        hscrollbar_policy=Gtk.PolicyType.NEVER,
                                        vscrollbar_policy=Gtk.PolicyType.NEVER,
                                        propagate_natural_width=False))
@@ -113,14 +115,33 @@ class PreviewPane(Gtk.Box):
             self.win.settings.set("preview_width", width)
         return width
 
-    def _drag_begin(self, _g, _x, _y):
+    # The handle moves while the pane resizes, so the gesture's own offsets
+    # (relative to the handle) jitter. Use the pointer's window position.
+    @staticmethod
+    def _pointer_x(g):
+        ev = g.get_current_event()
+        pos = ev.get_position() if ev is not None else None
+        if not pos:
+            return None
+        return pos[-2] if len(pos) == 3 else pos[0]
+
+    def _drag_begin(self, g, _x, _y):
         self._drag_start = self.get_width()
+        self._drag_x0 = self._pointer_x(g)
 
-    def _drag_update(self, _g, dx, _dy):
-        self.set_pane_width(self._drag_start - dx)
+    def _drag_width(self, g, dx):
+        x = self._pointer_x(g)
+        if x is not None and self._drag_x0 is not None:
+            dx = x - self._drag_x0
+        return self._drag_start - dx
 
-    def _drag_end(self, _g, dx, _dy):
-        self.set_pane_width(self._drag_start - dx, save=True)
+    def _drag_update(self, g, dx, _dy):
+        w = self._drag_width(g, dx)
+        if abs(w - self.get_width()) >= 2:
+            self.set_pane_width(w)
+
+    def _drag_end(self, g, dx, _dy):
+        self.set_pane_width(self._drag_width(g, dx), save=True)
 
     # ------------------------------------------------------------ helpers
     def _clear(self):
