@@ -321,7 +321,8 @@ class Settings:
                 "remote_preview_max_mb": 10,
                 # Share over Wi-Fi (never starts by itself)
                 "share_folders": [], "share_port": 8765, "share_autostop": 30,
-                "share_upload_max_mb": 4096, "share_iface": "", "share_tailscale": False}
+                "share_upload_max_mb": 4096, "share_iface": "", "share_tailscale": False,
+                "share_in_sidebar": False}
     LISTS = ("pins", "hidden_defaults", "last_tabs")
     # settings with a fixed set of values (first one is the default)
     CHOICES = {"open_to": ("thispc", "home", "last"), "style": ("win11", "system"),

@@ -1131,6 +1131,9 @@ class FilesWindow(HarborWindow):
             for w in wins:
                 for t in w.tabs():
                     t.view.refresh_thumbs()
+        elif key == "share_in_sidebar":
+            for w in wins:
+                w.sidebar.rebuild()
         elif key == "show_quick_access":
             for w in wins:
                 w.sidebar.rebuild()

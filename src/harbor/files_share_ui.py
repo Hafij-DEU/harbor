@@ -313,8 +313,8 @@ class ShareDialog(Adw.Dialog):
         else:
             g = Adw.PreferencesGroup(title="Share only this",
                                      description="A one-time share: it is not added to your "
-                                                 "saved list. Open Share over Wi-Fi from the "
-                                                 "sidebar to share your saved list.")
+                                                 "saved list. Use the Share button to share "
+                                                 "your saved list.")
         for f in folders:
             is_dir = not os.path.isfile(f["path"])
             row = Adw.ActionRow(title=os.path.basename(f["path"]) or f["path"],

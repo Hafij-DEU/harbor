@@ -200,8 +200,9 @@ class Sidebar(Gtk.Box):
         for n in self.settings.network_locations():
             add("net:" + n["url"], fn.display_name(n["url"], n["name"]), fn.icon_for(n["url"]),
                 n["url"], indent=14, tooltip=n["url"])
-        add("wifi-share", "Share over Wi-Fi", "network-wireless-symbolic", ("action", "share"),
-            tooltip="Share files with your phone, show the QR code or scan the phone's code")
+        if self.settings.get("share_in_sidebar"):
+            add("wifi-share", "Share over Wi-Fi", "network-wireless-symbolic", ("action", "share"),
+                tooltip="Share files with your phone, show the QR code or scan the phone's code")
         lst.add_separator()
         add("trash", "Trash", "user-trash-full-symbolic" if self.trash_full
             else "user-trash-symbolic", fc.TRASH_URI)

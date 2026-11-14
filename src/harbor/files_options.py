@@ -69,6 +69,8 @@ SWITCHES = {
     "show_extensions": ("Show file name extensions", None),
     "show_quick_access": ("Show Quick access", "Pinned folders in the navigation pane and Home"),
     "show_recent": ("Show recent files in Home", None),
+    "share_in_sidebar": ("Share over Wi-Fi in the navigation pane",
+                         "It is always in the Share button (and the ribbon's Share tab)"),
     "open_archives_in_harbor": ("Open archives in Harbor",
                                 "Double-click lists a .zip / .7z / .tar here instead of the "
                                 "default app"),
@@ -173,6 +175,7 @@ class SettingsDialog(Adw.PreferencesDialog):
         for spec in LAYOUT_CHOICES:
             g.add(self._combo(*spec))
         g.add(self._switch("show_status_bar"))
+        g.add(self._switch("share_in_sidebar"))
         p.add(g)
         g2 = Adw.PreferencesGroup(title="Views")
         g2.add(self._value_combo("start_pane", "Pane at start-up",
