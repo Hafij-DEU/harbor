@@ -392,12 +392,13 @@ def merged_item_menu(kind, sel, can_paste=False, pinned=False, send_to=()):
     n = len(sel)
     one = sel[0] if n == 1 else {}
     folder_one = n == 1 and one.get("is_dir") and one.get("local")
+    # bold full-colour round icons (the Custom ribbon set), not thin symbolic ones
     row = button_row(
-        verb("Cut", "win.cut", "edit-cut-symbolic") if st["cut"] else None,
-        verb("Copy", "win.copy", "edit-copy-symbolic") if st["copy"] else None,
-        verb("Paste", "win.paste-into", "edit-paste-symbolic") if folder_one and can_paste else None,
-        verb("Rename", "win.rename", "document-edit-symbolic") if st["rename"] else None,
-        verb("Delete", "win.delete", "user-trash-symbolic") if st["delete"] else None,
+        verb("Cut", "win.cut", "harbor-rbc-cut") if st["cut"] else None,
+        verb("Copy", "win.copy", "harbor-rbc-copy") if st["copy"] else None,
+        verb("Paste", "win.paste-into", "harbor-rbc-paste") if folder_one and can_paste else None,
+        verb("Rename", "win.rename", "harbor-rbc-rename") if st["rename"] else None,
+        verb("Delete", "win.delete", "harbor-rbc-delete") if st["delete"] else None,
     )
     s1 = section(item("Open", "win.open", icon="document-open-symbolic"))
     if st["open-with"]:

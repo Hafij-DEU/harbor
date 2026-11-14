@@ -11,7 +11,7 @@ Entry kinds:
   ("menu",   label, menu_key, icon, size)           the model comes from a provider
 """
 
-from gi.repository import GLib, Gtk, Pango
+from gi.repository import Gio, GLib, Gtk, Pango
 
 from . import files_icons
 
@@ -107,6 +107,21 @@ def menu_keys():
     return {e[2] for e in entries() if e[0] == "menu"}
 
 
+# Custom design (hybrid bar): commands that keep a text label, and rarely used
+# ones that move into the "More" menu at the end of the row
+SIMPLE_LABELS = {"win.paste", "win.new-folder", "win.compress",
+                 "win.share-wifi", "win.nav-pane", "win.split-view", "win.new-window",
+                 "win.terminal"}
+SIMPLE_MORE = {"win.pin-toggle", "win.copy-path", "win.paste-shortcut", "win.open",
+               "win.select-all", "win.select-none", "win.invert-selection", "win.close-window"}
+# always visible at the right end, whichever tab is open (like Windows 11)
+SIMPLE_END = (
+    ("menu", "Sort", "sort", "harbor-rb-sort", "small"),
+    ("menu", "View", "view", "harbor-rb-large-icons", "small"),
+    ("toggle", "Details", "win.details-pane", "harbor-rb-details-pane", "small"),
+    ("toggle", "Preview", "win.preview-pane", "harbor-rb-preview-pane", "small"),
+)
+
 # the Custom design swaps in its own round long-shadow set (harbor-rbc-*)
 CUSTOM_SET = [False]
 
@@ -120,11 +135,28 @@ def _icon(name, size):
     return img
 
 
+def _find_label(w):
+    if isinstance(w, Gtk.Label):
+        return w
+    c = w.get_first_child()
+    while c is not None:
+        r = _find_label(c)
+        if r is not None:
+            return r
+        c = c.get_next_sibling()
+    return None
+
+
 class Ribbon(Gtk.Box):
     """The ribbon. menus: {menu_key: callable() -> Gio.MenuModel}."""
 
-    def __init__(self, menus, collapsed=False, on_collapse=None):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, css_classes=["hbf-ribbon"])
+    def __init__(self, menus, collapsed=False, on_collapse=None, simplified=False):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, css_classes=["hbf-ribbon"]
+                         + (["hbf-ribbon-simple"] if simplified else []))
+        # simplified (Custom design): tabs and commands share one row, like the
+        # Windows 11 command bar, but every ribbon command is still one click away
+        self.simplified = bool(simplified)
+        CUSTOM_SET[0] = self.simplified
         self.menus = menus
         self.on_collapse = on_collapse
         self.menu_buttons = {}
@@ -155,19 +187,87 @@ class Ribbon(Gtk.Box):
         self.append(tabs)
         self.revealer = Gtk.Revealer(child=self.stack, reveal_child=True,
                                      transition_type=Gtk.RevealerTransitionType.NONE)
-        self.append(self.revealer)
+        if self.simplified:
+            # one row: [tabs] | commands (scroll sideways when the window is narrow)
+            self.remove(tabs)
+            tabs.remove(self.collapse_btn)
+            for c in list(tabs):
+                if c.get_hexpand():
+                    tabs.remove(c)
+            tabs.set_valign(Gtk.Align.CENTER)
+            # tabs on their own line, the commands in a strip under them (Win10-like)
+            tabs.set_halign(Gtk.Align.START)
+            tabs.add_css_class("hbf-ribbon-tabline")
+            self.append(tabs)
+            row = Gtk.Box(css_classes=["hbf-ribbon-row"])
+            sw = Gtk.ScrolledWindow(child=self.revealer, hexpand=True,
+                                    vscrollbar_policy=Gtk.PolicyType.NEVER,
+                                    hscrollbar_policy=Gtk.PolicyType.EXTERNAL,
+                                    propagate_natural_height=True)
+            row.append(sw)
+            end = Gtk.Box(css_classes=["hbf-cluster", "hbf-cluster-end"], spacing=2,
+                          valign=Gtk.Align.CENTER)
+            for e in SIMPLE_END:
+                if e[0] == "menu" and e[2] not in self.menus:
+                    continue
+                b = self._button(e, simple=True)
+                end.append(b)
+            for b in end:
+                lab = _find_label(b)
+                if lab is not None:
+                    lab.set_visible(True)
+            row.append(end)
+            self.append(row)
+            wheel = Gtk.EventControllerScroll(
+                flags=Gtk.EventControllerScrollFlags.BOTH_AXES)
+            wheel.connect("scroll", self._on_wheel, sw)
+            sw.add_controller(wheel)
+        else:
+            self.append(self.revealer)
         self.collapsed = False
         self.select("Home")
-        self.set_collapsed(collapsed)
+        self.set_collapsed(collapsed and not self.simplified)
 
     # ------------------------------------------------------------ layout
     def _page(self, groups):
+        if self.simplified:
+            return self._simple_page(groups)
         page = Gtk.Box(css_classes=["hbf-ribbon-page"], spacing=0)
         for i, (caption, items) in enumerate(groups):
             if i:
                 page.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL,
                                           css_classes=["hbf-ribbon-sep"]))
             page.append(self._group(caption, items))
+        return page
+
+    def _simple_page(self, groups):
+        """Hybrid row: each ribbon group is a soft rounded cluster; rare commands
+        go into a "More" menu at the end so the row stays short."""
+        page = Gtk.Box(css_classes=["hbf-ribbon-page"], spacing=8, valign=Gtk.Align.CENTER)
+        more = Gio.Menu()
+        for caption, items in groups:
+            cluster = Gtk.Box(css_classes=["hbf-cluster"], spacing=2, valign=Gtk.Align.CENTER,
+                              tooltip_text=caption or None)
+            for e in items:
+                if e[0] == "check":
+                    cluster.append(Gtk.CheckButton(label=e[1], action_name=e[2],
+                                                   css_classes=["hbf-ribbon-check"]))
+                elif e[0] != "menu" and e[2] in SIMPLE_MORE:
+                    it = Gio.MenuItem.new(e[1], e[2])
+                    if len(e) > 5:
+                        it.set_action_and_target_value(e[2], GLib.Variant("s", e[5]))
+                    more.append_item(it)
+                else:
+                    cluster.append(self._button(e, simple=True))
+            if cluster.get_first_child() is not None:
+                page.append(cluster)
+        if more.get_n_items():
+            mb = Gtk.MenuButton(icon_name="view-more-symbolic", menu_model=more,
+                                tooltip_text="More", css_classes=["hbf-ribbon-simple-btn",
+                                                                  "hbf-cluster-more"],
+                                valign=Gtk.Align.CENTER)
+            mb.set_has_frame(False)
+            page.append(mb)
         return page
 
     def _group(self, caption, items):
@@ -198,14 +298,22 @@ class Ribbon(Gtk.Box):
             g.append(Gtk.Label(label=caption, css_classes=["hbf-ribbon-caption"]))
         return g
 
-    def _button(self, e):
+    def _button(self, e, simple=False):
         kind, label, action, icon, size = e[:5]
         big = size == "big"
-        inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL if big else Gtk.Orientation.HORIZONTAL,
-                        spacing=2 if big else 6)
-        inner.append(_icon(icon, 32 if big else 16))
-        lab = Gtk.Label(label=label, wrap=big, justify=Gtk.Justification.CENTER,
-                        max_width_chars=10 if big else -1)
+        if simple:
+            inner = Gtk.Box(spacing=6)
+            inner.append(_icon(icon, 22))
+            # labels only on the drop-downs (Move to, Copy to, New...), the
+            # rest are icon buttons with tooltips so the whole tab fits one row
+            lab = Gtk.Label(label=label, visible=kind == "menu" or action in SIMPLE_LABELS)
+            big = False
+        else:
+            inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL if big
+                            else Gtk.Orientation.HORIZONTAL, spacing=2 if big else 6)
+            inner.append(_icon(icon, 32 if big else 16))
+            lab = Gtk.Label(label=label, wrap=big, justify=Gtk.Justification.CENTER,
+                            max_width_chars=10 if big else -1)
         lab.set_wrap_mode(Pango.WrapMode.WORD)
         inner.append(lab)
         if kind == "menu":
@@ -218,6 +326,8 @@ class Ribbon(Gtk.Box):
                 lab.set_xalign(0)
                 inner.append(arrow)
         cls = ["hbf-ribbon-btn", "hbf-ribbon-big" if big else "hbf-ribbon-small"]
+        if simple:
+            cls.append("hbf-ribbon-simple-btn")
         if kind == "menu":
             w = Gtk.MenuButton(child=inner, css_classes=cls, always_show_arrow=False)
             w.set_has_frame(False)
@@ -235,6 +345,14 @@ class Ribbon(Gtk.Box):
             w.set_action_target_value(GLib.Variant("s", e[5]))
         w.set_tooltip_text(label)
         return w
+
+    @staticmethod
+    def _on_wheel(_ctl, dx, dy, sw):
+        adj = sw.get_hadjustment()
+        if adj.get_upper() - adj.get_page_size() <= 0:
+            return False
+        adj.set_value(adj.get_value() + (dx or dy) * 40)
+        return True
 
     # ------------------------------------------------------------ state
     def _on_tab(self, button, name):
@@ -261,11 +379,6 @@ class Ribbon(Gtk.Box):
                                            else "Minimize the ribbon (Ctrl+F1)")
         if notify and self.on_collapse:
             self.on_collapse(self.collapsed)
-
-    def set_custom_icons(self, on):
-        if CUSTOM_SET[0] != bool(on):
-            CUSTOM_SET[0] = bool(on)
-            self.refresh_icons()
 
     def refresh_icons(self):
         """Rebuild after the icon set changed (cheap: the ribbon is small)."""

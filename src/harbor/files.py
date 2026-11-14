@@ -9,7 +9,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, Graphene, Gsk, Gtk, Pango  # noqa: E402
 
 from . import common  # noqa: E402
 from . import files_actions as fa_  # noqa: E402
@@ -362,6 +362,64 @@ window.hbf-custom button.hbf-ribbon-tab { border-radius: 999px; min-height: 24px
 window.hbf-custom button.hbf-ribbon-tab:checked { background: alpha(var(--accent-bg-color), 0.14); }
 window.hbf-custom button.hbf-ribbon-file, window.hbf-custom button.hbf-ribbon-file:checked {
     background: var(--accent-bg-color); color: var(--accent-fg-color); }
+/* Custom: simplified one-row ribbon */
+/* Custom shading: accent-tinted glass top fading into the window, raised cards */
+window.hbf-custom .hbf-top {
+    background: linear-gradient(180deg, alpha(var(--accent-bg-color), 0.13),
+                                alpha(var(--accent-bg-color), 0.04) 75%, transparent); }
+window.hbf-custom .hbf-top .hbf-titlebar, window.hbf-custom .hbf-top .hbf-navbar,
+window.hbf-custom .hbf-top .hbf-cmdbar { background: transparent; }
+window.hbf-custom .hbf-titlebar tabbar tab:selected, window.hbf-custom .hbf-titlebar tabbar tab:selected:hover {
+    background: $surface; box-shadow: 0 -1px 6px alpha(black, 0.10); }
+window.hbf-custom .hbf-ribbon {
+    box-shadow: 0 3px 10px alpha(black, 0.10), 0 1px 2px alpha(black, 0.08),
+                0 0 0 1px alpha(currentColor, 0.05); }
+window.hbf-custom .hbf-pane {
+    box-shadow: 0 3px 12px alpha(black, 0.08), 0 0 0 1px alpha(currentColor, 0.05); }
+window.hbf-custom .hbf-sidebar {
+    background: linear-gradient(180deg, alpha(var(--accent-bg-color), 0.07), alpha(currentColor, 0.03)); }
+window.hbf-custom .hbf-address-box, window.hbf-custom entry {
+    box-shadow: 0 1px 3px alpha(black, 0.08), 0 0 0 1px alpha(currentColor, 0.06); }
+window.hbf-custom button.hbf-ribbon-simple-btn:hover,
+window.hbf-custom menubutton.hbf-ribbon-simple-btn > button:hover {
+    background: linear-gradient(180deg, alpha(var(--accent-bg-color), 0.14), alpha(var(--accent-bg-color), 0.07)); }
+window.hbf-custom .hbf-ribbon-row { padding: 4px 8px 6px 8px; }
+window.hbf-custom .hbf-ribbon-simple .hbf-ribbon-tabs.hbf-ribbon-tabline { margin: 6px 8px 0 8px; }
+window.hbf-custom .hbf-ribbon-simple .hbf-ribbon-tabs { padding: 0; border: none; }
+window.hbf-custom .hbf-ribbon-simple .hbf-ribbon-page { padding: 0 4px; min-height: 0; }
+window.hbf-custom .hbf-ribbon-simple .hbf-ribbon-sep { margin: 6px 6px; }
+/* hybrid bar: segmented tab pill + soft command clusters */
+window.hbf-custom .hbf-ribbon-simple .hbf-ribbon-tabs {
+  background: alpha(currentColor, 0.06); border-radius: 999px; padding: 3px; }
+window.hbf-custom .hbf-ribbon-simple .hbf-ribbon-tab {
+  border-radius: 999px; min-height: 30px; padding: 0 16px; margin: 0; border: none;
+  box-shadow: none; background: transparent; font-weight: 600; }
+window.hbf-custom .hbf-ribbon-simple .hbf-ribbon-tab:checked {
+  background: $surface; color: var(--accent-color);
+  box-shadow: 0 1px 4px alpha(black, 0.14), 0 0 0 1px alpha(currentColor, 0.04); }
+window.hbf-custom .hbf-ribbon-simple .hbf-ribbon-tab.hbf-ribbon-file {
+  background: var(--accent-bg-color); color: var(--accent-fg-color); margin-right: 3px; }
+window.hbf-custom .hbf-ribbon-simple .hbf-ribbon-sep { opacity: 0; margin: 0 2px; }
+window.hbf-custom .hbf-cluster {
+  background: alpha(currentColor, 0.04); border-radius: 12px; padding: 2px;
+  box-shadow: inset 0 0 0 1px alpha(currentColor, 0.05); }
+window.hbf-custom .hbf-cluster-end { margin-left: 8px;
+  background: alpha(var(--accent-bg-color), 0.07); }
+window.hbf-custom .hbf-cluster button.hbf-ribbon-simple-btn,
+window.hbf-custom .hbf-cluster menubutton.hbf-ribbon-simple-btn > button { border-radius: 10px; }
+window.hbf-custom .hbf-cluster-end togglebutton:checked, window.hbf-custom .hbf-cluster-end button:checked {
+  background: alpha(var(--accent-bg-color), 0.22); }
+window.hbf-custom button.hbf-ribbon-simple-btn:disabled,
+window.hbf-custom menubutton.hbf-ribbon-simple-btn > button:disabled { filter: none; }
+window.hbf-custom .hbf-ribbon-simple-btn:disabled image { opacity: 0.5; -gtk-icon-filter: none; }
+window.hbf-custom .hbf-ribbon-simple-btn:disabled label { opacity: 0.55; }
+window.hbf-custom button.hbf-ribbon-simple-btn, window.hbf-custom menubutton.hbf-ribbon-simple-btn > button {
+  min-height: 34px; min-width: 34px; padding: 2px 6px; }
+window.hbf-custom .hbf-ribbon-simple-btn label { font-size: 13px; }
+/* merged right-click menu: bigger, bolder icon row */
+popover.hbf-merged-menu .horizontal-buttons button,
+popover.hbf-merged-menu .horizontal-buttons modelbutton { min-height: 38px; min-width: 44px; }
+popover.hbf-merged-menu .horizontal-buttons image { -gtk-icon-size: 24px; }
 window.hbf-custom button.hbf-ribbon-btn, window.hbf-custom menubutton.hbf-ribbon-btn > button {
     border-radius: 10px; }
 
@@ -379,6 +437,50 @@ window.hbf-compact .hbf-navbar { padding: 3px 10px; }
 
 
 # ---------------------------------------------------------------------- window
+
+
+class TabStrip(Gtk.Box):
+    """Title-bar row whose tab bar is as wide as its tabs (up to the free space),
+    so the + new-tab button (the bar's end widget) sits right after the last tab.
+    AdwTabBar's own natural width is too small for that, hence the manual layout."""
+    TAB_W = 220
+    END_W = 44
+
+    def __init__(self, bar, view, **kw):
+        super().__init__(**kw)
+        self.bar, self.view = bar, view
+        # GTK calls a layout manager instead of size_allocate, so drop it
+        self.set_layout_manager(None)
+
+    def do_measure(self, orientation, for_size):
+        kids = [c for c in self if c.get_visible()]
+        sizes = [c.measure(orientation, -1)[:2] for c in kids]
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            gap = self.get_spacing() * max(0, len(kids) - 1)
+            return (sum(s[0] for s in sizes) + gap, sum(s[1] for s in sizes) + gap, -1, -1)
+        return (max((s[0] for s in sizes), default=0), max((s[1] for s in sizes), default=0), -1, -1)
+
+    def do_size_allocate(self, width, height, baseline):
+        kids = [c for c in self if c.get_visible()]
+        sp = self.get_spacing()
+        fixed = [c for c in kids if c is not self.bar and not c.get_hexpand()]
+        used = sum(c.measure(Gtk.Orientation.HORIZONTAL, -1)[1] for c in fixed) + sp * (len(kids) - 1)
+        bar_min = self.bar.measure(Gtk.Orientation.HORIZONTAL, -1)[0]
+        want = self.view.get_n_pages() * self.TAB_W + self.END_W
+        bar_w = max(bar_min, min(want, width - used))
+        rest = max(0, width - used - bar_w)
+        x = 0
+        for c in kids:
+            if c is self.bar:
+                w = bar_w
+            elif c.get_hexpand():
+                w = rest
+            else:
+                w = c.measure(Gtk.Orientation.HORIZONTAL, -1)[1]
+            pt = Graphene.Point()
+            pt.init(x, 0)
+            c.allocate(w, height, -1, Gsk.Transform().translate(pt))
+            x += w + sp
 
 class FilesWindow(HarborWindow):
     def __init__(self, app, locations=None):
@@ -420,17 +522,21 @@ class FilesWindow(HarborWindow):
                                     | sc.CONTROL_PAGE_DOWN | sc.ALT_DIGITS | sc.ALT_ZERO)
         self.tab_view.connect("notify::selected-page", lambda *_: self._on_switch())
         self.tab_view.connect("close-page", self._on_close_page)
+        # not hexpand: the bar is only as wide as its tabs, so the + (its end
+        # widget) sits right after the last tab like a browser; a spacer fills the rest
         self.tab_bar = Adw.TabBar(view=self.tab_view, autohide=False, expand_tabs=False,
-                                  hexpand=True)
+                                  hexpand=False)
         newtab = Gtk.Button(icon_name="list-add-symbolic", css_classes=["flat", "hbf-newtab"],
                             tooltip_text="New tab (Ctrl+T)", valign=Gtk.Align.CENTER)
         newtab.connect("clicked", lambda *_: self.new_tab())
         self.tab_bar.set_end_action_widget(newtab)
-        tbox = Gtk.Box(css_classes=["hbf-titlebar"], spacing=6)
+        tbox = TabStrip(self.tab_bar, self.tab_view, css_classes=["hbf-titlebar"], spacing=6)
         icon = Gtk.Image(icon_name=ICON, pixel_size=16, valign=Gtk.Align.CENTER,
                          margin_top=4, margin_end=4)
         tbox.append(icon)
         tbox.append(self.tab_bar)
+        tbox.append(Gtk.Box(hexpand=True))
+        self.tab_view.connect("notify::n-pages", lambda *_: tbox.queue_allocate())
         ctl = Gtk.WindowControls(side=Gtk.PackType.END, decoration_layout=":minimize,maximize,close",
                                  valign=Gtk.Align.START)
         tbox.append(ctl)
@@ -1009,6 +1115,8 @@ class FilesWindow(HarborWindow):
         # instead of sliding over the main menu
         pop = Gtk.PopoverMenu.new_from_model_full(menu, Gtk.PopoverMenuFlags.NESTED)
         pop.set_has_arrow(False)
+        if self.settings.get("menu_style") == "merged":
+            pop.add_css_class("hbf-merged-menu")
         pop.set_halign(Gtk.Align.START)
         pop.set_parent(widget)
         rect = Gdk.Rectangle()
@@ -1366,13 +1474,15 @@ class FilesWindow(HarborWindow):
         # Windows 10 keeps Refresh at the end of the address bar
         self.nav.reorder_child_after(self.refresh_btn, self.address if w10 else self.up_btn)
         self._sync_tab_row()
+        if self.ribbon is not None and self.ribbon.simplified != custom:
+            self.ribbon_slot.remove(self.ribbon)
+            self.ribbon = None
         if ribbon and self.ribbon is None:
             from .files_ribbon import Ribbon
             self.ribbon = Ribbon(self.ribbon_menus(), bool(self.settings.get("ribbon_collapsed")),
-                                 on_collapse=lambda c: self.settings.set("ribbon_collapsed", c))
+                                 on_collapse=lambda c: self.settings.set("ribbon_collapsed", c),
+                                 simplified=custom)
             self.ribbon_slot.append(self.ribbon)
-        if self.ribbon is not None:
-            self.ribbon.set_custom_icons(custom)
         self.cmdbar.set_visible(not ribbon)
         self.ribbon_slot.set_visible(ribbon)
 
@@ -1384,7 +1494,8 @@ class FilesWindow(HarborWindow):
                 fm.item("Choose another app…", "win.open-with-other")))
         return {"move-to": lambda: fm.location_menu("move-to", self.location_places()),
                 "copy-to": lambda: fm.location_menu("copy-to", self.location_places()),
-                "new": fm.new_menu, "open-with": open_with, "sort": fm.sort_menu}
+                "new": fm.new_menu, "open-with": open_with, "sort": fm.sort_menu,
+                "view": fm.view_menu}
 
     def toggle_ribbon(self):
         if self.ribbon is not None and self.ribbon_slot.get_visible():
