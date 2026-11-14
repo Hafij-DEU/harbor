@@ -25,8 +25,9 @@ control() {   # app version stage
     local app=$1 v=$2 stage=$3 depends recommends desc
     depends="python3 (>= 3.10), python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1 (>= 1.7), gir1.2-glib-2.0"
     if [ "$app" = files ]; then
-        depends="$depends, 7zip"
-        recommends="7zip-rar, python3-qrcode, gvfs-backends"
+        # gtk-3.0: the Share over Wi-Fi tray process (app indicators are GTK 3)
+        depends="$depends, 7zip, gir1.2-gtk-3.0"
+        recommends="7zip-rar, python3-qrcode, gvfs-backends, gir1.2-ayatanaappindicator3-0.1, gir1.2-gstreamer-1.0, gstreamer1.0-plugins-bad, gstreamer1.0-gtk4"
         desc="Windows 11-style File Explorer for GNOME
  Harbor Files: a File Explorer with tabs, a breadcrumb address bar,
  recursive search, Home and This PC pages, Quick access pins, drives

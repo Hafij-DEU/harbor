@@ -162,6 +162,11 @@ class Guard:
 
 # ------------------------------------------------------------------ server
 
+# The share runs in its own process (files_sharetray) under this session-bus name.
+BUS_NAME = "io.github.hafij_deu.Harbor.Share"
+OBJECT_PATH = "/io/github/hafij_deu/Harbor/Share"
+
+
 class ShareServer:
     """folders: [{"path": str, "upload": bool}]. start() -> url."""
 
@@ -191,6 +196,16 @@ class ShareServer:
     @property
     def url(self):
         return "http://%s:%d/" % (self.host, self.port)
+
+    @property
+    def qr_text(self):
+        """What the QR code says: the address plus the PIN, so a scan signs in."""
+        return "%s#pin=%s" % (self.url, self.pin)
+
+    def status(self):
+        return {"url": self.url, "dav_url": self.dav_url, "qr_text": self.qr_text,
+                "pin": self.pin, "host": self.host, "port": self.port,
+                "stops_at": self.stops_at}
 
     @property
     def dav_url(self):
@@ -262,6 +277,13 @@ def split_path(urlpath):
 
 JS = r"""
 document.addEventListener('DOMContentLoaded', () => {
+  // QR code from Harbor: http://ip:port/#pin=123456 signs in with no typing.
+  const m = /(?:^#|&)pin=(\d{6})(?:&|$)/.exec(location.hash);
+  if (m) {
+    history.replaceState(null, '', location.pathname + location.search);
+    const p = document.querySelector('input[name=pin]');
+    if (p) { p.value = m[1]; p.form.submit(); return; }
+  }
   const input = document.getElementById('files');
   if (!input) return;
   const status = document.getElementById('status');

@@ -37,6 +37,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Android
 import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Computer
@@ -646,7 +647,7 @@ fun ConnectScreen(state: AppState) {
                     Spacer(Modifier.height(12.dp))
                     Button(onClick = { ServerService.error.value = null; ServerService.start(state.ctx) }) { Text("Start sharing") }
                 } else {
-                    val qr = remember(i.url) { qrBitmap(i.url) }
+                    val qr = remember(i.qrText) { qrBitmap(i.qrText) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("Sharing on Wi-Fi", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
@@ -667,12 +668,13 @@ fun ConnectScreen(state: AppState) {
         }
         Row(Modifier.padding(start = 22.dp, end = 8.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Computers & servers", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            IconButton(onClick = { scanQr(state) }) { Icon(Icons.Rounded.QrCodeScanner, "Scan QR") }
             IconButton(onClick = { adding = true }) { Icon(Icons.Rounded.Add, "Add") }
         }
         val servers = state.prefs.servers
         Card {
             if (servers.isEmpty()) {
-                Text("Add your PC: on the PC open Harbor Files › Share over Wi-Fi, then type the address and PIN it shows.",
+                Text("Add your PC: on the PC open Harbor Files › Share over Wi-Fi, then scan its QR code, or tap + and type the address and PIN.",
                     Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             servers.forEachIndexed { idx, s ->
@@ -711,6 +713,25 @@ fun ConnectScreen(state: AppState) {
             state.prefs.removeServer(s.id); removing = null
         }
     }
+}
+
+/** Scans a Harbor QR code with Google's code scanner (no camera permission), saves the server and opens it. */
+private fun scanQr(state: AppState) {
+    val opts = com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions.Builder()
+        .setBarcodeFormats(com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE).build()
+    com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(state.ctx, opts).startScan()
+        .addOnSuccessListener { code ->
+            val q = code.rawValue?.let(::parseConnectQr)
+            if (q == null) { state.toast("Not a Harbor QR code"); return@addOnSuccessListener }
+            val old = state.prefs.servers.firstOrNull { it.type == q.type && it.host == q.host && it.port == q.port }
+            val s = Server(old?.id ?: UUID.randomUUID().toString(), q.type,
+                old?.name ?: if (q.type == "dav") "PC ${q.host}" else "FTP ${q.host}", q.host, q.port, q.user, q.path)
+            state.prefs.saveServer(s)
+            if (q.secret != null) state.prefs.setSecret(s.id, q.secret)
+            val fs = fsFor(s, state.prefs.secret(s.id))
+            state.openFolder(fs, fs.root, fs.root, s.name)
+        }
+        .addOnFailureListener { e -> state.toast("Scanner not available: ${e.message ?: "try + instead"}") }
 }
 
 @Composable

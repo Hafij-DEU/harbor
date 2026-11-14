@@ -126,7 +126,7 @@ UNGATED_ACTIONS = {
     "open-location-of", "properties-at", "terminal-at", "copy-path-at", "pin-at", "unpin",
     "open-location", "open-location-tab", "open-uri", "open-uri-location", "forget-recent",
     "empty-trash", "about", "new-tab", "undo", "sb-mount", "sb-eject", "sb-unmount",
-    "copy-name", "add-network", "net-edit", "net-remove", "share-wifi",
+    "copy-name", "add-network", "net-edit", "net-remove", "share-wifi", "scan-phone",
 }
 
 
@@ -905,6 +905,7 @@ class FilesWindow(HarborWindow):
         A("customize-folder", lambda: self.customize_folder())
         A("share-folder", lambda: self.share_wifi(True))
         A("share-wifi", lambda: self.share_wifi())
+        A("scan-phone", lambda: self.scan_phone())
         A("context-menu", lambda: self.menu_at_selection())
         A("context-menu-classic", lambda: self.menu_at_selection(classic=True))
 
@@ -1089,6 +1090,11 @@ class FilesWindow(HarborWindow):
                 path = items[0].path
         from .files_share_ui import ShareDialog
         ShareDialog(self, add_path=path).present(self)
+
+    def scan_phone(self):
+        """Scan Harbor for Android's QR code with the webcam and open the phone."""
+        from .files_scan import ScanDialog
+        ScanDialog(self).present(self)
 
     def set_preview_width(self, width):
         self.preview.set_pane_width(width)
@@ -1964,8 +1970,6 @@ class App(Adw.Application):
         win.present()
 
     def do_shutdown(self):
-        if getattr(self, "share_server", None) is not None:
-            self.share_server.stop()
         if getattr(self, "fm1", None) is not None:
             self.fm1.stop()
         from . import files_debug

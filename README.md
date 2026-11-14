@@ -54,7 +54,13 @@ shows open connections per process; the total at the top is real.
   each session; 5 wrong tries lock it for 5 minutes. Folders are read-only
   unless you turn uploads on, and uploads never overwrite a file. Sharing
   never starts by itself and stops after 30 minutes (you can change this).
-  Scan the QR code on your phone to open it.
+  The QR code carries the PIN: the phone camera opens the page and signs
+  in, and Harbor Files for Android connects with no typing. Sharing keeps
+  going after you quit Harbor Files; a "Send by Wi-Fi" tray icon shows
+  the QR code and PIN, copies the address and stops the share.
+- **Scan phone QR**: hold the QR code from Harbor Files for Android up to
+  the webcam and the phone's files open in a new tab (FTP; the PIN is
+  never saved).
 
 Harbor Files does not make itself your default file manager.
 
@@ -67,7 +73,7 @@ The Settings app is in progress.
 
 - **Recent** first: every new file of any kind, grouped by day and by the app or folder it came from.
 - **Browse**: categories (images, videos, audio, documents, APKs, archives), Downloads, favourites, Recently deleted and storage volumes.
-- **Connect**: start an FTP server on the phone (user `harbor`, a 6-digit PIN, QR code, optional read-only, idle stop), or open a Harbor PC share (WebDAV, the PIN shown in Harbor Files on the desktop) or any FTP server.
+- **Connect**: start an FTP server on the phone (user `harbor`, a 6-digit PIN, QR code with the PIN, optional read-only, idle stop; the notification has Show QR and Stop), or open a Harbor PC share (scan its QR code, or type the address and PIN) or any FTP server.
 - **Send** through MeshDrop when it is installed, or through any other app.
 - Own settings: hidden and system folders, screenshots in Recent, Recently deleted keep time, theme and accent colour, server port.
 

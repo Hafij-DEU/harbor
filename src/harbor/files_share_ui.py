@@ -1,19 +1,23 @@
 """Harbor Files: the "Share over Wi-Fi" dialog.
 
-The server object lives on the application (app.share_server), so closing
-the dialog keeps sharing on; it stops with the Stop button, the auto-stop
-timer or when Harbor quits. It never starts by itself.
+The server runs in its own process (files_sharetray) with a "Send by Wi-Fi"
+tray icon, so sharing keeps going after Harbor Files quits. It stops with the
+Stop button, the tray menu or the auto-stop timer. It never starts by itself.
+This dialog talks to it over the session bus.
 """
 
+import json
 import os
+import subprocess
+import sys
 import time
 
-from gi.repository import Adw, Gdk, GLib, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 from . import common
 from . import files_core as fc
 from . import qr
-from .files_share import ShareServer
+from .files_share import BUS_NAME, OBJECT_PATH
 
 STOP_LABELS = {15: "15 minutes", 30: "30 minutes", 60: "1 hour", 120: "2 hours", 0: "Never"}
 
@@ -68,6 +72,64 @@ def qr_picture(text):
     return pic
 
 
+class RemoteShare:
+    """The running share, as reported by the share process."""
+
+    running = True
+
+    def __init__(self, conn, st):
+        self.conn = conn
+        self.url = st["url"]
+        self.dav_url = st["dav_url"]
+        self.qr_text = st["qr_text"]
+        self.pin = st["pin"]
+        self.host = st["host"]
+        self.port = st["port"]
+        self.stops_at = st.get("stops_at")
+
+    def stop(self):
+        try:
+            self.conn.call_sync(BUS_NAME, OBJECT_PATH, BUS_NAME, "Stop", None, None,
+                                Gio.DBusCallFlags.NO_AUTO_START, 2000, None)
+        except GLib.Error:
+            pass
+
+
+def running_share():
+    """RemoteShare when a share process is running, else None."""
+    try:
+        conn = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        r = conn.call_sync(BUS_NAME, OBJECT_PATH, BUS_NAME, "Status", None,
+                           GLib.VariantType("(s)"), Gio.DBusCallFlags.NO_AUTO_START,
+                           2000, None)
+        return RemoteShare(conn, json.loads(r.unpack()[0]))
+    except (GLib.Error, ValueError, KeyError):
+        return None
+
+
+def start_share(folders, port, upload_max_mb, minutes):
+    """Start the share process. Returns None, or an error message."""
+    pkg = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = dict(os.environ)
+    env["PYTHONPATH"] = pkg + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    try:
+        p = subprocess.Popen([sys.executable, "-m", "harbor.files_sharetray"], env=env,
+                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, start_new_session=True, text=True)
+        p.stdin.write(json.dumps({"folders": folders, "port": port,
+                                  "upload_max_mb": upload_max_mb, "minutes": minutes}) + "\n")
+        p.stdin.close()
+        line = p.stdout.readline()
+        p.stdout.close()
+    except OSError as e:
+        return str(e)
+    try:
+        ans = json.loads(line)
+    except ValueError:
+        return "the share process did not start"
+    return None if ans.get("ok") else ans.get("error", "unknown error")
+
+
 class ShareDialog(Adw.Dialog):
     def __init__(self, win, add_path=None):
         super().__init__(title="Share over Wi-Fi", content_width=520, content_height=680)
@@ -82,12 +144,18 @@ class ShareDialog(Adw.Dialog):
         tv.set_content(self.page)
         self.set_child(tv)
         self._tick = 0
-        self.connect("closed", lambda *_: self._stop_tick())
+        self.server = running_share()
+        self._watch = Gio.bus_watch_name(Gio.BusType.SESSION, BUS_NAME,
+                                         Gio.BusNameWatcherFlags.NONE, None, self._vanished)
+        self.connect("closed", lambda *_: (self._stop_tick(),
+                                           Gio.bus_unwatch_name(self._watch)))
         self.build()
 
-    @property
-    def server(self):
-        return getattr(self.app, "share_server", None)
+    def _vanished(self, *_):
+        if self.server is not None:
+            self.server = None
+            self.win.notify_toast("Sharing over Wi-Fi stopped")
+            self.build()
 
     def _stop_tick(self):
         if self._tick:
@@ -105,6 +173,7 @@ class ShareDialog(Adw.Dialog):
             for g in self._status_group():
                 self._add(g)
         self._add(self._folders_group(running))
+        self._add(self._phone_group())
         self._add(self._options_group(running))
         bar = Adw.PreferencesGroup()
         btn = Gtk.Button(label="Stop sharing" if running else "Start sharing",
@@ -124,7 +193,11 @@ class ShareDialog(Adw.Dialog):
         s = self.server
         g = Adw.PreferencesGroup(title="Open on your phone or another computer")
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        box.append(qr_picture(s.url))
+        box.append(Gtk.Label(label="Scan with your phone: the camera app opens it in the "
+                                   "browser, Harbor Files for Android connects with no typing",
+                             wrap=True, justify=Gtk.Justification.CENTER,
+                             css_classes=["dim-label"]))
+        box.append(qr_picture(s.qr_text))
         url = Gtk.Label(label=s.url, selectable=True, css_classes=["title-3"])
         box.append(url)
         pin = Gtk.Label(label="PIN  " + " ".join(s.pin), selectable=True,
@@ -161,6 +234,18 @@ class ShareDialog(Adw.Dialog):
         else:
             self.left.set_label("Runs until you stop it")
         return True
+
+    def _phone_group(self):
+        g = Adw.PreferencesGroup()
+        row = Adw.ActionRow(title="Open your phone's files",
+                            subtitle="Scan the QR code Harbor Files for Android shows "
+                                     "under Connect")
+        row.add_prefix(Gtk.Image(icon_name="phone-symbolic"))
+        btn = Gtk.Button(label="Scan phone QR…", valign=Gtk.Align.CENTER)
+        btn.connect("clicked", lambda *_: (self.close(), self.win.scan_phone()))
+        row.add_suffix(btn)
+        g.add(row)
+        return g
 
     def _folders_group(self, running):
         g = Adw.PreferencesGroup(title="Shared folders",
@@ -224,27 +309,17 @@ class ShareDialog(Adw.Dialog):
         if not folders:
             return
         s = self.settings
-        srv = ShareServer(folders, port=s.get("share_port"),
-                          upload_max_mb=s.get("share_upload_max_mb"),
-                          host=None, minutes=s.get("share_autostop"),
-                          on_stop=lambda: GLib.idle_add(self._stopped))
         if common.DRY_RUN:
             common.DRY_RUN_LOG.append(["share-start", [f["path"] for f in folders]])
             return
-        try:
-            srv.start()
-        except OSError as e:
-            self.win.notify_toast("Can't start sharing: %s" % e, timeout=6)
+        err = start_share(folders, s.get("share_port"), s.get("share_upload_max_mb"),
+                          s.get("share_autostop"))
+        if err:
+            self.win.notify_toast("Can't start sharing: %s" % err, timeout=6)
             return
-        self.app.share_server = srv
+        self.server = running_share()
         self.build()
 
     def stop(self):
         if self.server is not None:
-            self.server.stop()
-
-    def _stopped(self):
-        self.app.share_server = None
-        self.win.notify_toast("Sharing over Wi-Fi stopped")
-        self.build()
-        return False
+            self.server.stop()        # the name vanishes, then _vanished() rebuilds

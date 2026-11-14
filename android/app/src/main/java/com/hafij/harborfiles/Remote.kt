@@ -295,3 +295,28 @@ class DavFs(
         }
     }
 }
+
+
+/** What a scanned Harbor QR code says: where to connect and, when the code carries it, the PIN. */
+data class ScannedServer(val type: String, val host: String, val port: Int, val user: String, val path: String, val secret: String?)
+
+/**
+ * Reads the QR code Harbor shows: `http://ip:8765/#pin=123456` on the PC,
+ * `ftp://harbor:123456@ip:2121/` on a phone. Returns null for anything else.
+ */
+fun parseConnectQr(text: String): ScannedServer? {
+    val m = Regex("""^(https?|ftp)://(?:([^:@/]*)(?::([^@/]*))?@)?([^/:#?]+)(?::(\d{1,5}))?(/[^#]*)?(?:#(.*))?$""")
+        .find(text.trim()) ?: return null
+    val (scheme, user, pass, host, port, _, frag) = m.destructured
+    if (port.isNotEmpty() && port.toInt() !in 1..65535) return null
+    fun dec(v: String) = java.net.URLDecoder.decode(v, "UTF-8")
+    return if (scheme == "ftp") {
+        ScannedServer("ftp", host, port.toIntOrNull() ?: 21,
+            dec(user).ifEmpty { "harbor" }, "", dec(pass).ifEmpty { null })
+    } else {
+        val pin = frag.split('&').firstNotNullOfOrNull { kv ->
+            kv.split('=', limit = 2).takeIf { it.size == 2 && it[0] == "pin" }?.get(1)
+        }
+        ScannedServer("dav", host, port.toIntOrNull() ?: 8765, "harbor", "/dav/", pin?.ifEmpty { null })
+    }
+}

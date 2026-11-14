@@ -110,12 +110,22 @@ class AppState(val ctx: Context, val prefs: Prefs, val scope: CoroutineScope) {
 class MainActivity : ComponentActivity() {
     private var resumes by mutableIntStateOf(0)
 
+    private var askTab by mutableIntStateOf(-1)
+
     override fun onResume() { super.onResume(); resumes++ }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        askTab = intent.getIntExtra(EXTRA_TAB, -1)
+    }
+
+    companion object { const val EXTRA_TAB = "tab" }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val prefs = Prefs(this)
+        askTab = intent.getIntExtra(EXTRA_TAB, -1)
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         setContent {
             HarborTheme(prefs) {
@@ -125,6 +135,13 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(resumes) {
                     allowed = Environment.isExternalStorageManager()
                     if (allowed && resumes > 0) state.rev++
+                }
+                LaunchedEffect(askTab) {
+                    if (askTab >= 0) {
+                        while (state.stack.size > 1) state.pop()
+                        state.tab = askTab
+                        askTab = -1
+                    }
                 }
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     if (!allowed) PermissionGate() else Root(state)

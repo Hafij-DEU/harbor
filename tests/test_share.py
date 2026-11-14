@@ -197,3 +197,22 @@ def test_qr_shape():
     assert m[0][:7] == [True] * 7                               # finder pattern
     with pytest.raises(ValueError):
         qr.matrix("x" * 400)
+
+
+# --- QR codes (0.5.6) -----------------------------------------------------
+
+def test_qr_text_carries_pin(tmp_path):
+    from harbor.files_share import ShareServer
+    s = ShareServer([{"path": str(tmp_path)}], host="192.168.1.5", minutes=0)
+    assert s.qr_text == "http://192.168.1.5:8765/#pin=" + s.pin
+    st = s.status()
+    assert st["pin"] == s.pin and st["dav_url"] == s.dav_url
+
+
+def test_parse_phone_qr():
+    from harbor.files_scan import parse_phone_qr
+    assert parse_phone_qr("ftp://harbor:123456@10.0.0.7:2121/") == (
+        "ftp://harbor@10.0.0.7:2121/", "harbor", "123456")
+    assert parse_phone_qr("http://10.0.0.7:8765/#pin=1") is None
+    assert parse_phone_qr("hello") is None
+    assert parse_phone_qr("ftp://h:1@x:99999/") is None

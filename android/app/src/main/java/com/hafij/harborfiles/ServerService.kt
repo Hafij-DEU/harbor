@@ -22,6 +22,8 @@ import java.security.SecureRandom
 
 data class ServerInfo(val ip: String, val port: Int, val pin: String) {
     val url: String get() = "ftp://$ip:$port"
+    /** The QR code carries the login too, so a scan connects with no typing. */
+    val qrText: String get() = "ftp://harbor:$pin@$ip:$port/"
 }
 
 /** Runs [FtpServer] in the foreground while the phone is shared. Wi-Fi only; stops when idle. */
@@ -87,12 +89,17 @@ class ServerService : Service() {
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE
         )
+        val qr = PendingIntent.getActivity(
+            this, 1, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(MainActivity.EXTRA_TAB, 2), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_upload)
             .setContentTitle("Phone shared over Wi-Fi")
             .setContentText("${i.url}  ·  PIN in Harbor Files")
             .setContentIntent(open)
             .setOngoing(true)
+            .addAction(Notification.Action.Builder(null, "Show QR", qr).build())
             .addAction(Notification.Action.Builder(null, "Stop", stop).build())
             .build()
     }
