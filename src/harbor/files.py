@@ -1371,6 +1371,8 @@ class FilesWindow(HarborWindow):
             self.ribbon = Ribbon(self.ribbon_menus(), bool(self.settings.get("ribbon_collapsed")),
                                  on_collapse=lambda c: self.settings.set("ribbon_collapsed", c))
             self.ribbon_slot.append(self.ribbon)
+        if self.ribbon is not None:
+            self.ribbon.set_custom_icons(custom)
         self.cmdbar.set_visible(not ribbon)
         self.ribbon_slot.set_visible(ribbon)
 

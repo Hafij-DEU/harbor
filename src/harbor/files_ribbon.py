@@ -107,8 +107,14 @@ def menu_keys():
     return {e[2] for e in entries() if e[0] == "menu"}
 
 
+# the Custom design swaps in its own round long-shadow set (harbor-rbc-*)
+CUSTOM_SET = [False]
+
+
 def _icon(name, size):
     img = Gtk.Image(pixel_size=size, css_classes=["hbf-ribbon-icon"])
+    if CUSTOM_SET[0] and name.startswith("harbor-rb-"):
+        name = "harbor-rbc-" + name[len("harbor-rb-"):]
     # Harbor's own full-colour ribbon set is used as it is, in every icon mode
     img.set_from_icon_name(name if name.startswith("harbor-rb-") else files_icons.themed(name))
     return img
@@ -255,6 +261,11 @@ class Ribbon(Gtk.Box):
                                            else "Minimize the ribbon (Ctrl+F1)")
         if notify and self.on_collapse:
             self.on_collapse(self.collapsed)
+
+    def set_custom_icons(self, on):
+        if CUSTOM_SET[0] != bool(on):
+            CUSTOM_SET[0] = bool(on)
+            self.refresh_icons()
 
     def refresh_icons(self):
         """Rebuild after the icon set changed (cheap: the ribbon is small)."""

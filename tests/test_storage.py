@@ -61,3 +61,11 @@ def test_merged_menu_has_row_and_no_more_options():
     acts = fm.actions_in(m)
     assert {"cut", "copy", "rename", "delete", "properties"} <= acts
     assert "more-options" not in acts
+
+
+def test_custom_icon_set_matches_ribbon_set():
+    import glob
+    d = os.path.join(os.path.dirname(__file__), "..", "data", "icons", "hicolor", "scalable", "actions")
+    rb = {os.path.basename(f)[len("harbor-rb-"):] for f in glob.glob(os.path.join(d, "harbor-rb-*.svg"))}
+    rbc = {os.path.basename(f)[len("harbor-rbc-"):] for f in glob.glob(os.path.join(d, "harbor-rbc-*.svg"))}
+    assert rb and rb == rbc
