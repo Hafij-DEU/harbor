@@ -314,7 +314,8 @@ class Sidebar(Gtk.Box):
         if menu is None:
             return
         if self._popover is None:
-            self._popover = Gtk.PopoverMenu(has_arrow=False, halign=Gtk.Align.START)
+            self._popover = Gtk.PopoverMenu(has_arrow=False, halign=Gtk.Align.START,
+                                           flags=Gtk.PopoverMenuFlags.NESTED)
             self._popover.set_parent(self.list)
         self._popover.set_menu_model(menu)
         rect = Gdk.Rectangle()

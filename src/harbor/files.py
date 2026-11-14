@@ -734,7 +734,9 @@ class FilesWindow(HarborWindow):
     def popup_menu(self, widget, x, y, menu):
         if self._popover is not None:
             self._popover.popdown()
-        pop = Gtk.PopoverMenu.new_from_model(menu)
+        # NESTED: submenus (Send to, 7-Zip) cascade to the side like Windows,
+        # instead of sliding over the main menu
+        pop = Gtk.PopoverMenu.new_from_model_full(menu, Gtk.PopoverMenuFlags.NESTED)
         pop.set_has_arrow(False)
         pop.set_halign(Gtk.Align.START)
         pop.set_parent(widget)
