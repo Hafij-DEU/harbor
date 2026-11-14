@@ -129,7 +129,6 @@ QUICK = (
 # always visible at the right end, whichever tab is open (like Windows 11)
 SIMPLE_END = (
     ("menu", "Sort", "sort", "harbor-rb-sort", "small"),
-    ("menu", "View", "view", "harbor-rb-large-icons", "small"),
     ("toggle", "Split", "win.split-view", "harbor-rb-split", "small"),
     ("toggle", "Details", "win.details-pane", "harbor-rb-details-pane", "small"),
     ("toggle", "Preview", "win.preview-pane", "harbor-rb-preview-pane", "small"),
@@ -295,7 +294,6 @@ class Ribbon(Gtk.Box):
     def _custom_groups(groups):
         """Ribbon groups minus what the quick line already has (no duplicates)."""
         quick = {e[2] for items in QUICK for e in items} | {e[2] for e in SIMPLE_END}
-        quick.add("win.view")      # the View drop-down covers the layout toggles
         groups = [(c, [e for e in items if e[2] not in quick]) for c, items in groups]
         return [(c, items) for c, items in groups if items]
 
