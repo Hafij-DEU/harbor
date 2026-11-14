@@ -32,7 +32,7 @@ try:
 except (ValueError, ImportError):
     Gst = None
 
-PIPELINE = ("v4l2src device=%s ! decodebin ! videoconvert ! zbar cache=true ! "
+PIPELINE = ("v4l2src name=src ! decodebin ! videoconvert ! zbar cache=true ! "
             "videoconvert ! gtk4paintablesink name=sink")
 PAIR_TIMEOUT = 300      # seconds the pairing code stays valid
 PAIR_MAX_BAD = 5        # wrong tokens before the listener closes
@@ -271,7 +271,9 @@ class ScanDialog(Adw.Dialog):
         Gst.init(None)
         dev, name = self.cameras[self.cam_i]
         try:
-            self.pipe = Gst.parse_launch(PIPELINE % GLib.shell_quote(dev))
+            self.pipe = Gst.parse_launch(PIPELINE)
+            # a property, not text in the launch line: shell quotes stay literal there
+            self.pipe.get_by_name("src").set_property("device", dev)
         except GLib.Error as e:
             self.status.set_label("Camera scanning needs the GStreamer zbar and GTK 4 "
                                   "plugins (gstreamer1.0-plugins-bad, gstreamer1.0-gtk4): "
