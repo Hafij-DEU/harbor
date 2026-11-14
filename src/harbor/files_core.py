@@ -331,8 +331,8 @@ class Settings:
     LISTS = ("pins", "hidden_defaults", "last_tabs")
     # settings with a fixed set of values (first one is the default)
     CHOICES = {"open_to": ("thispc", "home", "last"), "style": ("win11", "system"),
-               "icons": ("modern", "system"), "menu_style": ("win11", "classic"),
-               "command_bar": ("win11", "ribbon"), "ui_design": ("win11", "win10", "win12"),
+               "icons": ("modern", "system"), "menu_style": ("win11", "classic", "merged"),
+               "command_bar": ("win11", "ribbon"), "ui_design": ("win11", "win10", "custom"),
                "density": ("comfortable", "compact"),
                "theme": ("follow", "light", "dark"),
                "folder_color": ("classic", "accent") + tuple(FOLDER_PALETTE) + ("custom",),
@@ -372,6 +372,9 @@ class Settings:
         # before 0.5.18 the ribbon was the only Windows 10 piece
         if "ui_design" not in raw and raw.get("command_bar") == "ribbon":
             raw["ui_design"] = "win10"
+        # 0.5.18 test builds called the Custom design "win12"
+        if raw.get("ui_design") == "win12":
+            raw["ui_design"] = "custom"
         known = {k: v for k, v in raw.items() if k in cls.DEFAULTS}
         extra = {k: v for k, v in raw.items() if k not in cls.DEFAULTS}
         return known, extra, version

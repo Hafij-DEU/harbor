@@ -45,11 +45,22 @@ def page(x, y, w, h, lines=0, fold=True, fill=PAGE, line=BLUE):
 
 
 def folder(x=2, y=7, w=28, h=20, defs_id="fd"):
-    back = '<path d="M%g %gh8l2.5 3H%gv%gH%gz" fill="url(#%sb)"/>' % (
-        x, y, x + w, h, x, defs_id)
-    front = '<rect x="%g" y="%g" width="%g" height="%g" rx="2" fill="url(#%sf)"/>' % (
-        x, y + 5, w, h - 5, defs_id)
-    return back + front, g(defs_id + "b", "#efae38", "#dc9420") + g(defs_id + "f", "#ffdc7a", "#f7bd3c")
+    """Modern (Fluent-like) folder: rounded back with a soft tab, glossy front."""
+    back = ('<path d="M%g %ga2.5 2.5 0 0 1 2.5-2.5h6.2a2.5 2.5 0 0 1 1.9.9l1.6 1.9H%ga2.5 2.5 0 0 1 '
+            '2.5 2.5V%gH%gz" fill="url(#%sb)"/>' % (x, y + 2.5, x + w - 2.5, y + h - 3, x, defs_id))
+    front = ('<rect x="%g" y="%g" width="%g" height="%g" rx="2.6" fill="url(#%sf)"/>'
+             '<rect x="%g" y="%g" width="%g" height="1.1" rx=".55" fill="#fff" opacity=".55"/>' % (
+                 x, y + 5.5, w, h - 5.5, defs_id, x + 1.5, y + 6.2, w - 3))
+    return back + front, g(defs_id + "b", "#f2b13a", "#d98f12") + g(defs_id + "f", "#ffe08a", "#f7b928")
+
+
+def card(x, y, w, h, lines=2, line=BLUE):
+    out = ('<rect x="%g" y="%g" width="%g" height="%g" rx="2.2" fill="#fff" stroke="%s" '
+           'stroke-width="1"/>' % (x, y, w, h, PAGE_E))
+    for i in range(lines):
+        out += '<rect x="%g" y="%g" width="%g" height="1.5" rx=".75" fill="%s"/>' % (
+            x + 2.2, y + 3 + i * 3, w - 4.4 - (2.5 if i == lines - 1 else 0), line)
+    return out
 
 
 def badge(cx, cy, color, glyph):
@@ -80,16 +91,25 @@ def make():
         '<path d="M19.5 3.5l9 9-3 1.2-4.6 4.6.6 5.2-2.3 2.3-5.2-5.2L7 27.5 4.5 25l6.9-7-5.2-5.2 '
         '2.3-2.3 5.2.6 4.6-4.6z" fill="url(#p)" stroke="%s" stroke-width="1" '
         'stroke-linejoin="round"/>' % BLUE_D, g("p", "#62a8f5", BLUE_D))
-    icons["copy"] = svg(page(4, 3, 17, 21, 0, False, "#e8eef6") + page(11, 8, 17, 21, 4))
+    icons["copy"] = svg(
+        '<rect x="3.5" y="2.5" width="17" height="21" rx="3.2" fill="url(#cb)"/>'
+        '<rect x="10.5" y="8.5" width="18" height="21" rx="3.2" fill="#000" opacity=".12"/>'
+        '<rect x="10" y="7.5" width="18" height="21" rx="3.2" fill="#fff" stroke="%s" '
+        'stroke-width="1"/>' % PAGE_E + "".join(
+            '<rect x="13.5" y="%g" width="%g" height="1.8" rx=".9" fill="%s"/>' % (
+                12 + i * 3.6, 11 - (4 if i == 3 else 0), BLUE) for i in range(4)),
+        g("cb", "#8cc4fb", BLUE))
     icons["paste"] = svg(
         '<rect x="4" y="5" width="20" height="24" rx="2.5" fill="url(#c)"/>'
         '<rect x="9" y="2.5" width="10" height="5" rx="1.5" fill="%s"/>' % GREY_D
         + page(12, 11, 16, 18, 3), g("c", "#d9a066", "#b5763a"))
     icons["cut"] = svg(
-        '<path d="M10 3l9 17M22 3l-9 17" stroke="%s" stroke-width="2.4" stroke-linecap="round"/>'
-        '<circle cx="10" cy="24" r="4.5" fill="none" stroke="%s" stroke-width="2.6"/>'
-        '<circle cx="22" cy="24" r="4.5" fill="none" stroke="%s" stroke-width="2.6"/>' % (
-            GREY_D, BLUE, BLUE))
+        '<path d="M11.2 2.5c.9 0 1.6.5 2 1.3l7 15.4-2.6 1.3-7.4-14.6a2.4 2.4 0 0 1 1-3.4z" fill="url(#bl)"/>'
+        '<path d="M20.8 2.5c-.9 0-1.6.5-2 1.3l-7 15.4 2.6 1.3 7.4-14.6a2.4 2.4 0 0 0-1-3.4z" fill="url(#bl)"/>'
+        '<circle cx="16" cy="16.2" r="1.3" fill="%s"/>'
+        '<circle cx="10" cy="24" r="4.3" fill="none" stroke="url(#hd)" stroke-width="3"/>'
+        '<circle cx="22" cy="24" r="4.3" fill="none" stroke="url(#hd)" stroke-width="3"/>' % GREY_D,
+        g("bl", "#eef2f7", "#9aa6b5") + g("hd", "#5aa7f5", BLUE_D))
     icons["link"] = svg(
         '<g fill="none" stroke-width="3" stroke-linecap="round"><path d="M13.5 18.5l5-5" '
         'stroke="%s"/><path d="M11 15l-3.5 3.5a4.6 4.6 0 0 0 6.5 6.5L17.5 21.5" stroke="%s"/>'
@@ -99,8 +119,17 @@ def make():
                             'rx="2" fill="%s"/><path d="M12 24c0-4 2-5.5 5-5.5M15 16.5l2.2 2-2.2 2" '
                             'fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" '
                             'stroke-linejoin="round"/>' % BLUE)
-    icons["move-to"] = svg(fb + badge(23, 21, BLUE, "arrow"), fdefs)
-    icons["copy-to"] = svg(fb + page(17, 13, 10, 13, 2) + badge(9, 21, GREEN, "plus"), fdefs)
+    def chip(color, glyph):
+        """Rounded-square chip with a white ring, bottom right."""
+        return ('<rect x="16.5" y="15.5" width="14" height="14" rx="4" fill="%s" stroke="#fff" '
+                'stroke-width="1.6"/>' % color + glyph)
+    icons["move-to"] = svg(fb + chip(BLUE, '<path d="M19.8 22.5h7.2M24 19.4l3.1 3.1-3.1 3.1" '
+                                     'fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" '
+                                     'stroke-linejoin="round"/>'), fdefs)
+    icons["copy-to"] = svg(fb + chip(GREEN, '<rect x="22" y="18.6" width="5.6" height="6.4" rx="1.3" '
+                                     'fill="none" stroke="#fff" stroke-width="1.6"/><path d="M20 21.3v4'
+                                     'a1.4 1.4 0 0 0 1.4 1.4h3.6" fill="none" stroke="#fff" '
+                                     'stroke-width="1.6" stroke-linecap="round"/>'), fdefs)
     icons["delete"] = svg(
         '<path d="M6.5 6.5l19 19M25.5 6.5l-19 19" stroke="url(#r)" stroke-width="4.6" '
         'stroke-linecap="round"/>', g("r", "#ff6b6b", RED_D))
@@ -109,7 +138,8 @@ def make():
         '<rect x="5.5" y="14" width="12" height="4" rx="1" fill="%s"/>'
         '<path d="M22 7.5v17M20 7.5h4M20 24.5h4" stroke="#1d2733" stroke-width="1.5" '
         'stroke-linecap="round"/>' % (PAGE_E, BLUE))
-    icons["new-folder"] = svg(fb + badge(24, 22, GREEN, "plus"), fdefs)
+    icons["new-folder"] = svg(fb + chip(GREEN, '<path d="M23.5 18.9v7.2M19.9 22.5h7.2" stroke="#fff" '
+                                        'stroke-width="2" stroke-linecap="round"/>'), fdefs)
     icons["new-item"] = svg(page(5, 3, 19, 25, 3) + badge(23, 23, GREEN, "plus"))
     icons["properties"] = svg(page(5, 3, 20, 26, 3) + '<path d="M11 20l3.5 3.5L27 9" fill="none" '
                               'stroke="%s" stroke-width="3.2" stroke-linecap="round" '
@@ -171,6 +201,9 @@ def make():
                                 for p in ((19, 19), (24, 19), (21.5, 22.5), (19, 25), (24, 25))))
     icons["nav-pane"] = svg(window('<rect x="4" y="10.5" width="8" height="15.8" fill="%s" '
                                    'opacity=".85"/>' % BLUE))
+    icons["split"] = svg(window('<rect x="4.6" y="11.5" width="10.6" height="14" rx="1" fill="%s" '
+                                'opacity=".85"/><rect x="16.8" y="11.5" width="10.6" height="14" rx="1" '
+                                'fill="%s" opacity=".85"/>' % (BLUE, ORANGE)))
     icons["preview-pane"] = svg(window('<rect x="18" y="10.5" width="10.4" height="15.8" fill="%s" '
                                        'opacity=".85"/><path d="M20 21l2.5-3 2 2 1.5-1.5 1.5 2.5z" '
                                        'fill="#fff"/>' % ORANGE))

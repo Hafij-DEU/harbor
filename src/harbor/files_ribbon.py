@@ -71,6 +71,7 @@ RIBBON = (
             ("toggle", "Navigation pane", "win.nav-pane", "harbor-rb-nav-pane", "big"),
             ("toggle", "Preview pane", "win.preview-pane", "harbor-rb-preview-pane", "small"),
             ("toggle", "Details pane", "win.details-pane", "harbor-rb-details-pane", "small"),
+            ("toggle", "Two panes", "win.split-view", "harbor-rb-split", "big"),
         )),
         ("Layout", (
             ("toggle", "Large icons", "win.view", "harbor-rb-large-icons", "small", "large"),

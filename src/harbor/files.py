@@ -121,7 +121,7 @@ ACTION_RULES = {
 # and the menus may only use actions listed here or in ACTION_RULES.
 UNGATED_ACTIONS = {
     "new-window", "terminal", "options", "close-window", "properties", "open-with",
-    "nav-pane", "preview-pane", "details-pane", "view", "sort", "sort-order", "show-ext",
+    "nav-pane", "preview-pane", "details-pane", "split-view", "view", "sort", "sort-order", "show-ext",
     "show-hidden", "more-options", "ribbon-toggle", "refresh", "paste-into", "terminal-sel",
     "open-location-of", "properties-at", "terminal-at", "copy-path-at", "pin-at", "unpin",
     "open-location", "open-location-tab", "open-uri", "open-uri-location", "forget-recent",
@@ -279,6 +279,7 @@ menubutton.hbf-ribbon-btn > button:disabled image.hbf-ribbon-icon { filter: gray
 .hbf-preview-text text { background: transparent; }
 /* ---- Windows 10 design: flat, square, compact ---- */
 window.hbf-win10, window.hbf-win10 > * { border-radius: 0; }
+.hbf-win10 .hbf-titlebar { border-bottom: 1px solid $divider; }
 .hbf-w10-title { background: var(--accent-bg-color); color: var(--accent-fg-color); min-height: 30px; }
 .hbf-w10-title windowcontrols button { border-radius: 0; min-width: 44px; min-height: 30px; padding: 0;
   margin: 0; background: none; box-shadow: none; color: var(--accent-fg-color); }
@@ -288,10 +289,6 @@ window.hbf-win10, window.hbf-win10 > * { border-radius: 0; }
 .hbf-w10-title windowcontrols button.close:hover { background: #e81123; }
 .hbf-w10-tsep { background: alpha(currentColor, 0.5); min-width: 1px; min-height: 14px; }
 .hbf-w10-tlabel { font-size: 12px; }
-.hbf-win10 .hbf-titlebar { min-height: 30px; padding: 0 4px; background: $surface;
-  border-bottom: 1px solid $divider; }
-.hbf-win10 .hbf-titlebar tabbar tab { border-radius: 0; min-height: 26px; }
-.hbf-win10 .hbf-titlebar tabbar tabbox { padding-top: 2px; }
 .hbf-win10 .hbf-navbar { padding: 4px 6px; border-bottom: 1px solid $divider; }
 .hbf-win10 .hbf-navbar button.hbf-nav { border-radius: 0; min-width: 26px; min-height: 24px; }
 .hbf-win10 .hbf-navbar entry, .hbf-win10 .hbf-navbar .hbf-search,
@@ -330,6 +327,7 @@ button.hbo-design:checked { box-shadow: inset 0 0 0 2px var(--accent-bg-color);
 .hbo-t-side { background: $surface; min-width: 34px; border-right: 1px solid $divider; }
 .hbo-thumb-w12 { border-radius: 12px; }
 .hbo-t-pill { border-radius: 99px; }
+.hbo-t-ribcard { border-radius: 6px; margin-top: 2px; min-height: 18px; border-bottom: none; }
 .hbo-t-cmdcard { border-radius: 4px; margin: 0 6px 3px 6px; border-bottom: none; }
 .hbo-t-float { padding: 0 6px 6px 6px; }
 .hbo-t-card { background: $surface; border-radius: 6px; border: none; }
@@ -341,20 +339,31 @@ button.hbo-swatch:checked { box-shadow: inset 0 0 0 2px currentColor; background
 .hbf-legend-dot { min-width: 10px; min-height: 10px; border-radius: 3px; }
 .hbf-dot-accent { background: var(--accent-bg-color); }
 
-/* Windows 12 concept: floating rounded panels, pill controls (experimental) */
-window.hbf-win12 .hbf-body { background: $window; padding: 0 10px 10px 10px; }
-window.hbf-win12 .hbf-top, window.hbf-win12 .hbf-navbar,
-window.hbf-win12 .hbf-cmdbar { background: $window; border-bottom: none; }
-window.hbf-win12 .hbf-cmdbar { margin: 0 10px 8px 10px; padding: 4px 8px; border-radius: 14px;
+/* Custom design: Windows 10 ribbon redrawn with floating rounded panels, pill controls */
+window.hbf-custom .hbf-body { background: $window; padding: 0 10px 10px 10px; }
+window.hbf-custom .hbf-top, window.hbf-custom .hbf-navbar,
+window.hbf-custom .hbf-cmdbar { background: $window; border-bottom: none; }
+window.hbf-custom .hbf-cmdbar { margin: 0 10px 8px 10px; padding: 4px 8px; border-radius: 14px;
     background: alpha(currentColor, 0.045); }
-window.hbf-win12 .hbf-sidebar { background: alpha(currentColor, 0.035); border: none;
+window.hbf-custom .hbf-sidebar { background: alpha(currentColor, 0.035); border: none;
     border-radius: 16px; margin-right: 8px; padding: 6px 0; }
-window.hbf-win12 .hbf-sidebar list.hb-nav > row { border-radius: 10px; }
-window.hbf-win12 .hbf-pane { background: $surface; border: none; border-radius: 16px;
+window.hbf-custom .hbf-sidebar list.hb-nav > row { border-radius: 10px; }
+window.hbf-custom .hbf-pane { background: $surface; border: none; border-radius: 16px;
     box-shadow: 0 1px 3px alpha(black, 0.14), 0 0 0 1px alpha(currentColor, 0.05); }
-window.hbf-win12 .hbf-address, window.hbf-win12 .hbf-address-box,
-window.hbf-win12 entry, window.hbf-win12 button.hbf-nav { border-radius: 999px; }
-window.hbf-win12 .hbf-status { background: $window; border-top: none; }
+window.hbf-custom .hbf-address, window.hbf-custom .hbf-address-box,
+window.hbf-custom entry, window.hbf-custom button.hbf-nav { border-radius: 999px; }
+window.hbf-custom .hbf-status { background: $window; border-top: none; }
+window.hbf-custom .hbf-ribbon { margin: 2px 10px 8px 10px; border: none; border-radius: 16px;
+    background: $surface;
+    box-shadow: 0 1px 3px alpha(black, 0.12), 0 0 0 1px alpha(currentColor, 0.05); }
+window.hbf-custom .hbf-ribbon-tabs { padding: 6px 8px 2px 8px; border-bottom: 1px solid alpha(currentColor, 0.06); }
+window.hbf-custom button.hbf-ribbon-tab { border-radius: 999px; min-height: 24px; padding: 2px 14px;
+    margin: 0 2px; }
+window.hbf-custom button.hbf-ribbon-tab:checked { background: alpha(var(--accent-bg-color), 0.14); }
+window.hbf-custom button.hbf-ribbon-file, window.hbf-custom button.hbf-ribbon-file:checked {
+    background: var(--accent-bg-color); color: var(--accent-fg-color); }
+window.hbf-custom button.hbf-ribbon-btn, window.hbf-custom menubutton.hbf-ribbon-btn > button {
+    border-radius: 10px; }
 
 /* Compact layout density */
 window.hbf-compact .hbf-sidebar list.hb-nav > row { min-height: 26px; }
@@ -914,21 +923,26 @@ class FilesWindow(HarborWindow):
         True is "Show more options" / Shift+F10."""
         self.update_actions()
         kind = tab.kind()
+        merged = False
         if classic is None:
-            classic = self.settings.get("menu_style") == "classic"
+            style = self.settings.get("menu_style")
+            classic, merged = style == "classic", style == "merged"
         self._menu_ctx = (tab, x, y, item)
         can_paste = self.ops.can_paste()
         if item is None:
             path = tab.folder_path()
             pinned = bool(path) and fsb.is_pinned(self.settings, path)
-            build = fm.classic_background_menu if classic else fm.win11_background_menu
+            build = fm.classic_background_menu if classic or merged else fm.win11_background_menu
             m = build(kind, can_paste, tab.location, pinned)
         else:
             items = tab.view.selected_items() or [item]
             one = items[0]
             pinned = len(items) == 1 and one.is_dir and bool(one.path) \
                 and fsb.is_pinned(self.settings, one.path)
-            if classic:
+            if merged:
+                m = fm.merged_item_menu(kind, sel_dicts(items), can_paste, pinned,
+                                        send_to=self.send_to_targets())
+            elif classic:
                 m = fm.classic_item_menu(kind, sel_dicts(items), can_paste, pinned,
                                          send_to=self.send_to_targets())
             else:
@@ -1323,7 +1337,7 @@ class FilesWindow(HarborWindow):
     # ------------------------------------------------------------ look / options
     def design(self):
         d = self.settings.get("ui_design")
-        return d if d in ("win10", "win12") else "win11"
+        return d if d in ("win10", "custom") else "win11"
 
     def _sync_tab_row(self):
         self.tab_row.set_visible(True)     # every design keeps the tab strip
@@ -1331,17 +1345,19 @@ class FilesWindow(HarborWindow):
     def _apply_command_bar(self):
         """Lay out the top of the window for the chosen design.
         Windows 11: tabs in the title bar, navigation row, command bar.
-        Windows 10: blue title bar, ribbon, navigation row, tab strip."""
+        Windows 10: blue title bar, Windows 11 tab strip, ribbon, navigation row.
+        Custom: Windows 11 tab strip, ribbon as a floating card, pill controls."""
         w10 = self.design() == "win10"
-        ribbon = w10
+        custom = self.design() == "custom"
+        ribbon = w10 or custom
         (self.add_css_class if w10 else self.remove_css_class)("hbf-win10")
-        (self.add_css_class if self.design() == "win12" else self.remove_css_class)("hbf-win12")
+        (self.add_css_class if custom else self.remove_css_class)("hbf-custom")
         compact = self.settings.get("density") == "compact"
         (self.add_css_class if compact else self.remove_css_class)("hbf-compact")
         self.w10_title.set_visible(w10)
         self.tab_icon.set_visible(not w10)
         self.tab_ctl.set_visible(not w10)
-        order = ([self.w10_title, self.ribbon_slot, self.nav, self.tab_row, self.cmdbar] if w10
+        order = ([self.w10_title, self.tab_row, self.ribbon_slot, self.nav, self.cmdbar] if ribbon
                  else [self.w10_title, self.tab_row, self.nav, self.cmdbar, self.ribbon_slot])
         prev = None
         for w in order:
@@ -1462,9 +1478,10 @@ class FilesWindow(HarborWindow):
                 w.set_preview_width(int(value))
         elif key in ("command_bar", "ui_design"):
             if key == "ui_design":
-                w10 = value == "win10"
-                self.settings.set("command_bar", "ribbon" if w10 else "win11")
-                self.settings.set("menu_style", "classic" if w10 else "win11")
+                self.settings.set("command_bar", "ribbon" if value in ("win10", "custom")
+                                  else "win11")
+                self.settings.set("menu_style", {"win10": "classic", "custom": "merged"}.get(
+                    value, "win11"))
             for w in self.app.files_windows():
                 w._apply_command_bar()
                 w.update_actions()

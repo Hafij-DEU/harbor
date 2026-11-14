@@ -1009,6 +1009,8 @@ def _menu_actions():
             out |= fm.actions_in(fm.win11_item_menu(kind, sel, can_paste=True))
             out |= fm.actions_in(fm.classic_item_menu(
                 kind, sel, can_paste=True, send_to=fc.send_to_targets(home="/h", desktop="/h/D")))
+            out |= fm.actions_in(fm.merged_item_menu(
+                kind, sel, can_paste=True, send_to=fc.send_to_targets(home="/h", desktop="/h/D")))
         out |= fm.actions_in(fm.win11_background_menu(kind, True, "file:///tmp"))
         out |= fm.actions_in(fm.classic_background_menu(kind, True, "file:///tmp"))
     out |= fm.actions_in(fm.location_menu("move-to", [("Desktop", "/h/D", "user-desktop")]))

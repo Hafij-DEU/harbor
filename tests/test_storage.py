@@ -40,3 +40,24 @@ def test_app_icon_sync(tmp_path, monkeypatch):
     assert not (tmp_path / "apps" / (ai.APP_ID + ".svg")).exists()
     (tmp_path / "apps" / (ai.APP_ID + ".svg")).write_text("<svg/>")
     assert ai.sync("#ff0000") is None            # not ours: left alone
+
+
+def test_win12_becomes_custom(tmp_path):
+    import json
+    from harbor import files_core as fc
+    p = tmp_path / "s.json"
+    p.write_text(json.dumps({"ui_design": "win12"}))
+    known, _extra, _v = fc.Settings.migrate(json.loads(p.read_text()))
+    assert known["ui_design"] == "custom"
+    assert "custom" in fc.Settings.CHOICES["ui_design"] and "win12" not in fc.Settings.CHOICES["ui_design"]
+    assert "merged" in fc.Settings.CHOICES["menu_style"]
+
+
+def test_merged_menu_has_row_and_no_more_options():
+    from harbor import files_menus as fm
+    sel = [{"path": "/tmp/a.txt", "name": "a.txt", "is_dir": False, "local": True,
+            "content_type": "text/plain", "archive": False}]
+    m = fm.merged_item_menu("folder", sel, can_paste=False)
+    acts = fm.actions_in(m)
+    assert {"cut", "copy", "rename", "delete", "properties"} <= acts
+    assert "more-options" not in acts

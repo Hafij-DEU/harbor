@@ -383,6 +383,54 @@ def classic_item_menu(kind, sel, can_paste=False, pinned=False, send_to=()):
     return menu(s1, s2, s3, s4, s4b, s5)
 
 
+def merged_item_menu(kind, sel, can_paste=False, pinned=False, send_to=()):
+    """Custom design menu: the Windows 11 icon row on top of the full Windows 10
+    list (Send to, 7-Zip, Create shortcut, Terminal...), no Show more options."""
+    if kind == "trash":
+        return item_menu(kind, sel, can_paste, pinned)
+    st = fc.command_states(kind, sel, can_paste=can_paste)
+    n = len(sel)
+    one = sel[0] if n == 1 else {}
+    folder_one = n == 1 and one.get("is_dir") and one.get("local")
+    row = button_row(
+        verb("Cut", "win.cut", "edit-cut-symbolic") if st["cut"] else None,
+        verb("Copy", "win.copy", "edit-copy-symbolic") if st["copy"] else None,
+        verb("Paste", "win.paste-into", "edit-paste-symbolic") if folder_one and can_paste else None,
+        verb("Rename", "win.rename", "document-edit-symbolic") if st["rename"] else None,
+        verb("Delete", "win.delete", "user-trash-symbolic") if st["delete"] else None,
+    )
+    s1 = section(item("Open", "win.open", icon="document-open-symbolic"))
+    if st["open-with"]:
+        s1.append_submenu("Open with", open_with_menu(one.get("content_type", "")))
+    s1b = section(
+        item("Open in new tab", "win.open-tab", icon="tab-new-symbolic")
+        if st["open-new-tab"] else None,
+        item("Open in new window", "win.open-window", icon="window-new-symbolic")
+        if st["open-new-tab"] else None,
+        item("Open file location", "win.open-location-of") if kind == "search" else None,
+        item("Open in Terminal", "win.terminal-sel", icon="utilities-terminal-symbolic")
+        if folder_one else None,
+    )
+    s2 = section(
+        item("Unpin from Quick access" if pinned else "Pin to Quick access", "win.pin-toggle",
+             icon="starred-symbolic") if st["pin"] and n == 1 else None,
+        item("Compress to ZIP file", "win.compress", icon="package-x-generic-symbolic")
+        if st["compress"] else None,
+        item("Extract all…", "win.extract") if st["extract"] else None,
+        item("Copy as path", "win.copy-path", icon="insert-link-symbolic")
+        if st["copy-path"] else None,
+        item("Create shortcut", "win.create-shortcut") if st["copy"] else None,
+    )
+    s3 = Gio.Menu()
+    if st["copy"] and send_to:
+        s3.append_submenu("Send to", send_to_menu(send_to))
+    if st["copy"]:
+        s3.append_submenu("7-Zip", sevenzip_menu(sel))
+    s4 = extra_section(sel, st)
+    s5 = section(item("Properties", "win.properties", icon="document-properties-symbolic"))
+    return _with_row(row, s1, s1b, s2, s3, s4, s5)
+
+
 def classic_background_menu(kind, can_paste=False, location=None, pinned=False):
     """Windows 10 style menu for the empty area of a folder."""
     if kind != "folder":

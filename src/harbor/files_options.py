@@ -42,7 +42,8 @@ LAYOUT_CHOICES = (
     ("density", "Layout density", "Compact fits more rows on screen",
      (("comfortable", "Comfortable"), ("compact", "Compact"))),
     ("menu_style", "Right-click menu", "Show more options (Shift+F10) always opens the classic one",
-     (("win11", "Windows 11"), ("classic", "Classic (Windows 10)"))),
+     (("win11", "Windows 11"), ("classic", "Classic (Windows 10)"),
+      ("merged", "Merged (Windows 10 + 11)"))),
 )
 BEHAVIOUR_CHOICES = (
     ("click_to_open", "Open items with", None,
@@ -90,7 +91,7 @@ def _all_choices():
 
 DESIGNS = (("win11", "Windows 11", "Tabs in the title bar, command bar, rounded"),
            ("win10", "Windows 10", "Blue title bar, File / Home / Share / View ribbon, flat"),
-           ("win12", "Concept", "Experimental: floating rounded panels and pill controls"))
+           ("custom", "Custom", "Harbor's own: modern ribbon, floating rounded panels, pill controls"))
 ACCENTS = (("#3584e4", "Blue"), ("#2190a4", "Teal"), ("#3a944a", "Green"),
            ("#c88800", "Yellow"), ("#ed5b00", "Orange"), ("#e62d42", "Red"),
            ("#d56199", "Pink"), ("#9141ac", "Purple"), ("#6f8396", "Slate"))
@@ -102,19 +103,24 @@ def design_thumb(value, width=150, height=84):
                 height_request=height, width_request=width)
     if value == "win10":
         t.append(Gtk.Box(css_classes=["hbo-t-blue"]))
+        tabs = Gtk.Box(css_classes=["hbo-t-tabs"])
+        tabs.append(Gtk.Box(css_classes=["hbo-t-tab"]))
+        t.append(tabs)
         t.append(Gtk.Box(css_classes=["hbo-t-ribbon"]))
         t.append(Gtk.Box(css_classes=["hbo-t-row"]))
+    elif value == "custom":
+        tabs = Gtk.Box(css_classes=["hbo-t-tabs"])
+        tabs.append(Gtk.Box(css_classes=["hbo-t-tab", "hbo-t-pill"]))
+        t.append(tabs)
+        t.append(Gtk.Box(css_classes=["hbo-t-ribbon", "hbo-t-cmdcard", "hbo-t-ribcard"]))
+        t.append(Gtk.Box(css_classes=["hbo-t-row", "hbo-t-pill"]))
     else:
         tabs = Gtk.Box(css_classes=["hbo-t-tabs"])
-        tabs.append(Gtk.Box(css_classes=["hbo-t-tab"] + (["hbo-t-pill"] if value == "win12" else [])))
+        tabs.append(Gtk.Box(css_classes=["hbo-t-tab"]))
         t.append(tabs)
-        t.append(Gtk.Box(css_classes=["hbo-t-row", "hbo-t-round"]
-                         + (["hbo-t-pill"] if value == "win12" else [])))
-        if value == "win12":
-            t.append(Gtk.Box(css_classes=["hbo-t-cmd", "hbo-t-cmdcard"]))
-        else:
-            t.append(Gtk.Box(css_classes=["hbo-t-cmd"]))
-    if value == "win12":
+        t.append(Gtk.Box(css_classes=["hbo-t-row", "hbo-t-round"]))
+        t.append(Gtk.Box(css_classes=["hbo-t-cmd"]))
+    if value == "custom":
         body = Gtk.Box(vexpand=True, spacing=4, css_classes=["hbo-t-float"])
         body.append(Gtk.Box(css_classes=["hbo-t-side", "hbo-t-card"]))
         body.append(Gtk.Box(hexpand=True, css_classes=["hbo-t-card"]))

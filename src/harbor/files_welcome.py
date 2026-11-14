@@ -332,13 +332,13 @@ class WelcomeDialog(Adw.Dialog):
         box.append(self._header("Choose your interface",
                                 "Each design changes the whole window layout, not only colours."))
         subs = {v: s for v, _t, s in DESIGNS}
-        opts = [(v, t if v != "win12" else "Windows 12 concept", subs[v]) for v, t, _s in DESIGNS]
+        opts = [(v, t, subs[v]) for v, t, _s in DESIGNS]
         cards, self.design_btns = _card_group(
             opts, self.choice["ui_design"], lambda v: self._pick("ui_design", v),
             lambda v: design_thumb(v, 200, 118))
         box.append(cards)
-        note = _lab("The Windows 12 concept is Harbor's own experimental design. It is not an "
-                    "official Windows theme.", "dim-label", "caption", wrap=True)
+        note = _lab("Custom is Harbor's own design: the Windows 10 ribbon, redrawn with "
+                    "floating rounded panels. It is not an official Windows theme.", "dim-label", "caption", wrap=True)
         note.set_margin_top(14)
         box.append(note)
         return self._scroller(box)
@@ -399,7 +399,6 @@ class WelcomeDialog(Adw.Dialog):
                                 "or later in Settings > Appearance."))
         g = Adw.PreferencesGroup()
         names = {v: t for v, t, _s in DESIGNS}
-        names["win12"] = "Windows 12 concept"
         accent = self.choice["accent"]
         accent_name = dict(ACCENTS).get(accent, accent.upper() or "") if accent else "Follow system"
         on_off = lambda k: "On" if self.choice[k] else "Off"  # noqa: E731
