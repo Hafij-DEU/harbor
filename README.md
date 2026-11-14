@@ -63,12 +63,16 @@ The Settings app is in progress.
 
 ## Install
 
-Download `harbor_<version>_all.deb` from the
-[releases](https://github.com/Hafij-DEU/harbor/releases) and run:
+Each app is its own package. Download `harbor-files_<version>_all.deb`
+and/or `harbor-taskmgr_<version>_all.deb` from the
+[releases](https://github.com/Hafij-DEU/harbor/releases) (tags
+`files-v…` and `taskmgr-v…`) and run:
 
 ```bash
-sudo apt install ./harbor_0.4.0_all.deb
+sudo apt install ./harbor-files_0.5.1_all.deb ./harbor-taskmgr_0.3.0_all.deb
 ```
+
+They replace the older combined `harbor` package.
 
 Then open **Harbor Files** or **Harbor Task Manager** from the app menu,
 or run `harbor-files [folder]` / `harbor-taskmgr`
@@ -77,7 +81,7 @@ or run `harbor-files [folder]` / `harbor-taskmgr`
 ## Build and test
 
 ```bash
-./build-deb.sh
+./build-deb.sh            # both apps; ./build-deb.sh files for one
 PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider tests/test_files.py tests/test_taskmgr.py tests/test_taskmgr_sweep.py
 tools/shot.sh taskmgr shot.png --do "win.show_page('performance')"
 ```
