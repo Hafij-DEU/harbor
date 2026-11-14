@@ -80,3 +80,11 @@ def test_pin_dropped(tmp_path):
     assert fsb.pin_dropped(s, [str(d), str(f), None]) == [str(d)]
     assert fsb.is_pinned(s, str(d))
     assert fsb.pin_dropped(s, [str(d)]) == []
+
+
+def test_files_css_uses_only_palette_names():
+    """An unknown $name makes Template.substitute raise and drops the whole theme."""
+    from string import Template
+    from harbor import common, files
+    for pal in common.PALETTES.values():
+        Template(files.CSS).substitute(pal)

@@ -187,7 +187,7 @@ searchentry.hbf-search { min-height: 32px; }
 .hbf-viewtoggle button { min-height: 22px; min-width: 26px; padding: 0 4px; border-radius: 4px; }
 .hbf-viewtoggle button:checked { background: $nav_sel; }
 .hbf-pkg { margin: 14px 12px; }
-.hbf-pkg-state { font-size: 13px; font-weight: 600; color: $accent; }
+.hbf-pkg-state { font-size: 13px; font-weight: 600; color: var(--accent-color); }
 .hbf-pkg-head { font-size: 13px; font-weight: 600; }
 separator.hbf-sep, .hbf-sep { background: $divider; min-height: 1px; }
 .hbf-status { background: $surface; padding: 3px 14px; min-height: 24px;
