@@ -147,10 +147,10 @@ CSS = """
 .hbf-titlebar tabbar tabbox > separator { opacity: 0.6; margin-top: 9px; margin-bottom: 6px; }
 /* Windows-style caption buttons: flat, wide, square, red close on hover */
 .hbf-titlebar windowcontrols { margin: 0; }
-.hbf-titlebar windowcontrols > button { min-height: 32px; min-width: 46px; padding: 0; margin: 0;
+.hbf-titlebar windowcontrols > button { min-height: 34px; min-width: 52px; padding: 0; margin: 0;
     background: none; box-shadow: none; border-radius: 0; }
 .hbf-titlebar windowcontrols > button > image { background: none; box-shadow: none; padding: 0;
-    -gtk-icon-size: 14px; }
+    -gtk-icon-size: 24px; }
 .hbf-titlebar windowcontrols > button:hover { background: alpha(currentColor, 0.09); }
 .hbf-titlebar windowcontrols > button:active { background: alpha(currentColor, 0.15); }
 .hbf-titlebar windowcontrols > button.close:hover { background: #c42b1c; color: white; }
