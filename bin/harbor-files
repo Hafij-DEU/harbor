@@ -5,5 +5,10 @@ for p in (os.path.join(here, "..", "src"), "/usr/lib/harbor-files", "/usr/lib/ha
     if os.path.isfile(os.path.join(p, "harbor", "__init__.py")):
         sys.path.insert(0, p)
         break
+if sys.argv[1:2] == ["--share-again"]:
+    # Launcher action: share last time's files again and show the QR code.
+    # GTK 3 tray process, so harbor.files (GTK 4) must not be imported here.
+    from harbor.files_sharetray import main as share_again
+    sys.exit(share_again(["--again"]))
 from harbor.files import main
 sys.exit(main(sys.argv))

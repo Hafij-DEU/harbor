@@ -40,6 +40,7 @@ XML = """
   <interface name="io.github.hafij_deu.Harbor.Share">
     <method name="Status"><arg type="s" name="json" direction="out"/></method>
     <method name="Stop"/>
+    <method name="ShowQr"/>
   </interface>
 </node>
 """
@@ -101,6 +102,9 @@ class Runner:
         elif method == "Stop":
             inv.return_value(None)
             GLib.idle_add(self.stop)
+        elif method == "ShowQr":
+            inv.return_value(None)
+            GLib.idle_add(lambda: self.show_qr() or False)
 
     def _menu(self):
         menu = Gtk.Menu()
@@ -172,26 +176,66 @@ class Runner:
         return False
 
 
-def main():
-    try:
-        cfg = json.loads(sys.stdin.readline() or "{}")
-    except ValueError:
-        cfg = {}
+def saved_config(settings=None):
+    """Share config from Harbor Files' saved settings (what was shared last time)."""
+    if settings is None:
+        from .files_core import Settings
+        settings = Settings()
+    d = settings.data
+    return {"folders": [dict(f) for f in d.get("share_folders", [])],
+            "port": d.get("share_port"), "upload_max_mb": d.get("share_upload_max_mb"),
+            "minutes": d.get("share_autostop")}
+
+
+def shareable(folders):
+    return [f for f in folders
+            if os.path.isdir(f.get("path", "")) or os.path.isfile(f.get("path", ""))]
+
+
+def notice(text, secondary):
+    d = Gtk.MessageDialog(message_type=Gtk.MessageType.INFO, buttons=Gtk.ButtonsType.OK,
+                          text=text, title="Send by Wi-Fi")
+    d.format_secondary_text(secondary)
+    d.run()
+    d.destroy()
+
+
+def main(argv=None):
+    """Read the config on stdin (from Harbor Files), or with --again use the
+    saved share list and show the QR code at once."""
+    again = "--again" in (sys.argv[1:] if argv is None else argv)
+    if again:
+        cfg = saved_config()
+    else:
+        try:
+            cfg = json.loads(sys.stdin.readline() or "{}")
+        except ValueError:
+            cfg = {}
 
     def answer(obj):
+        if again:
+            if obj.get("error"):
+                notice("Can't share over Wi-Fi", obj["error"])
+            return
         sys.stdout.write(json.dumps(obj) + "\n")
         sys.stdout.flush()
         null = os.open(os.devnull, os.O_WRONLY)   # Harbor Files stops reading here
         os.dup2(null, 1)
         os.close(null)
 
-    folders = [f for f in cfg.get("folders", []) if os.path.isdir(f.get("path", ""))]
+    folders = shareable(cfg.get("folders", []))
     if not folders:
-        answer({"error": "No folders to share"})
+        answer({"error": "Nothing to share yet. In Harbor Files, right-click a file or "
+                         "folder and choose Share over Wi-Fi." if again
+                else "No folders to share"})
         return 1
     try:
         conn = Gio.bus_get_sync(Gio.BusType.SESSION, None)
         if not own_name(conn):
+            if again:      # already sharing: just show its QR code
+                conn.call_sync(BUS_NAME, OBJECT_PATH, BUS_NAME, "ShowQr", None, None,
+                               Gio.DBusCallFlags.NO_AUTO_START, 5000, None)
+                return 0
             answer({"error": "Sharing is already on"})
             return 1
     except GLib.Error as e:
@@ -206,8 +250,10 @@ def main():
     except OSError as e:
         answer({"error": str(e)})
         return 1
-    Runner(server, conn)
+    runner = Runner(server, conn)
     answer({"ok": True})
+    if again:
+        runner.show_qr()
     for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sig, lambda *_: server.stop() or False)
     Gtk.main()

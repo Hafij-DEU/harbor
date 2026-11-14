@@ -10,8 +10,12 @@ Categories=GTK;GNOME;Utility;Core;FileManager;
 MimeType=inode/directory;
 Keywords=files;folder;explorer;file manager;browse;trash;drive;
 StartupNotify=true
-Actions=new-window;
+Actions=new-window;share-again;
 
 [Desktop Action new-window]
 Name=New Window
 Exec=harbor-files --new-window
+
+[Desktop Action share-again]
+Name=Share over Wi-Fi Again
+Exec=harbor-files --share-again
