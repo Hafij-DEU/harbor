@@ -8,25 +8,12 @@ from . import files_core as fc
 from . import files_icons
 from .common import NavList
 
-USER_DIRS = (
-    (GLib.UserDirectory.DIRECTORY_DESKTOP, "user-desktop"),
-    (GLib.UserDirectory.DIRECTORY_DOCUMENTS, "folder-documents"),
-    (GLib.UserDirectory.DIRECTORY_DOWNLOAD, "folder-download"),
-    (GLib.UserDirectory.DIRECTORY_PICTURES, "folder-pictures"),
-    (GLib.UserDirectory.DIRECTORY_MUSIC, "folder-music"),
-    (GLib.UserDirectory.DIRECTORY_VIDEOS, "folder-videos"),
-)
-
-
-def user_dirs():
-    """[(path, label, icon)] for the XDG user folders that exist (not = home)."""
-    home = os.path.normpath(fc.home_dir())
-    out = []
-    for which, icon in USER_DIRS:
-        p = GLib.get_user_special_dir(which)
-        if p and os.path.normpath(p) != home and os.path.isdir(p):
-            out.append((os.path.normpath(p), os.path.basename(p.rstrip("/")), icon))
-    return out
+def user_dirs(home=None, xdg=None):
+    """[(path, label, icon)] for the user folders that exist, in Explorer order
+    (Desktop, Documents, Downloads, Pictures, Music, Videos). An XDG entry that
+    is unset or points at home falls back to ~/<Name> (fc.user_folder)."""
+    return [(p, os.path.basename(p.rstrip("/")) or kind, icon)
+            for kind, p, icon in fc.user_folders(home, xdg) if os.path.isdir(p)]
 
 
 def quick_access(settings):

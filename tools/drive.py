@@ -80,7 +80,8 @@ def render(win):
     node = snap.to_node()
     if node is None:
         return fail("no render node (layout not ready)")
-    renderer = Gsk.CairoRenderer()
+    renderer = {"gl": Gsk.GLRenderer, "vulkan": getattr(Gsk, "VulkanRenderer", Gsk.GLRenderer)}.get(
+        os.environ.get("HB_RENDERER"), Gsk.CairoRenderer)()
     renderer.realize_for_display(win.get_display())
     rect = Graphene.Rect().init(0, 0, w, h)
     tex = renderer.render_texture(node, rect)

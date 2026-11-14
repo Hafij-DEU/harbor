@@ -14,7 +14,7 @@ if [ ! -S "$XDG_RUNTIME_DIR/hb-0" ]; then
     kill "$SHELL_PID" 2>/dev/null
     exit 3
 fi
-WAYLAND_DISPLAY=hb-0 GDK_BACKEND=wayland GSETTINGS_BACKEND=memory GSK_RENDERER=cairo \
+WAYLAND_DISPLAY=hb-0 GDK_BACKEND=wayland GSETTINGS_BACKEND=memory GSK_RENDERER=${HB_GSK:-cairo} \
     timeout "${HB_TIMEOUT:-60}" python3 "$HB_ROOT/tools/drive.py" "$@"
 rc=$?
 kill "$SHELL_PID" 2>/dev/null

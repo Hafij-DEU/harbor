@@ -11,7 +11,17 @@ import os
 
 from gi.repository import Gio, GLib
 
+from . import files_tint as tint
+
 MODE = "modern"          # "modern" (bundled set) or "system" (icon theme)
+COLOR = None             # folder colour for the whole app (#rrggbb) or None = classic
+
+# Customize folder (GIO metadata; metadata::custom-icon is Nautilus' key)
+ATTR_CUSTOM_ICON = "metadata::custom-icon"
+ATTR_CUSTOM_ICON_NAME = "metadata::custom-icon-name"
+ATTR_FOLDER_COLOR = "metadata::harbor-folder-color"
+ATTR_EMBLEM = "metadata::harbor-emblem"
+METADATA_ATTRS = (ATTR_CUSTOM_ICON, ATTR_CUSTOM_ICON_NAME, ATTR_FOLDER_COLOR, ATTR_EMBLEM)
 
 FOLDER = "harbor-folder"
 FILE = "harbor-file"
@@ -165,9 +175,12 @@ def special_dirs():
     if _special is None:
         home = os.path.normpath(os.path.expanduser("~"))
         out = {home: "harbor-folder-home"}
-        for which, icon in SPECIAL_DIRS:
-            p = GLib.get_user_special_dir(which)
-            if p and os.path.normpath(p) != home:
+        from . import files_core as fc
+        by_dir = {which: icon for which, icon in SPECIAL_DIRS}
+        kind_dir = {k: d for k, d, _i in fc.USER_FOLDERS + fc.EXTRA_USER_FOLDERS}
+        for kind, p, _icon in fc.user_folders(home, extra=True):
+            icon = by_dir.get(kind_dir[kind])
+            if icon:
                 out[os.path.normpath(p)] = icon
         _special = out
     return _special
@@ -183,8 +196,41 @@ def icon_name_for(content_type, name="", is_dir=False, path=None):
     return icon_for_folder(path) if is_dir else icon_for_type(content_type, name)
 
 
+def tinted(name, color=None, emblem=None):
+    """A Harbor folder icon name in the folder colour (per-folder > app-wide)."""
+    if not modern() or not tint.is_folder_icon(name):
+        return name
+    c = color if tint.valid_hex(color) else COLOR
+    return tint.icon_name(name, c, emblem if emblem in tint.EMBLEMS else None)
+
+
+def custom_of(info):
+    """(custom icon uri, custom icon name, colour, emblem) from GIO metadata."""
+    def get(attr):
+        try:
+            v = info.get_attribute_string(attr)
+        except TypeError:
+            v = None
+        return v or None
+    return tuple(get(a) for a in METADATA_ATTRS)
+
+
+def custom_gicon(info, is_dir=False):
+    """Icon chosen with Customize folder, or None."""
+    uri, name, color, emblem = custom_of(info)
+    if uri:
+        f = Gio.File.new_for_uri(uri) if "://" in uri else Gio.File.new_for_path(uri)
+        return Gio.FileIcon.new(f)
+    if name:
+        return Gio.ThemedIcon.new(tinted(name, color if is_dir else None, emblem))
+    return None
+
+
 def item_gicon(info, path=None, is_dir=False):
     """Icon for a list item: the bundled one in Modern mode, else the theme's."""
+    own = custom_gicon(info, is_dir)
+    if own is not None:
+        return own
     if not modern():
         return info.get_icon()
     ct = info.get_content_type() or info.get_attribute_string("standard::fast-content-type") or ""
@@ -192,14 +238,18 @@ def item_gicon(info, path=None, is_dir=False):
         # mountables and the like keep their own icon (drives in This PC etc.)
         own = info.get_icon()
         return own or Gio.ThemedIcon.new(FOLDER)
-    return Gio.ThemedIcon.new(icon_name_for(ct, info.get_display_name() or "", is_dir, path))
+    name = icon_name_for(ct, info.get_display_name() or "", is_dir, path)
+    if is_dir:
+        _u, _n, color, emblem = custom_of(info)
+        name = tinted(name, color, emblem)
+    return Gio.ThemedIcon.new(name)
 
 
 def themed(name):
     """Map a theme icon name used by the UI to the bundled one (Modern mode)."""
     if not modern() or not isinstance(name, str):
         return name
-    return THEMED.get(name, name)
+    return tinted(THEMED.get(name, name))
 
 
 def themed_gicon(icon):
@@ -209,7 +259,7 @@ def themed_gicon(icon):
     if isinstance(icon, Gio.ThemedIcon):
         for n in icon.get_names():
             if n in THEMED:
-                return Gio.ThemedIcon.new(THEMED[n])
+                return Gio.ThemedIcon.new(tinted(THEMED[n]))
             for key, val in (("optical", "harbor-drive-optical"), ("removable", "harbor-drive-usb"),
                              ("usb", "harbor-drive-usb"), ("harddisk", "harbor-drive"),
                              ("network", "harbor-network"), ("remote", "harbor-network")):

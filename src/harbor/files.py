@@ -14,6 +14,8 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 from . import common  # noqa: E402
 from . import files_core as fc  # noqa: E402
 from . import files_icons  # noqa: E402
+from . import files_tint  # noqa: E402
+from . import files_view  # noqa: E402
 from . import files_menus as fm  # noqa: E402
 from . import files_sidebar as fsb  # noqa: E402
 from .common import HarborWindow, apply_theme  # noqa: E402
@@ -134,7 +136,7 @@ CSS = """
 .hbf-titlebar tabbar tab:hover { background: $nav_hover; }
 .hbf-titlebar tabbar tab:selected, .hbf-titlebar tabbar tab:selected:hover {
     background: $surface; box-shadow: none; }
-.hbf-titlebar tabbar tab .tab-title { font-size: 12.5px; }
+.hbf-titlebar tabbar tab .tab-title { font-size: 13px; }
 .hbf-titlebar tabbar tabbox > separator { opacity: 0.6; margin-top: 12px; margin-bottom: 6px; }
 .hbf-titlebar windowcontrols button { min-height: 30px; min-width: 40px; }
 button.hbf-newtab { min-height: 28px; min-width: 28px; margin: 6px 4px 0 4px; border-radius: 5px; }
@@ -185,7 +187,7 @@ gridview.hbf-grid { background: transparent; padding: 8px; }
 gridview.hbf-grid > child { border-radius: 6px; padding: 6px 2px; margin: 2px; }
 gridview.hbf-grid > child:hover { background: $nav_hover; }
 gridview.hbf-grid > child:selected { background: alpha(var(--accent-bg-color), 0.28); color: $text; }
-.hbf-tile-label { font-size: 12.5px; }
+.hbf-tile-label { font-size: 13px; }
 .hbf-cell { font-size: 13px; }
 .hbf-name label { font-size: 13px; }
 
@@ -196,7 +198,7 @@ flowbox.hbf-tiles > flowboxchild { border-radius: 8px; padding: 0; }
 flowbox.hbf-tiles > flowboxchild:hover { background: $nav_hover; }
 flowbox.hbf-tiles > flowboxchild:selected { background: $nav_sel; }
 .hbf-qtile { padding: 10px 12px; }
-.hbf-qtile-title { font-size: 13.5px; }
+.hbf-qtile-title { font-size: 14px; }
 list.hbf-recent { background: transparent; }
 list.hbf-recent > row { border-radius: 5px; min-height: 36px; }
 list.hbf-recent > row:hover { background: $nav_hover; }
@@ -213,7 +215,7 @@ list.hbf-apps > row { border-radius: 5px; }
 .hbf-ribbon { background: $surface; border-bottom: 1px solid $divider; }
 .hbf-ribbon-tabs { padding: 0 8px; border-bottom: 1px solid $divider; }
 button.hbf-ribbon-tab { background: none; border-radius: 0; min-height: 26px; padding: 2px 14px;
-    font-size: 12.5px; box-shadow: none; border-bottom: 2px solid transparent; }
+    font-size: 12px; box-shadow: none; border-bottom: 2px solid transparent; }
 button.hbf-ribbon-tab:hover { background: $nav_hover; }
 button.hbf-ribbon-tab:checked { background: none; color: var(--accent-color);
     border-bottom-color: var(--accent-bg-color); }
@@ -261,6 +263,9 @@ class FilesWindow(HarborWindow):
         self.ops = Operations(self)
         self._install_actions()
         self._install_keys()
+        if not locations and s.get("restore_tabs") and s.get("last_tabs") \
+                and not app.files_windows_except(self):
+            locations = [(loc, None) for loc in s.get("last_tabs")[:20] if isinstance(loc, str)]
         for loc, sel in (locations or [(fc.start_location(s), None)]):
             self.open_arg(loc, sel, new_tab=True)
         self.connect("close-request", self._on_close_request)
@@ -312,6 +317,9 @@ class FilesWindow(HarborWindow):
         self.search.connect("activate", self._on_search_changed)
         self.search.connect("stop-search", lambda *_: self._cancel_search())
         nav.append(self.search)
+        gear = Gtk.Button(icon_name="emblem-system-symbolic", action_name="win.options",
+                          tooltip_text="Settings (Ctrl+,)", css_classes=["hbf-nav"])
+        nav.append(gear)
         self.toolbar.add_top_bar(nav)
 
         # 3. command bar
@@ -397,6 +405,8 @@ class FilesWindow(HarborWindow):
         for w in (self.ops_label, self.ops_bar, cancel):
             self.ops_box.append(w)
         status.append(self.ops_box)
+        self.status_bar = status
+        status.set_visible(bool(self.settings.get("show_status_bar")))
         self.toolbar.add_bottom_bar(status)
 
     # ------------------------------------------------------------ tabs
@@ -413,6 +423,7 @@ class FilesWindow(HarborWindow):
         page = self.tab_view.append(tab)
         tab.page = page
         tab.connect("changed", self._on_tab_changed)
+        tab.view.set_single_click(self.settings.get("click_to_open") == "single")
         tab.view.cv.get_sorter().connect("changed", lambda *_: self._on_header_sort(tab))
         self._sync_page(tab)
         if select:
@@ -690,9 +701,8 @@ class FilesWindow(HarborWindow):
                     removable.append((fsb.mount_label(m), p))
         except (AttributeError, GLib.Error):
             pass
-        return fc.send_to_targets(
-            fc.home_dir(), GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP),
-            GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOCUMENTS), removable)
+        return fc.send_to_targets(fc.home_dir(), fc.user_folder("Desktop"),
+                                  fc.user_folder("Documents"), removable)
 
     def location_places(self):
         """Move to / Copy to: Quick access folders (label, path, icon)."""
@@ -928,6 +938,11 @@ class FilesWindow(HarborWindow):
             a.set_enabled(bool(value))
 
     # ------------------------------------------------------------ view settings
+    def _sync_options(self, key, value):
+        for w in self.app.files_windows():
+            if w._options is not None:
+                w._options.sync(key, value)
+
     def _set_view(self, key):
         view = "details" if key == "details" else "icons"
         size = key if key in ("large", "medium") else self.settings.get("icon_size")
@@ -935,6 +950,7 @@ class FilesWindow(HarborWindow):
         self.settings.set("view", view)
         for t in self.tabs():
             t.view.set_view(view, size)
+        self._sync_options("icon_size", size)
 
     def _set_sort_field(self, field):
         if field not in fc.SORT_FIELDS:
@@ -942,23 +958,27 @@ class FilesWindow(HarborWindow):
         self.settings.set("sort", field)
         for t in self.tabs():
             t.view.set_sort(field, bool(self.settings.get("descending")))
+        self._sync_options("sort", field)
 
     def _set_sort_order(self, order):
         desc = order == "desc"
         self.settings.set("descending", desc)
         for t in self.tabs():
             t.view.set_sort(self.settings.get("sort"), desc)
+        self._sync_options("descending", desc)
 
     def _set_hidden(self, value):
         self.settings.set("show_hidden", bool(value))
         for t in self.tabs():
             t.view.set_show_hidden(bool(value))
         self._update_status()
+        self._sync_options("show_hidden", bool(value))
 
     def _set_ext(self, value):
         self.settings.set("show_extensions", bool(value))
         for t in self.tabs():
             t.view.set_show_extensions(bool(value))
+        self._sync_options("show_extensions", bool(value))
 
     def _set_details(self, value):
         value = bool(value)
@@ -971,6 +991,7 @@ class FilesWindow(HarborWindow):
         self.settings.save()
         self.details.set_visible(value)
         self._queue_details()
+        self._sync_options("details_pane", value)
 
     def _set_preview(self, value):
         """The preview pane and the details pane share one slot (like Explorer)."""
@@ -981,10 +1002,12 @@ class FilesWindow(HarborWindow):
             self.settings.data["details_pane"] = False
             self.details.set_visible(False)
         self.settings.save()
+        self.preview_slot.set_visible(value)
         self.preview.set_visible(value)
         if not value:
             self.preview.reset()
         self._queue_details()
+        self._sync_options("preview_pane", value)
 
     def _set_nav(self, value):
         self.settings.set("nav_pane", bool(value))
@@ -1015,9 +1038,14 @@ class FilesWindow(HarborWindow):
         if self.ribbon is not None and self.ribbon_slot.get_visible():
             self.ribbon.set_collapsed(not self.ribbon.collapsed, notify=True)
 
-    def show_options(self):
-        from .files_options import OptionsDialog
-        dlg = OptionsDialog(self)
+    def show_options(self, page=None):
+        from .files_options import SettingsDialog
+        if self._options is not None:
+            if page:
+                self._options.set_visible_page_name(page)
+            self._options.present(self)
+            return self._options
+        dlg = SettingsDialog(self, page)
         self._options = dlg
         dlg.connect("closed", lambda *_: setattr(self, "_options", None))
         dlg.present(self)
@@ -1033,8 +1061,39 @@ class FilesWindow(HarborWindow):
         if self.settings.get(key) == value:
             return
         self.settings.set(key, value)
-        if key in ("style", "icons"):
+        wins = self.app.files_windows()
+        for w in wins:
+            if w is not self and w._options is not None:
+                w._options.sync(key, value)
+        if key in ("style", "icons", "theme", "folder_color") or (
+                key == "folder_color_custom" and self.settings.get("folder_color") == "custom"):
             self.app.apply_look()
+        elif key == "show_status_bar":
+            for w in wins:
+                w.status_bar.set_visible(bool(value))
+        elif key == "click_to_open":
+            for w in wins:
+                for t in w.tabs():
+                    t.view.set_single_click(value == "single")
+        elif key in ("image_thumbnails", "doc_thumbnails", "remote_thumbnails"):
+            files_view.OPTIONS[key] = bool(value)
+            for w in wins:
+                for t in w.tabs():
+                    t.view.refresh_thumbs()
+        elif key == "show_quick_access":
+            for w in wins:
+                w.sidebar.rebuild()
+                for t in w.tabs():
+                    if t.home_page is not None:
+                        t.home_page.refresh()
+        elif key in ("office_preview", "preview_max_mb"):
+            for w in wins:
+                if w.preview.get_visible():
+                    w.preview.reset()
+                    w.preview.update(w.tab())
+        elif key == "preview_width":
+            for w in wins:
+                w.set_preview_width(int(value))
         elif key == "command_bar":
             for w in self.app.files_windows():
                 w._apply_command_bar()
@@ -1283,6 +1342,17 @@ class FilesWindow(HarborWindow):
                         "You can't undo this." % what)
             confirm(self, "Delete permanently?", body[0].upper() + body[1:], "Delete",
                     lambda: self.ops.delete_permanently(paths))
+            return
+
+        if self.settings.get("confirm_trash") and not getattr(self, "_trash_ok", False):
+            def go():
+                self._trash_ok = True
+                try:
+                    self.delete(False)
+                finally:
+                    self._trash_ok = False
+            confirm(self, "Move to the Trash?", "%s will be moved to the Trash." %
+                    (what[0].upper() + what[1:]), "Move to Trash", go, destructive=False)
             return
 
         def done(job):
@@ -1672,7 +1742,13 @@ class FilesWindow(HarborWindow):
             w, h = self.get_default_size()
             if w > 300 and h > 200:
                 s.data["width"], s.data["height"] = w, h
-        s.set("maximized", bool(self.is_maximized()))
+        s.data["maximized"] = bool(self.is_maximized())
+        locs = [t.location for t in self.tabs() if t.location and not t.search_query]
+        s.data["last_tabs"] = [fc.strip_url_password(loc) for loc in locs][:20]
+        cur = self.tab()
+        if cur is not None and cur.location:
+            s.data["last_folder"] = fc.strip_url_password(cur.location)
+        s.save()
         if self.ops.jobs:
             self.ops.cancel_all()
         for t in self.tabs():
@@ -1742,6 +1818,7 @@ class App(Adw.Application):
                 ("win.preview-pane", ["<Alt>p"]),
                 ("win.details-pane", ["<Alt><Shift>p"]),
                 ("win.ribbon-toggle", ["<Control>F1"]),
+                ("win.options", ["<Control>comma"]),
                 ("app.quit", ["<Control>q"])):
             self.set_accels_for_action(action, keys)
         quit_ = Gio.SimpleAction.new("quit", None)
@@ -1756,15 +1833,42 @@ class App(Adw.Application):
     def files_windows(self):
         return [w for w in self.get_windows() if isinstance(w, FilesWindow)]
 
+    def files_windows_except(self, win):
+        return [w for w in self.files_windows() if w is not win]
+
     def apply_look(self, initial=False):
         """Settings > Style / Icons, at startup and live."""
         s = self.settings
         files_icons.MODE = "system" if s.get("icons") == "system" else "modern"
+        for k in files_view.OPTIONS:
+            files_view.OPTIONS[k] = bool(s.get(k))
         theme = common.THEME if common.THEME is not None else apply_theme()
         theme.set_style("system" if s.get("style") == "system" else "harbor")
+        sm = Adw.StyleManager.get_default()
+        sm.set_color_scheme({"light": Adw.ColorScheme.FORCE_LIGHT,
+                             "dark": Adw.ColorScheme.FORCE_DARK}.get(
+                                 s.get("theme"), Adw.ColorScheme.DEFAULT))
+        if not getattr(self, "_tint_hooked", False):
+            self._tint_hooked = True
+            files_tint.add_listener(self._refresh_windows)
+            try:
+                sm.connect("notify::accent-color", lambda *_: self._on_accent())
+            except TypeError:
+                pass
+        files_icons.COLOR = files_tint.effective_color(
+            s.get("folder_color"), s.get("folder_color_custom"), files_tint.accent_hex())
+        if files_icons.COLOR and files_icons.MODE == "modern":
+            files_tint.request(files_icons.COLOR)
         if not initial:
-            for w in self.files_windows():
-                w.refresh_look()
+            self._refresh_windows()
+
+    def _refresh_windows(self):
+        for w in self.files_windows():
+            w.refresh_look()
+
+    def _on_accent(self):
+        if self.settings.get("folder_color") == "accent":
+            self.apply_look()
 
     def fm1_show(self, method, targets):
         """org.freedesktop.FileManager1 call (already parsed by fc.fm1_targets)."""

@@ -4,6 +4,8 @@
 #   tools/shot.sh APP OUT.png [--size 1200x780] [--theme dark|light]
 #                 [--do 'python statement' ...] [--delay MS] [--overlay EXPR]
 #
+# HB_FILES_JSON=settings.json seeds the Files settings for the run.
+#
 # APP is files, settings or taskmgr. Each --do runs in order (globals: win,
 # app, Gtk, GLib, Adw) with --delay ms between them, then the window is
 # rendered. The app runs with HARBOR_DRY_RUN=1 and an in-memory GSettings
@@ -16,6 +18,13 @@ BASE=/tmp/claude-1000
 RT=$(mktemp -d "$BASE/hb.XXXX")
 mkdir -p "$RT/c" "$RT/d" "$RT/k" "$RT/r"
 chmod 700 "$RT/r"
+# Same XDG user folders as the real session (read-only copy), so the Home
+# and This PC pages show the real folder list.
+[ -f "$HOME/.config/user-dirs.dirs" ] && cp "$HOME/.config/user-dirs.dirs" "$RT/c/"
+# The user's own fonts (fontconfig looks in $XDG_DATA_HOME/fonts).
+[ -d "$HOME/.local/share/fonts" ] && ln -s "$HOME/.local/share/fonts" "$RT/d/fonts"
+# HB_FILES_JSON=path seeds Harbor Files' settings for this run.
+if [ -n "${HB_FILES_JSON:-}" ]; then mkdir -p "$RT/c/harbor"; cp "$HB_FILES_JSON" "$RT/c/harbor/files.json"; fi
 # Export the private XDG dirs BEFORE dbus-run-session: dconf-service is
 # D-Bus activated and inherits dbus-daemon's environment.
 export XDG_CONFIG_HOME=$RT/c XDG_DATA_HOME=$RT/d XDG_CACHE_HOME=$RT/k XDG_RUNTIME_DIR=$RT/r

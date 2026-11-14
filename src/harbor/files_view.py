@@ -28,7 +28,10 @@ ATTRS = ",".join((
     "standard::is-symlink", "standard::target-uri", "time::modified", "time::created",
     "thumbnail::path", "thumbnail::is-valid", "trash::orig-path", "trash::deletion-date",
     "access::can-rename", "access::can-trash", "access::can-delete", "access::can-write",
-))
+) + files_icons.METADATA_ATTRS)
+
+# Settings > Preview (set by the window; the view has no settings access)
+OPTIONS = {"image_thumbnails": True, "doc_thumbnails": False, "remote_thumbnails": False}
 
 ICON_SIZES = {"large": (96, 124), "medium": (56, 96)}  # icon px, tile width
 
@@ -71,6 +74,8 @@ class FileItem(GObject.Object):
         else:
             self.type_desc = "File"
         self.icon = files_icons.item_gicon(info, self.path, self.is_dir)
+        # gvfs (sftp, ftp, smb...) has no local path or a FUSE one
+        self.remote = not gfile.is_native() or (self.path or "").startswith("/run/user/")
         self.hidden = bool(
             (info.has_attribute("standard::is-hidden") and info.get_is_hidden())
             or (info.has_attribute("standard::is-backup") and info.get_is_backup()))
@@ -120,6 +125,37 @@ def _load_thumb(item, size):
     fmt = Gdk.MemoryFormat.R8G8B8A8 if pb.get_has_alpha() else Gdk.MemoryFormat.R8G8B8
     return Gdk.MemoryTexture.new(pb.get_width(), pb.get_height(), fmt, pb.read_pixel_bytes(),
                                  pb.get_rowstride())
+
+
+def _load_doc_thumb(item, size):
+    """Worker: page 1 of an office document (Settings > Document thumbnails)."""
+    from . import files_office
+    if not item.path or item.size > 50 * 1024 * 1024:
+        return None
+    png = files_office.thumbnail(item.path, item.mtime, item.size)
+    if not png:
+        return None
+    try:
+        pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(png, size, size, True)
+    except GLib.Error:
+        return None
+    fmt = Gdk.MemoryFormat.R8G8B8A8 if pb.get_has_alpha() else Gdk.MemoryFormat.R8G8B8
+    return Gdk.MemoryTexture.new(pb.get_width(), pb.get_height(), fmt, pb.read_pixel_bytes(),
+                                 pb.get_rowstride())
+
+
+def thumb_loader(item, icon_px, options=None):
+    """Which worker makes this item's grid thumbnail, or None."""
+    o = OPTIONS if options is None else options
+    if item.is_dir or not item.path:
+        return None
+    if item.remote and not o.get("remote_thumbnails"):
+        return None
+    if item.is_image:
+        return _load_thumb if o.get("image_thumbnails", True) else None
+    if o.get("doc_thumbnails") and icon_px >= 96 and fc.office_kind(item.name):
+        return _load_doc_thumb
+    return None
 
 
 def find_item_widget(widget, root):
@@ -355,11 +391,12 @@ class FolderView(Gtk.Box):
         box.lab.set_label(self.label_for(item))
         box.set_opacity(0.55 if item.hidden else 1.0)
         self._set_grid_icon(box, item)
-        if item.is_image and item.thumb_state == 0 and item.path:
+        loader = thumb_loader(item, box.icon_px) if item.thumb_state == 0 else None
+        if loader is not None:
             item.thumb_state = 1
-            gen = self._gen
+            gen = (self._gen, getattr(self, "_tgen", 0))
             size = 128
-            fut = _THUMBS.submit(_load_thumb, item, size)
+            fut = _THUMBS.submit(loader, item, size)
             fut.add_done_callback(lambda fu: GLib.idle_add(self._thumb_done, item, fu, gen))
 
     def _set_grid_icon(self, box, item):
@@ -376,7 +413,7 @@ class FolderView(Gtk.Box):
             tex = fut.result()
         except Exception:
             tex = None
-        if tex is None or gen != self._gen:
+        if tex is None or gen != (self._gen, getattr(self, "_tgen", 0)):
             return False
         item.texture = tex
         for box in list(item.cells):
@@ -491,6 +528,21 @@ class FolderView(Gtk.Box):
                 if item.texture is not None and box.img.get_pixel_size() > 32:
                     continue
                 box.img.set_from_gicon(item.icon)
+
+    def refresh_thumbs(self):
+        """Thumbnail settings changed: drop the pictures and bind again."""
+        for item in self.items_all():
+            item.texture = None
+            item.thumb_state = 0
+        self._tgen = getattr(self, "_tgen", 0) + 1
+        f = self.grid.get_factory()
+        self.grid.set_factory(None)
+        self.grid.set_factory(f)
+
+    def set_single_click(self, value):
+        """Settings > Open items with: single click (like a web page)."""
+        self.grid.set_single_click_activate(bool(value))
+        self.cv.set_single_click_activate(bool(value))
 
     def items_all(self):
         return [self.store.get_item(i) for i in range(self.store.get_n_items())]

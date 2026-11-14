@@ -7,15 +7,6 @@ from gi.repository import Gdk, Gio, GLib, GObject, Gtk
 from . import files_core as fc
 from .files_view import FolderView
 
-SPECIAL_ICONS = {
-    GLib.UserDirectory.DIRECTORY_DESKTOP: "user-desktop",
-    GLib.UserDirectory.DIRECTORY_DOCUMENTS: "folder-documents",
-    GLib.UserDirectory.DIRECTORY_DOWNLOAD: "folder-download",
-    GLib.UserDirectory.DIRECTORY_PICTURES: "folder-pictures",
-    GLib.UserDirectory.DIRECTORY_MUSIC: "folder-music",
-    GLib.UserDirectory.DIRECTORY_VIDEOS: "folder-videos",
-}
-
 
 def icon_for_location(loc, searching=False):
     if searching:
@@ -36,9 +27,8 @@ def icon_for_location(loc, searching=False):
         return "user-home"
     if path == "/":
         return "drive-harddisk"
-    for which, icon in SPECIAL_ICONS.items():
-        p = GLib.get_user_special_dir(which)
-        if p and os.path.normpath(p) == path:
+    for _kind, p, icon in fc.user_folders():
+        if p == path:
             return icon
     return "folder"
 

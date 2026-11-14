@@ -134,6 +134,56 @@ def home_dir():
     return GLib.get_home_dir()
 
 
+# (kind, GLib special dir, icon) in the order This PC / Home / the sidebar show them
+USER_FOLDERS = (
+    ("Desktop", GLib.UserDirectory.DIRECTORY_DESKTOP, "user-desktop"),
+    ("Documents", GLib.UserDirectory.DIRECTORY_DOCUMENTS, "folder-documents"),
+    ("Downloads", GLib.UserDirectory.DIRECTORY_DOWNLOAD, "folder-download"),
+    ("Pictures", GLib.UserDirectory.DIRECTORY_PICTURES, "folder-pictures"),
+    ("Music", GLib.UserDirectory.DIRECTORY_MUSIC, "folder-music"),
+    ("Videos", GLib.UserDirectory.DIRECTORY_VIDEOS, "folder-videos"),
+)
+EXTRA_USER_FOLDERS = (
+    ("Templates", GLib.UserDirectory.DIRECTORY_TEMPLATES, "folder-templates"),
+    ("Public", GLib.UserDirectory.DIRECTORY_PUBLIC_SHARE, "folder-publicshare"),
+)
+_KIND_DIR = {k: d for k, d, _i in USER_FOLDERS + EXTRA_USER_FOLDERS}
+
+
+def user_folder(kind, home=None, xdg=None):
+    """Path of a user folder ("Documents", "Desktop", ...) or None.
+
+    The XDG setting wins unless it is unset or points at the home folder
+    itself (xdg-user-dirs writes XDG_DOCUMENTS_DIR="$HOME/" when the folder
+    was missing once). Then ~/<Name> is used if it exists. xdg is an optional
+    {kind: path or None} mapping for tests; by default GLib is asked.
+    """
+    if kind not in _KIND_DIR:
+        raise ValueError("unknown user folder: %s" % kind)
+    home = os.path.normpath(home or home_dir())
+    if xdg is not None:
+        p = xdg.get(kind)
+    else:
+        try:
+            p = GLib.get_user_special_dir(_KIND_DIR[kind])
+        except (TypeError, GLib.Error):
+            p = None
+    if p and os.path.normpath(p) != home:
+        return os.path.normpath(p)
+    fallback = os.path.join(home, kind)
+    return fallback if os.path.isdir(fallback) else None
+
+
+def user_folders(home=None, xdg=None, extra=False):
+    """[(kind, path, icon)] for the folders that exist / are configured."""
+    out = []
+    for kind, _d, icon in USER_FOLDERS + (EXTRA_USER_FOLDERS if extra else ()):
+        p = user_folder(kind, home, xdg)
+        if p:
+            out.append((kind, p, icon))
+    return out
+
+
 def display_name_for(path, home=None):
     home = home or home_dir()
     if path == home:
@@ -212,28 +262,108 @@ def config_path():
     return os.path.join(GLib.get_user_config_dir(), "harbor", "files.json")
 
 
-class Settings:
-    """Small JSON store: pinned folders and view preferences."""
+PREVIEW_WIDTHS = {"small": 320, "medium": 420, "large": 560}
+PREVIEW_MIN_WIDTH = 260
+PREVIEW_MAX_FRACTION = 0.6
 
+
+def clamp_preview_width(width, window_width=None):
+    """Preview pane width: at least 260 px, at most 60% of the window."""
+    try:
+        width = int(width)
+    except (TypeError, ValueError):
+        width = PREVIEW_WIDTHS["medium"]
+    width = max(PREVIEW_MIN_WIDTH, width)
+    if window_width:
+        width = min(width, max(PREVIEW_MIN_WIDTH, int(window_width * PREVIEW_MAX_FRACTION)))
+    return width
+
+
+def preview_size_name(width):
+    """Nearest of small / medium / large for the Settings row."""
+    return min(PREVIEW_WIDTHS, key=lambda k: abs(PREVIEW_WIDTHS[k] - int(width)))
+
+
+# Share over Wi-Fi auto-stop choices in minutes (0 = never)
+SHARE_AUTOSTOP = (15, 30, 60, 120, 0)
+
+FOLDER_PALETTE = {
+    "blue": "#3584e4", "teal": "#2190a4", "green": "#3a944a", "yellow": "#c88800",
+    "orange": "#ed5b00", "red": "#e62d42", "pink": "#d56199", "purple": "#9141ac",
+    "slate": "#6f8396",
+}
+
+
+class Settings:
+    """Small JSON store: pinned folders and view preferences.
+
+    Version 2 (Harbor 0.5.0) added many keys; files written by older
+    versions load with defaults for the new keys, and keys this version does
+    not know are kept on save so a newer Harbor's settings survive.
+    """
+
+    VERSION = 2
     DEFAULTS = {"pins": [], "view": "details", "icon_size": "large", "show_hidden": False,
                 "sort": "name", "descending": False, "details_pane": False,
                 "show_extensions": True, "width": 1200, "height": 760, "maximized": False,
                 "hidden_defaults": [], "open_to": "thispc", "style": "win11",
                 "icons": "modern", "menu_style": "win11", "command_bar": "win11",
                 "preview_pane": False, "ribbon_collapsed": False, "show_recent": True,
-                "nav_pane": True}
-    LISTS = ("pins", "hidden_defaults")
+                "nav_pane": True,
+                # 0.5.0
+                "theme": "follow", "folder_color": "classic", "folder_color_custom": "#9141ac",
+                "restore_tabs": False, "last_folder": "", "last_tabs": [],
+                "show_status_bar": True, "click_to_open": "double", "confirm_trash": False,
+                "show_quick_access": True, "image_thumbnails": True, "doc_thumbnails": False,
+                "office_preview": True, "preview_max_mb": 50, "preview_width": 420,
+                "open_archives_in_harbor": False, "group_by": "none",
+                "network_locations": [], "remote_thumbnails": False,
+                "remote_preview_max_mb": 10,
+                # Share over Wi-Fi (never starts by itself)
+                "share_folders": [], "share_port": 8765, "share_autostop": 30,
+                "share_upload_max_mb": 4096, "share_iface": "", "share_tailscale": False}
+    LISTS = ("pins", "hidden_defaults", "last_tabs")
     # settings with a fixed set of values (first one is the default)
-    CHOICES = {"open_to": ("thispc", "home"), "style": ("win11", "system"),
+    CHOICES = {"open_to": ("thispc", "home", "last"), "style": ("win11", "system"),
                "icons": ("modern", "system"), "menu_style": ("win11", "classic"),
-               "command_bar": ("win11", "ribbon")}
+               "command_bar": ("win11", "ribbon"), "theme": ("follow", "light", "dark"),
+               "folder_color": ("classic", "accent") + tuple(FOLDER_PALETTE) + ("custom",),
+               "click_to_open": ("double", "single"), "group_by": ("none", "type", "date")}
+    # renamed keys: old name -> (new name, value map or None)
+    RENAMED = {"single_click": ("click_to_open", {True: "single", False: "double"}),
+               "folder_colour": ("folder_color", None),
+               "preview_size": ("preview_width", PREVIEW_WIDTHS)}
 
     def __init__(self, path=None):
         self.path = path or config_path()
         self.data = dict(self.DEFAULTS)
-        for k in self.LISTS:
+        for k in self.LISTS + ("network_locations", "share_folders"):
             self.data[k] = []
+        self.extra = {}
+        self.migrated_from = None
         self.load()
+
+    @classmethod
+    def migrate(cls, raw):
+        """Old settings dict -> (version 2 dict, unknown keys)."""
+        raw = dict(raw)
+        version = raw.pop("version", 1)
+        for old, (new, vmap) in cls.RENAMED.items():
+            if old in raw:
+                v = raw.pop(old)
+                if vmap is not None:
+                    try:
+                        v = vmap.get(v)
+                    except TypeError:
+                        v = None
+                if v is not None and new not in raw:
+                    raw[new] = v
+        # 0.4.x stored a bool-ish int for preview_max_mb in some builds
+        if isinstance(raw.get("preview_max_mb"), float):
+            raw["preview_max_mb"] = int(raw["preview_max_mb"])
+        known = {k: v for k, v in raw.items() if k in cls.DEFAULTS}
+        extra = {k: v for k, v in raw.items() if k not in cls.DEFAULTS}
+        return known, extra, version
 
     def load(self):
         try:
@@ -243,11 +373,28 @@ class Settings:
             return
         if not isinstance(raw, dict):
             return
-        for k, v in raw.items():
-            if k in self.DEFAULTS and isinstance(v, type(self.DEFAULTS[k])):
+        known, self.extra, version = self.migrate(raw)
+        if version != self.VERSION:
+            self.migrated_from = version
+        for k, v in known.items():
+            d = self.DEFAULTS[k]
+            if isinstance(v, type(d)) and not (isinstance(v, bool) and not isinstance(d, bool)):
                 self.data[k] = v
         for k in self.LISTS:
             self.data[k] = [p for p in self.data[k] if isinstance(p, str)]
+        self.data["network_locations"] = [
+            {"url": strip_url_password(n["url"]), "name": str(n.get("name") or "")}
+            for n in self.data["network_locations"]
+            if isinstance(n, dict) and isinstance(n.get("url"), str) and n["url"]]
+        self.data["share_folders"] = [
+            {"path": os.path.normpath(n["path"]), "upload": bool(n.get("upload"))}
+            for n in self.data["share_folders"]
+            if isinstance(n, dict) and isinstance(n.get("path"), str) and n["path"].startswith("/")]
+        if not 1024 <= self.data["share_port"] <= 65535:
+            self.data["share_port"] = self.DEFAULTS["share_port"]
+        if self.data["share_autostop"] not in SHARE_AUTOSTOP:
+            self.data["share_autostop"] = self.DEFAULTS["share_autostop"]
+        self.data["share_upload_max_mb"] = min(max(1, self.data["share_upload_max_mb"]), 65536)
         if self.data["view"] not in ("details", "icons"):
             self.data["view"] = "details"
         if self.data["icon_size"] not in ("large", "medium"):
@@ -257,14 +404,22 @@ class Settings:
         for k, allowed in self.CHOICES.items():
             if self.data[k] not in allowed:
                 self.data[k] = allowed[0]
+        if not re.match(r"^#[0-9a-fA-F]{6}$", self.data["folder_color_custom"]):
+            self.data["folder_color_custom"] = self.DEFAULTS["folder_color_custom"]
+        self.data["preview_width"] = clamp_preview_width(self.data["preview_width"])
+        self.data["preview_max_mb"] = min(max(1, self.data["preview_max_mb"]), 2048)
+        self.data["remote_preview_max_mb"] = min(max(0, self.data["remote_preview_max_mb"]), 2048)
         if self.data["preview_pane"] and self.data["details_pane"]:
             self.data["details_pane"] = False     # the two panes share one slot
 
     def save(self):
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         tmp = self.path + ".tmp"
+        out = dict(self.extra)
+        out.update(self.data)
+        out["version"] = self.VERSION
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(self.data, f, indent=2)
+            json.dump(out, f, indent=2)
         os.replace(tmp, self.path)
 
     def get(self, key):
@@ -273,6 +428,39 @@ class Settings:
     def set(self, key, value):
         self.data[key] = value
         self.save()
+
+    # network locations: never with a password
+    def network_locations(self):
+        return [dict(n) for n in self.data["network_locations"]]
+
+    def add_network_location(self, url, name=""):
+        url = strip_url_password(url)
+        for n in self.data["network_locations"]:
+            if n["url"] == url:
+                if name:
+                    n["name"] = name
+                self.save()
+                return False
+        self.data["network_locations"].append({"url": url, "name": name or ""})
+        self.save()
+        return True
+
+    def rename_network_location(self, url, name):
+        for n in self.data["network_locations"]:
+            if n["url"] == url:
+                n["name"] = name
+                self.save()
+                return True
+        return False
+
+    def remove_network_location(self, url):
+        before = len(self.data["network_locations"])
+        self.data["network_locations"] = [n for n in self.data["network_locations"]
+                                          if n["url"] != url]
+        if len(self.data["network_locations"]) != before:
+            self.save()
+            return True
+        return False
 
     @property
     def pins(self):
@@ -355,6 +543,15 @@ def search_walk(root, query, cancel=None, show_hidden=False, limit=5000):
 
 
 # ------------------------------------------------------------------ clipboard formats
+
+def strip_url_password(url):
+    """Drop a password from scheme://user:pass@host/...; keep the user."""
+    m = re.match(r"^([a-zA-Z][a-zA-Z0-9+.-]*://)([^/@]*)@(.*)$", url or "")
+    if not m:
+        return url
+    userinfo = m.group(2).split(":", 1)[0]
+    return m.group(1) + (userinfo + "@" if userinfo else "") + m.group(3)
+
 
 def uris_for(paths):
     return [Gio.File.new_for_path(p).get_uri() for p in paths]
@@ -1067,7 +1264,15 @@ def parent_location(loc):
 
 def start_location(settings):
     """Where a new window / tab opens (Options > General > Open Harbor Files to)."""
-    return HOME_PAGE if settings.get("open_to") == "home" else THIS_PC
+    mode = settings.get("open_to")
+    if mode == "home":
+        return HOME_PAGE
+    if mode == "last":
+        last = settings.get("last_folder")
+        if last and (not last.startswith("file:")
+                     or os.path.isdir(Gio.File.new_for_uri(last).get_path() or "")):
+            return last
+    return THIS_PC
 
 
 # ------------------------------------------------------------------ FileManager1 (D-Bus)
@@ -1169,6 +1374,8 @@ def create_shortcut(target, folder, name=None):
 def send_to_targets(home=None, desktop=None, documents=None, removable=()):
     """Send to submenu entries: [(label, kind, dest)] with kind zip / link / copy."""
     home = home or home_dir()
+    if desktop is None and documents is None:
+        desktop, documents = user_folder("Desktop", home), user_folder("Documents", home)
     out = [("Compressed (zipped) folder", "zip", None)]
     if desktop and os.path.normpath(desktop) != os.path.normpath(home):
         out.append(("Desktop (create shortcut)", "link", desktop))
@@ -1194,13 +1401,25 @@ _TEXT_EXTS = (".txt", ".md", ".log", ".py", ".c", ".h", ".cpp", ".rs", ".go", ".
 _FONT_EXTS = (".ttf", ".otf", ".woff", ".woff2")
 
 
+OFFICE_EXTS = {".docx": "word", ".doc": "word", ".odt": "word", ".rtf": "word",
+               ".pptx": "slides", ".xlsx": "sheet", ".csv": "sheet", ".tsv": "sheet"}
+
+
+def office_kind(name):
+    """"word", "slides", "sheet" or None (Craft Suite preview)."""
+    return OFFICE_EXTS.get(os.path.splitext((name or "").lower())[1])
+
+
 def preview_kind(content_type, name="", is_dir=False):
-    """What the preview pane shows: folder, image, text, pdf, video, audio, font or none."""
+    """What the preview pane shows: folder, image, text, pdf, office, video,
+    audio, font or none."""
     if is_dir:
         return "folder"
     ct = (content_type or "").lower()
     low = (name or "").lower()
     ext = os.path.splitext(low)[1]
+    if ext in OFFICE_EXTS:
+        return "office"
     if ct == "application/pdf" or ext == ".pdf":
         return "pdf"
     if ct.startswith("font/") or ct in ("application/x-font-ttf", "application/x-font-otf",

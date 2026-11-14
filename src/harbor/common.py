@@ -75,7 +75,7 @@ list.hb-nav > row:hover { background: $nav_hover; }
 list.hb-nav > row:selected, list.hb-nav > row:selected:hover { background: $nav_sel; color: $text; }
 list.hb-nav > row:selected .hb-nav-pill { background: var(--accent-bg-color); }
 .hb-nav-pill { min-width: 3px; min-height: 16px; border-radius: 2px; background: transparent; }
-.hb-nav-label { font-size: 13.5px; }
+.hb-nav-label { font-size: 14px; }
 .hb-nav-heading { font-size: 12px; color: $dim; margin: 10px 18px 2px 18px; }
 
 /* icon badge: solid accent square with a white symbolic icon */

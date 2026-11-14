@@ -67,7 +67,7 @@ def more_menu(pin_label="Pin to Quick access"):
                         item("Copy path", "win.copy-path")),
                 section(item("Undo", "win.undo")),
                 section(item("Properties", "win.properties"),
-                        item("Options", "win.options"),
+                        item("Settings", "win.options"),
                         item("About Harbor Files", "win.about")))
 
 
