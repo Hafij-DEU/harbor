@@ -16,7 +16,7 @@ import threading
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
 
 from . import files_core as fc
-from . import files_icons, files_office
+from . import files_icons, files_office, files_package
 
 PREVIEW_MAX_IMAGE_BYTES = 64 * 1024 * 1024
 PREVIEW_PX = 640
@@ -330,8 +330,123 @@ class PreviewPane(Gtk.Box):
                     lab.set_attributes(attrs)
                     self.content.append(lab)
             self._later(gen, lambda: _font_family(path), got_family)
+        elif kind == "package":
+            self._show_package(item, gen, icon)
         else:
             self._message(icon, item.name, "No preview available")
+
+    # ------------------------------------------------------------ .deb / .apk
+    def _show_package(self, item, gen, icon):
+        sp = self._loading()
+        path, is_deb = item.path, item.name.lower().endswith(".deb")
+        work = (lambda: files_package.deb_info(path)) if is_deb else (
+            lambda: files_package.apk_info(path))
+
+        def got(info):
+            self.content.remove(sp)
+            if not info:
+                self._message(icon, item.name, "Can't read this package")
+                return
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
+                          css_classes=["hbf-pkg"])
+            img = Gtk.Image(pixel_size=96, halign=Gtk.Align.CENTER)
+            img.set_from_gicon(files_icons.themed_gicon(icon))
+            box.append(img)
+            if is_deb:
+                title = info["Package"]
+                desc = info.get("Description", "")
+                summary, _, long_desc = desc.partition("\n")
+            else:
+                title = info.get("label") or info["package"]
+                summary, long_desc = info["package"], ""
+            box.append(_wrap_label(title, "hbf-pane-title", center=True))
+            if summary:
+                box.append(_wrap_label(summary, "hb-dim", center=True))
+            if is_deb:
+                self._deb_actions(box, item, info)
+                rows = [("Version", info.get("Version")),
+                        ("Architecture", info.get("Architecture")),
+                        ("Installed size", _kib(info.get("Installed-Size"))),
+                        ("File size", GLib.format_size(item.size or 0)),
+                        ("Maintainer", info.get("Maintainer")),
+                        ("Homepage", info.get("Homepage"))]
+            else:
+                ver = info.get("versionName") or "?"
+                if info.get("versionCode") is not None:
+                    ver += "  (%s)" % info["versionCode"]
+                rows = [("Version", ver),
+                        ("Needs", files_package.android_name(info.get("minSdk"))),
+                        ("Built for", files_package.android_name(info.get("targetSdk"))),
+                        ("File size", GLib.format_size(item.size or 0)),
+                        ("Permissions", str(len(info["permissions"])))]
+            box.append(_details_grid([(k, v) for k, v in rows if v]))
+            if is_deb and info.get("Depends"):
+                box.append(_section("Needs", info["Depends"].replace(", ", "\n")))
+            if long_desc.strip():
+                box.append(_section("About", long_desc.strip()))
+            if not is_deb and info["permissions"]:
+                box.append(_section("Permissions", "\n".join(
+                    p.rsplit(".", 1)[-1] for p in info["permissions"])))
+            self.content.append(Gtk.ScrolledWindow(child=box, vexpand=True,
+                                                   hscrollbar_policy=Gtk.PolicyType.NEVER))
+            if is_deb:
+                self._later(gen, lambda: files_package.deb_icon(path),
+                            lambda res: _set_icon_bytes(img, res))
+        self._later(gen, work, got)
+
+    def _deb_actions(self, box, item, info):
+        state, ver, inst = info["state"], info.get("Version", ""), info.get("installed")
+        status = {
+            "not-installed": "Not installed",
+            "update": "Installed: %s, this file is newer" % inst,
+            "installed": "This version is installed",
+            "newer-installed": "A newer version is installed (%s)" % inst,
+            "wrong-arch": "Made for %s, this PC is %s" % (
+                info.get("Architecture"), files_package.native_arch()),
+            "unknown": "Installed: %s" % inst,
+        }[state]
+        box.append(_wrap_label(status, "hbf-pkg-state", center=True))
+        if state == "wrong-arch":
+            return
+        label = {"not-installed": "Install", "update": "Update to %s" % ver,
+                 "installed": "Reinstall", "newer-installed": "Install older version",
+                 "unknown": "Install"}[state]
+        btn = Gtk.Button(label=label, halign=Gtk.Align.CENTER,
+                         css_classes=["pill"] + (["suggested-action"]
+                                                 if state in ("not-installed", "update") else []))
+        btn.connect("clicked", lambda b: self._install_deb(b, item))
+        box.append(btn)
+
+    def _install_deb(self, btn, item):
+        hub = shutil.which("app-hub")
+        if hub is None:
+            app = Gio.AppInfo.get_default_for_type("application/vnd.debian.binary-package",
+                                                   False)
+            if app is None:
+                common_toast(self.win, "No app installs .deb files here")
+            else:
+                self._launch(app, item)
+            return
+        btn.set_sensitive(False)
+        btn.set_child(Gtk.Spinner(spinning=True))
+        try:
+            proc = Gio.Subprocess.new([hub, "install-deb", item.path],
+                                      Gio.SubprocessFlags.STDOUT_SILENCE
+                                      | Gio.SubprocessFlags.STDERR_SILENCE)
+        except GLib.Error as e:
+            common_toast(self.win, "Couldn't start App Hub: %s" % e.message)
+            return
+
+        def done(p, res):
+            try:
+                ok = p.wait_finish(res) and p.get_successful()
+            except GLib.Error:
+                ok = False
+            common_toast(self.win, "%s installed" % item.name if ok
+                         else "%s was not installed" % item.name)
+            if btn.get_root() is not None:      # still showing: refresh its state
+                self.show_item(item)
+        proc.wait_async(None, done)
 
     # ------------------------------------------------------------ office
     def _show_office(self, item, gen, icon, page=0):
@@ -424,6 +539,60 @@ class PreviewPane(Gtk.Box):
         if ok:
             self._fonts_added.add(path)
         return bool(ok)
+
+
+def _wrap_label(text, css, center=False):
+    lab = Gtk.Label(label=text, wrap=True, css_classes=[css], selectable=False,
+                    justify=Gtk.Justification.CENTER if center else Gtk.Justification.LEFT,
+                    xalign=0.5 if center else 0)
+    lab.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+    return lab
+
+
+def _details_grid(rows):
+    grid = Gtk.Grid(column_spacing=12, row_spacing=4, margin_top=6)
+    for r, (k, v) in enumerate(rows):
+        grid.attach(Gtk.Label(label=k, xalign=0, valign=Gtk.Align.START,
+                              css_classes=["hb-dim"]), 0, r, 1, 1)
+        val = _wrap_label(str(v), "hbf-pane-value")
+        val.set_selectable(True)
+        val.set_hexpand(True)
+        grid.attach(val, 1, r, 1, 1)
+    return grid
+
+
+def _section(title, text):
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin_top=6)
+    box.append(Gtk.Label(label=title, xalign=0, css_classes=["hbf-pkg-head"]))
+    val = _wrap_label(text, "hbf-pane-value")
+    val.set_selectable(True)
+    box.append(val)
+    return box
+
+
+def _kib(value):
+    try:
+        return GLib.format_size(int(value) * 1024)
+    except (TypeError, ValueError):
+        return None
+
+
+def _set_icon_bytes(img, res):
+    if not res:
+        return
+    data, ext = res
+    try:
+        if ext == ".svg":
+            loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
+            loader.set_size(192, 192)
+            loader.write(data)
+            loader.close()
+            tex = Gdk.Texture.new_for_pixbuf(loader.get_pixbuf())
+        else:
+            tex = Gdk.Texture.new_from_bytes(GLib.Bytes.new(data))
+    except (GLib.Error, TypeError):
+        return
+    img.set_from_paintable(tex)
 
 
 def common_toast(win, text):

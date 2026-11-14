@@ -144,7 +144,13 @@ CSS = """
     background: $surface; box-shadow: none; }
 .hbf-titlebar tabbar tab .tab-title { font-size: 13px; }
 .hbf-titlebar tabbar tabbox > separator { opacity: 0.6; margin-top: 12px; margin-bottom: 6px; }
-.hbf-titlebar windowcontrols button { min-height: 30px; min-width: 40px; }
+.hbf-titlebar windowcontrols { margin: 6px 6px 0 4px; }
+.hbf-titlebar windowcontrols > button { min-height: 24px; min-width: 24px; padding: 0; margin: 0 5px;
+    background: none; box-shadow: none; border-radius: 50%; }
+.hbf-titlebar windowcontrols > button > image { background: alpha(currentColor, 0.1); border-radius: 50%;
+    padding: 4px; -gtk-icon-size: 12px; }
+.hbf-titlebar windowcontrols > button:hover > image { background: alpha(currentColor, 0.16); }
+.hbf-titlebar windowcontrols > button:active > image { background: alpha(currentColor, 0.24); }
 button.hbf-newtab { min-height: 28px; min-width: 28px; margin: 6px 4px 0 4px; border-radius: 5px; }
 
 .hbf-navbar { background: $surface; padding: 6px 10px; }
@@ -177,6 +183,12 @@ searchentry.hbf-search { min-height: 32px; }
 .hbf-pane { background: $surface; border-left: 1px solid $divider; }
 .hbf-pane-title { font-size: 15px; font-weight: 600; }
 .hbf-pane-value { font-size: 13px; }
+.hbf-pin-mark { opacity: 0.55; }
+.hbf-viewtoggle button { min-height: 22px; min-width: 26px; padding: 0 4px; border-radius: 4px; }
+.hbf-viewtoggle button:checked { background: $nav_sel; }
+.hbf-pkg { margin: 14px 12px; }
+.hbf-pkg-state { font-size: 13px; font-weight: 600; color: $accent; }
+.hbf-pkg-head { font-size: 13px; font-weight: 600; }
 separator.hbf-sep, .hbf-sep { background: $divider; min-height: 1px; }
 .hbf-status { background: $surface; padding: 3px 14px; min-height: 24px;
     border-top: 1px solid $divider; font-size: 12px; color: $dim; }
@@ -407,6 +419,17 @@ class FilesWindow(HarborWindow):
 
         # status bar with the operations area
         status = Gtk.Box(spacing=12, css_classes=["hbf-status"])
+        vbox = Gtk.Box(css_classes=["linked", "hbf-viewtoggle"], valign=Gtk.Align.CENTER)
+        self._vt_list = Gtk.ToggleButton(icon_name="view-list-symbolic", css_classes=["flat"],
+                                         tooltip_text="Details (list)")
+        self._vt_grid = Gtk.ToggleButton(icon_name="view-grid-symbolic", css_classes=["flat"],
+                                         tooltip_text="Icons (grid)", group=self._vt_list)
+        self._vt_list.connect("toggled", self._on_view_toggle, "details")
+        self._vt_grid.connect("toggled", self._on_view_toggle, "grid")
+        vbox.append(self._vt_list)
+        vbox.append(self._vt_grid)
+        self._sync_view_toggle(self.settings.get("view"))
+        status.append(vbox)
         self.status_label = Gtk.Label(xalign=0, hexpand=True)
         status.append(self.status_label)
         self.ops_box = Gtk.Box(spacing=8, visible=False)
@@ -979,6 +1002,19 @@ class FilesWindow(HarborWindow):
         for t in self.tabs():
             t.view.set_view(view, size)
         self._sync_options("icon_size", size)
+        for w in self.app.files_windows():
+            w._sync_view_toggle(view)
+
+    def _sync_view_toggle(self, view):
+        self._vt_quiet = True
+        (self._vt_list if view == "details" else self._vt_grid).set_active(True)
+        self._vt_quiet = False
+
+    def _on_view_toggle(self, btn, which):
+        if not btn.get_active() or getattr(self, "_vt_quiet", False):
+            return
+        key = "details" if which == "details" else self.settings.get("icon_size")
+        self.activate_action("win.view", GLib.Variant("s", key))
 
     def _set_sort_field(self, field):
         if field not in fc.SORT_FIELDS:

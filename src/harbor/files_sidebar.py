@@ -66,6 +66,16 @@ def pin(settings, path):
     return settings.pin(path)
 
 
+def pin_dropped(settings, paths):
+    """Pin each dropped local folder that isn't in Quick access yet; returns the new pins."""
+    added = []
+    for p in paths:
+        if p and os.path.isdir(p) and not is_pinned(settings, p):
+            pin(settings, p)
+            added.append(os.path.normpath(p))
+    return added
+
+
 def unpin(settings, path):
     path = os.path.normpath(path)
     defaults = {os.path.normpath(fc.home_dir())} | {p for p, _l, _i in user_dirs()}
@@ -89,7 +99,7 @@ class SideList(NavList):
         self.remove_all()
         self.rows = {}
 
-    def add_entry(self, key, text, icon, indent=0, tooltip=None):
+    def add_entry(self, key, text, icon, indent=0, tooltip=None, pinned=False):
         box = Gtk.Box(spacing=10, margin_start=4 + indent, margin_end=10)
         box.append(Gtk.Box(css_classes=["hb-nav-pill"], valign=Gtk.Align.CENTER))
         img = Gtk.Image(pixel_size=18)
@@ -101,6 +111,9 @@ class SideList(NavList):
         lab = Gtk.Label(label=text, xalign=0, hexpand=True, css_classes=["hb-nav-label"],
                         ellipsize=3)
         box.append(lab)
+        if pinned:
+            box.append(Gtk.Image(icon_name="view-pin-symbolic", pixel_size=12,
+                                 css_classes=["hbf-pin-mark"]))
         row = Gtk.ListBoxRow(child=box)
         row.key = key
         row.label = lab
@@ -143,6 +156,9 @@ class Sidebar(Gtk.Box):
         click = Gtk.GestureClick(button=0)
         click.connect("pressed", self._on_click)
         self.list.add_controller(click)
+        drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY | Gdk.DragAction.LINK)
+        drop.connect("drop", self._on_drop)
+        self.list.add_controller(drop)
         self._popover = None
         self.has_network = "network" in Gio.Vfs.get_default().get_supported_uri_schemes()
         self.vm = Gio.VolumeMonitor.get()
@@ -199,14 +215,14 @@ class Sidebar(Gtk.Box):
         self.targets = {}
         self.objects = {}
 
-        def add(key, text, icon, target, indent=0, tooltip=None):
-            lst.add_entry(key, text, icon, indent, tooltip)
+        def add(key, text, icon, target, indent=0, tooltip=None, pinned=False):
+            lst.add_entry(key, text, icon, indent, tooltip, pinned)
             self.targets[key] = target
         add("home", "Home", "go-home-symbolic", fc.HOME_PAGE)
         lst.add_separator()
         for q in quick_access(self.settings):
             add("pin:" + q["path"], q["label"], q["icon"], fc.location_for(q["path"]),
-                tooltip=q["path"])
+                tooltip=q["path"], pinned=not q["default"])
         lst.add_separator()
         add("thispc", "This PC", "computer-symbolic", fc.THIS_PC)
         add("root", "File System", "drive-harddisk-symbolic", fc.location_for("/"), indent=14)
@@ -226,6 +242,16 @@ class Sidebar(Gtk.Box):
             else "user-trash-symbolic", fc.TRASH_URI)
         if self.current:
             self.sync(self.current)
+
+    def _on_drop(self, _target, value, _x, _y):
+        """Folders dropped on the navigation pane get pinned to Quick access."""
+        added = pin_dropped(self.settings, [f.get_path() for f in value.get_files()])
+        if not added:
+            return False
+        self.rebuild()
+        self.win.notify_toast("Pinned %s" % os.path.basename(added[0]) if len(added) == 1
+                              else "Pinned %d folders" % len(added))
+        return True
 
     def queue_trash_update(self):
         # emptying a big trash fires one event per item: coalesce them

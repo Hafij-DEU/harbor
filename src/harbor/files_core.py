@@ -1446,6 +1446,8 @@ def preview_kind(content_type, name="", is_dir=False):
     ct = (content_type or "").lower()
     low = (name or "").lower()
     ext = os.path.splitext(low)[1]
+    if ext in (".deb", ".apk"):
+        return "package"
     if ext in OFFICE_EXTS:
         return "office"
     if ct == "application/pdf" or ext == ".pdf":
