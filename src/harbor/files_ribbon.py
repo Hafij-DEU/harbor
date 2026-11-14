@@ -130,6 +130,7 @@ QUICK = (
 SIMPLE_END = (
     ("menu", "Sort", "sort", "harbor-rb-sort", "small"),
     ("menu", "View", "view", "harbor-rb-large-icons", "small"),
+    ("toggle", "Split", "win.split-view", "harbor-rb-split", "small"),
     ("toggle", "Details", "win.details-pane", "harbor-rb-details-pane", "small"),
     ("toggle", "Preview", "win.preview-pane", "harbor-rb-preview-pane", "small"),
 )
