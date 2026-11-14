@@ -128,6 +128,12 @@ class PreviewPane(Gtk.Box):
     def _drag_begin(self, g, _x, _y):
         self._drag_start = self.get_width()
         self._drag_x0 = self._pointer_x(g)
+        self._drag_pending = None
+        # at most one relayout per frame, however many motion events arrive
+        self._drag_tick = self.add_tick_callback(self._drag_on_tick)
+        # re-wrapping a long text on every frame is what flickers: wrap once
+        # when the drag ends
+        self._set_text_wrap(False)
 
     def _drag_width(self, g, dx):
         x = self._pointer_x(g)
@@ -136,12 +142,34 @@ class PreviewPane(Gtk.Box):
         return self._drag_start - dx
 
     def _drag_update(self, g, dx, _dy):
-        w = self._drag_width(g, dx)
-        if abs(w - self.get_width()) >= 2:
+        self._drag_pending = self._drag_width(g, dx)
+
+    def _drag_on_tick(self, _widget, _clock):
+        w, self._drag_pending = self._drag_pending, None
+        if w is not None and abs(w - self.get_width()) >= 2:
             self.set_pane_width(w)
+        return True
 
     def _drag_end(self, g, dx, _dy):
+        if getattr(self, "_drag_tick", None):
+            self.remove_tick_callback(self._drag_tick)
+            self._drag_tick = None
+        self._drag_pending = None
         self.set_pane_width(self._drag_width(g, dx), save=True)
+        self._set_text_wrap(True)
+
+    def _set_text_wrap(self, on):
+        mode = Gtk.WrapMode.WORD_CHAR if on else Gtk.WrapMode.NONE
+        stack = [self.content]
+        while stack:
+            w = stack.pop()
+            if isinstance(w, Gtk.TextView):
+                w.set_wrap_mode(mode)
+                continue
+            c = w.get_first_child()
+            while c is not None:
+                stack.append(c)
+                c = c.get_next_sibling()
 
     # ------------------------------------------------------------ helpers
     def _clear(self):
