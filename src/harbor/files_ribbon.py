@@ -60,6 +60,11 @@ RIBBON = (
             ("button", "Zip", "win.compress", "package-x-generic-symbolic", "big"),
             ("button", "Copy path", "win.copy-path", "insert-link-symbolic", "big"),
         )),
+        ("Wi-Fi", (
+            ("button", "Share over Wi-Fi", "win.share-wifi", "network-wireless-symbolic", "big"),
+            ("button", "Share selected", "win.share-folder", "send-to-symbolic", "small"),
+            ("button", "Scan phone QR", "win.scan-phone", "camera-photo-symbolic", "small"),
+        )),
     )),
     ("View", (
         ("Panes", (

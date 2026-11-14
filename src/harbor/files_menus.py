@@ -120,6 +120,16 @@ def view_menu():
                         item("File name extensions", "win.show-ext")))
 
 
+def share_menu():
+    """The command bar's Share button."""
+    m = Gio.Menu()
+    m.append_section(None, section(
+        item("Share over Wi-Fi…", "win.share-wifi", icon="network-wireless-symbolic"),
+        item("Share selected over Wi-Fi", "win.share-folder"),
+        item("Scan phone QR…", "win.scan-phone")))
+    return m
+
+
 def more_menu(pin_label="Pin to Quick access"):
     return menu(section(item("Select all", "win.select-all"),
                         item("Select none", "win.select-none"),

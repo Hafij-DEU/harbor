@@ -347,6 +347,9 @@ class FilesWindow(HarborWindow):
                                   ("user-trash-symbolic", "win.delete", "Delete (Delete)")):
             cmd.append(Gtk.Button(icon_name=icon, action_name=action, tooltip_text=tip,
                                   css_classes=["hb-tool"]))
+        self.share_btn = menu_tool_button("send-to-symbolic", "Share", fm.share_menu())
+        self.share_btn.set_tooltip_text("Share over Wi-Fi with your phone")
+        cmd.append(self.share_btn)
         self.restore_btn = tool_button("edit-undo-symbolic", "Restore")
         self.restore_btn.set_action_name("win.restore")
         cmd.append(self.restore_btn)
