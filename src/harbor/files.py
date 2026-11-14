@@ -362,7 +362,7 @@ window.hbf-custom .hbf-ribbon { margin: 2px 10px 8px 10px; border: none; border-
     background: $surface;
     box-shadow: 0 1px 3px alpha(black, 0.12), 0 0 0 1px alpha(currentColor, 0.05); }
 window.hbf-custom .hbf-ribbon-tabs { padding: 6px 8px 2px 8px; border-bottom: 1px solid alpha(currentColor, 0.06); }
-window.hbf-custom button.hbf-ribbon-tab { border-radius: 999px; min-height: 24px; padding: 2px 14px;
+window.hbf-custom button.hbf-ribbon-tab { border-radius: 999px; min-height: 38px; padding: 0 18px; font-size: 14px;
     margin: 0 2px; }
 window.hbf-custom button.hbf-ribbon-tab:checked { background: alpha(var(--accent-bg-color), 0.14); }
 window.hbf-custom button.hbf-ribbon-file, window.hbf-custom button.hbf-ribbon-file:checked {

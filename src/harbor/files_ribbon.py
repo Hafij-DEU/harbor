@@ -343,7 +343,7 @@ class Ribbon(Gtk.Box):
                 row.append(w)
                 column = None
             else:
-                if column is None or column.n >= 3:
+                if column is None or column.n >= (2 if self.custom else 3):   # Custom: one height for every tab
                     column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0,
                                      valign=Gtk.Align.START)
                     column.n = 0
