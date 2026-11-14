@@ -1,0 +1,13 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- folder back -->
+    <path android:fillColor="#FFC83D"
+        android:pathData="M30,38 h18 l6,6 h24 a4,4 0 0 1 4,4 v24 a4,4 0 0 1 -4,4 h-48 a4,4 0 0 1 -4,-4 v-34 a4,4 0 0 1 4,-4 z" />
+    <!-- folder front -->
+    <path android:fillColor="#FFE08A"
+        android:pathData="M26,52 a4,4 0 0 1 4,-4 h48 a4,4 0 0 1 4,4 v20 a4,4 0 0 1 -4,4 h-48 a4,4 0 0 1 -4,-4 z" />
+    <!-- anchor-ish wave -->
+    <path android:fillColor="#0067C0"
+        android:pathData="M38,64 q4,-4 8,0 t8,0 t8,0 t8,0 v4 q-4,-4 -8,0 t-8,0 t-8,0 t-8,0 z" />
+</vector>

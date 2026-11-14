@@ -61,6 +61,25 @@ Harbor Files does not make itself your default file manager.
 The Settings app is in progress.
 
 
+## Harbor Files for Android
+
+`android/` holds a phone version of Harbor Files (package `com.hafij.harborfiles`, Android 10+), styled after the Xiaomi file manager.
+
+- **Recent** first: every new file of any kind, grouped by day and by the app or folder it came from.
+- **Browse**: categories (images, videos, audio, documents, APKs, archives), Downloads, favourites, Recently deleted and storage volumes.
+- **Connect**: start an FTP server on the phone (user `harbor`, a 6-digit PIN, QR code, optional read-only, idle stop), or open a Harbor PC share (WebDAV, the PIN shown in Harbor Files on the desktop) or any FTP server.
+- **Send** through MeshDrop when it is installed, or through any other app.
+- Own settings: hidden and system folders, screenshots in Recent, Recently deleted keep time, theme and accent colour, server port.
+
+Build and test:
+
+```bash
+cd android
+gradle --offline testDebugUnitTest assembleRelease
+```
+
+Release builds are signed when `HARBOR_KEYSTORE_FILE`, `HARBOR_KEYSTORE_PASSWORD`, `HARBOR_KEY_ALIAS` and `HARBOR_KEY_PASSWORD` are set; otherwise the debug key is used. `HARBOR_DAV="<port> <pin>"` runs an extra test against a live desktop share.
+
 ## Install
 
 Each app is its own package. Download `harbor-files_<version>_all.deb`
