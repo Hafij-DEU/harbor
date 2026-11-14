@@ -287,6 +287,8 @@ class FilesWindow(HarborWindow):
         self._undo = []
         self._menu_ctx = None
         self._options = None
+        self.split_tab = None
+        self._split_active = False
         self._build()
         self.ops = Operations(self)
         self._install_actions()
