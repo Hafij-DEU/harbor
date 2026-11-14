@@ -1,6 +1,7 @@
 """Harbor Files: the navigation pane (Home, Quick access, This PC, drives, Network, Trash)."""
 
 import os
+from urllib.parse import urlsplit
 
 from gi.repository import Gdk, Gio, GLib, GObject, Gtk
 
@@ -8,6 +9,21 @@ from . import files_core as fc
 from . import files_network as fn
 from . import files_icons
 from .common import NavList
+
+PHONE_CHECK_SECS = 5
+PHONE_MISSES = 2
+
+
+def phone_share_addr(uri):
+    """(host, port) of a Harbor phone share (ftp://harbor@ip:port/), else None."""
+    try:
+        u = urlsplit(uri or "")
+        port = u.port
+    except ValueError:
+        return None
+    if u.scheme != "ftp" or u.username != "harbor" or not u.hostname:
+        return None
+    return u.hostname, port or 21
 
 def user_dirs(home=None, xdg=None):
     """[(path, label, icon)] for the user folders that exist, in Explorer order
@@ -134,6 +150,8 @@ class Sidebar(Gtk.Box):
         for sig in ("mount-added", "mount-removed", "mount-changed", "volume-added",
                     "volume-removed", "volume-changed"):
             self.vm.connect(sig, lambda *_: self.queue_rebuild())
+        self._phone_miss = {}    # phone share uri -> failed reach checks in a row
+        GLib.timeout_add_seconds(PHONE_CHECK_SECS, self._check_phones)
         self._trash_mon = None
         try:
             self._trash_mon = Gio.File.new_for_uri(fc.TRASH_URI).monitor_directory(
@@ -276,6 +294,50 @@ class Sidebar(Gtk.Box):
             if m is not None:
                 self.emit("open", m.get_root().get_uri(), new_tab)
         vol.mount(Gio.MountMountFlags.NONE, op, None, done)
+
+    def _check_phones(self):
+        """Drop a Harbor phone share once the phone stops answering, so a
+        disconnected phone does not linger under This PC."""
+        if self.get_root() is None:     # window closed
+            return False
+        live = set()
+        for m in self.vm.get_mounts():
+            uri = m.get_root().get_uri()
+            addr = phone_share_addr(uri)
+            if addr is None:
+                continue
+            live.add(uri)
+            client = Gio.SocketClient(timeout=3)
+
+            def done(c, res, m=m, uri=uri):
+                try:
+                    c.connect_finish(res).close(None)
+                    self._phone_miss[uri] = 0
+                    return
+                except GLib.Error:
+                    pass
+                self._phone_miss[uri] = self._phone_miss.get(uri, 0) + 1
+                if self._phone_miss[uri] >= PHONE_MISSES:
+                    self._phone_miss.pop(uri, None)
+                    self._drop_phone(m, uri)
+            client.connect_async(Gio.NetworkAddress.new(*addr), None, done)
+        for uri in list(self._phone_miss):
+            if uri not in live:
+                del self._phone_miss[uri]
+        return True
+
+    def _drop_phone(self, mount, uri):
+        for tab in self.win.tabs():
+            if isinstance(tab.location, str) and tab.location.startswith(uri.rstrip("/")):
+                tab.navigate(fc.THIS_PC)
+
+        def done(o, res):
+            try:
+                o.unmount_with_operation_finish(res)
+            except GLib.Error:
+                return
+            self.win.notify_toast("Phone disconnected")
+        mount.unmount_with_operation(Gio.MountUnmountFlags.FORCE, None, None, done)
 
     def unmount(self, key, eject=False):
         obj = self.objects.get(key)
