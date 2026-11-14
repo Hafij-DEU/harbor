@@ -216,3 +216,31 @@ def test_parse_phone_qr():
     assert parse_phone_qr("http://10.0.0.7:8765/#pin=1") is None
     assert parse_phone_qr("hello") is None
     assert parse_phone_qr("ftp://h:1@x:99999/") is None
+
+
+def test_share_single_file(tmp_path):
+    (tmp_path / "app.apk").write_bytes(b"PK apk")
+    (tmp_path / "other.txt").write_text("not shared")
+    srv = fs.ShareServer([{"path": str(tmp_path / "app.apk"), "upload": True}],
+                         port=random.randint(20000, 40000), host="127.0.0.1", minutes=0)
+    srv.start()
+    try:
+        assert srv.upload == {"app.apk": False}
+        c = cookie(srv)
+        r, body = req(srv, "GET", "/", headers=c)
+        assert r.status == 200 and b"app.apk" in body and b"/f/app.apk?dl=1" in body
+        r, body = req(srv, "GET", "/f/app.apk", headers=c)
+        assert r.status == 200 and body == b"PK apk"
+        for bad in ("/f/app.apk/x", "/f/app.apk/../other.txt", "/f/other.txt"):
+            r, body = req(srv, "GET", bad, headers=c)
+            assert r.status == 404 and b"not shared" not in body
+        r, body = req(srv, "PROPFIND", "/dav/", headers={**dav(srv), "Depth": "1"})
+        assert r.status == 207 and b"<D:href>/dav/app.apk</D:href>" in body
+        r, body = req(srv, "GET", "/dav/app.apk", headers=dav(srv))
+        assert r.status == 200 and body == b"PK apk"
+        r, _ = req(srv, "PUT", "/dav/app.apk/x.txt", b"x", dav(srv))
+        assert r.status in (400, 403)
+        r, _ = req(srv, "DELETE", "/dav/app.apk", headers=dav(srv))
+        assert r.status == 404 and (tmp_path / "app.apk").exists()
+    finally:
+        srv.stop()

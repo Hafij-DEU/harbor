@@ -101,7 +101,7 @@ def extra_section(sel, st):
         item("Customize folder…", "win.customize-folder", icon="folder-symbolic")
         if n == 1 and one.get("is_dir") and one.get("local") else None,
         item("Share over Wi-Fi…", "win.share-folder", icon="network-wireless-symbolic")
-        if n == 1 and one.get("is_dir") and one.get("local") else None,
+        if n and all(s.get("local") for s in sel) else None,
     )
 
 

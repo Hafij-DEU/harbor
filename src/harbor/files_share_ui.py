@@ -131,29 +131,41 @@ def start_share(folders, port, upload_max_mb, minutes):
 
 
 class ShareDialog(Adw.Dialog):
-    def __init__(self, win, add_path=None):
+    def __init__(self, win, add_paths=()):
         super().__init__(title="Share over Wi-Fi", content_width=520, content_height=680)
         self.win = win
         self.app = win.app
         self.settings = win.app.settings
-        if add_path:
-            add_share_folder(self.settings, add_path)
+        for p in add_paths:
+            add_share_folder(self.settings, p)
         tv = Adw.ToolbarView()
         tv.add_top_bar(Adw.HeaderBar())
         self.page = Adw.PreferencesPage()
         tv.set_content(self.page)
         self.set_child(tv)
         self._tick = 0
+        self._restart = False
         self.server = running_share()
         self._watch = Gio.bus_watch_name(Gio.BusType.SESSION, BUS_NAME,
                                          Gio.BusNameWatcherFlags.NONE, None, self._vanished)
         self.connect("closed", lambda *_: (self._stop_tick(),
                                            Gio.bus_unwatch_name(self._watch)))
         self.build()
+        if add_paths:
+            # Right-click > Share over Wi-Fi: start now (or restart to include them).
+            if self.server is None:
+                self.start()
+            else:
+                self._restart = True
+                self.server.stop()
 
     def _vanished(self, *_):
         if self.server is not None:
             self.server = None
+            if self._restart:
+                self._restart = False
+                self.start()
+                return
             self.win.notify_toast("Sharing over Wi-Fi stopped")
             self.build()
 
@@ -248,26 +260,30 @@ class ShareDialog(Adw.Dialog):
         return g
 
     def _folders_group(self, running):
-        g = Adw.PreferencesGroup(title="Shared folders",
-                                 description="Only these folders (and what is inside) can be "
-                                             "opened. Hidden files are never shared.")
+        g = Adw.PreferencesGroup(title="Shared folders and files",
+                                 description="Only these (and what is inside the folders) can "
+                                             "be opened. Hidden files are never shared. "
+                                             "Right-click any file in Harbor Files to share it.")
         add = Gtk.Button(label="Add folder…", css_classes=["flat"], sensitive=not running)
         add.connect("clicked", self._pick_folder)
         g.set_header_suffix(add)
         folders = share_folders(self.settings)
         if not folders:
-            g.add(Adw.ActionRow(title="No folders yet", subtitle="Add a folder to share it"))
+            g.add(Adw.ActionRow(title="Nothing shared yet", subtitle="Add a folder to share it"))
         for f in folders:
+            is_dir = not os.path.isfile(f["path"])
             row = Adw.ActionRow(title=os.path.basename(f["path"]) or f["path"],
                                 subtitle=f["path"], sensitive=not running)
-            row.add_prefix(Gtk.Image(icon_name="folder-symbolic"))
-            up = Gtk.Switch(active=f["upload"], valign=Gtk.Align.CENTER,
-                            tooltip_text="Let other devices upload into this folder")
-            up.connect("notify::active",
-                       lambda sw, _p, p=f["path"]: set_share_upload(self.settings, p,
-                                                                     sw.get_active()))
-            row.add_suffix(Gtk.Label(label="Uploads", css_classes=["dim-label"]))
-            row.add_suffix(up)
+            row.add_prefix(Gtk.Image(icon_name="folder-symbolic" if is_dir
+                                     else "text-x-generic-symbolic"))
+            if is_dir:
+                up = Gtk.Switch(active=f["upload"], valign=Gtk.Align.CENTER,
+                                tooltip_text="Let other devices upload into this folder")
+                up.connect("notify::active",
+                           lambda sw, _p, p=f["path"]: set_share_upload(self.settings, p,
+                                                                         sw.get_active()))
+                row.add_suffix(Gtk.Label(label="Uploads", css_classes=["dim-label"]))
+                row.add_suffix(up)
             rm = Gtk.Button(icon_name="list-remove-symbolic", valign=Gtk.Align.CENTER,
                             css_classes=["flat"], tooltip_text="Stop sharing this folder")
             rm.connect("clicked", lambda _b, p=f["path"]: (
@@ -305,7 +321,8 @@ class ShareDialog(Adw.Dialog):
 
     # ------------------------------------------------------------ server
     def start(self):
-        folders = [f for f in share_folders(self.settings) if os.path.isdir(f["path"])]
+        folders = [f for f in share_folders(self.settings)
+                   if os.path.isdir(f["path"]) or os.path.isfile(f["path"])]
         if not folders:
             return
         s = self.settings

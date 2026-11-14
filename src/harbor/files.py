@@ -1082,14 +1082,14 @@ class FilesWindow(HarborWindow):
             CustomizeDialog(self, items[0].gfile).present(self)
 
     def share_wifi(self, selected=False):
-        """Open the Share over Wi-Fi dialog; with selected, add that folder."""
-        path = None
+        """Open the Share over Wi-Fi dialog; with selected, share the selected
+        files and folders right away."""
+        paths = []
         if selected:
             _tab, items = self._sel()
-            if len(items) == 1 and items[0].is_dir and items[0].path:
-                path = items[0].path
+            paths = [it.path for it in items if it.path]
         from .files_share_ui import ShareDialog
-        ShareDialog(self, add_path=path).present(self)
+        ShareDialog(self, add_paths=paths).present(self)
 
     def scan_phone(self):
         """Scan Harbor for Android's QR code with the webcam and open the phone."""

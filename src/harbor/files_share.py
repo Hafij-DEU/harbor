@@ -174,7 +174,8 @@ class ShareServer:
                  on_stop=None):
         self.roots = share_names([f["path"] for f in folders])
         uploads = {os.path.realpath(f["path"]) for f in folders if f.get("upload")}
-        self.upload = {n: (p in uploads) for n, p in self.roots.items()}
+        # A shared file is read-only: there is no folder to upload into.
+        self.upload = {n: (p in uploads and os.path.isdir(p)) for n, p in self.roots.items()}
         self.port = port
         self.upload_max = upload_max_mb * 1024 * 1024
         self.host = host
@@ -218,8 +219,8 @@ class ShareServer:
         if not self.host:
             raise OSError("No Wi-Fi or local network connection")
         for f in self.roots.values():
-            if not os.path.isdir(f):
-                raise OSError("Folder not found: %s" % f)
+            if not (os.path.isdir(f) or os.path.isfile(f)):
+                raise OSError("Not found: %s" % f)
         handler = type("H", (Handler,), {"share": self})
         last = None
         for port in range(self.port, self.port + 10):
@@ -264,6 +265,8 @@ class ShareServer:
             if not p or p in (".", "..") or p.startswith(".") or "\x00" in p or "/" in p:
                 return None, None
         root = self.roots[parts[0]]
+        if not os.path.isdir(root):          # a shared file has nothing below it
+            return (parts[0], root) if len(parts) == 1 else (None, None)
         path = os.path.realpath(os.path.join(root, *parts[1:]))
         if not is_inside(path, root):
             return None, None
@@ -483,10 +486,21 @@ class Handler(BaseHTTPRequestHandler):
         self._html(code, "Harbor Files", body)
 
     def index(self):
-        rows = "".join("<div class=row>📁 <a href='/f/%s/'>%s</a><span class=s>%s</span></div>"
-                       % (quote(n), html.escape(n),
-                          "uploads on" if self.share.upload[n] else "read-only")
-                       for n in self.share.roots)
+        rows = []
+        for n, p in self.share.roots.items():
+            if os.path.isdir(p):
+                rows.append("<div class=row>📁 <a href='/f/%s/'>%s</a><span class=s>%s</span>"
+                            "</div>" % (quote(n), html.escape(n), "uploads on"
+                                        if self.share.upload[n] else "read-only"))
+                continue
+            try:
+                size = human_size(os.path.getsize(p))
+            except OSError:
+                continue
+            rows.append("<div class=row>📄 <a href='/f/%s'>%s</a><span class=s>%s</span> "
+                        "<a class=s href='/f/%s?dl=1'>download</a></div>"
+                        % (quote(n), html.escape(n), size, quote(n)))
+        rows = "".join(rows)
         self._html(200, "Harbor Files", "<header>Shared from this computer</header><main>%s"
                    "<p><a href=/logout>Sign out</a></p></main>" % rows)
 
@@ -689,7 +703,8 @@ class Handler(BaseHTTPRequestHandler):
             out.append(self._prop("/dav/", "Harbor", None))
             if depth != "0":
                 for nm, p in self.share.roots.items():
-                    out.append(self._prop("/dav/%s/" % quote(nm), nm, p))
+                    out.append(self._prop("/dav/%s%s" % (quote(nm), "/" if os.path.isdir(p)
+                                                         else ""), nm, p))
         else:
             name, path = self._dav_target(parts)
             if path is None or not os.path.exists(path):
