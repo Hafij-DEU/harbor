@@ -126,16 +126,10 @@ QUICK = (
     (("button", "New folder", "win.new-folder", "harbor-rb-new-folder", "small"),
      ("menu", "New item", "new", "harbor-rb-new-item", "small")),
 )
-# what the quick line's Share menu holds (so the ribbon does not repeat them)
-SHARE_MENU = (("Zip", "win.compress", "harbor-rbc-zip"),
-              ("Copy path", "win.copy-path", "harbor-rbc-link"),
-              ("Share over Wi-Fi", "win.share-wifi", "harbor-rbc-wifi"),
-              ("Share selected", "win.share-folder", "harbor-rbc-send"),
-              ("Scan phone QR", "win.scan-phone", "harbor-rbc-qr"))
 # always visible at the right end, whichever tab is open (like Windows 11)
 SIMPLE_END = (
     ("menu", "Sort", "sort", "harbor-rb-sort", "small"),
-    ("menu", "Share", "share", "harbor-rb-send", "small"),
+    ("menu", "View", "view", "harbor-rb-large-icons", "small"),
     ("toggle", "Split", "win.split-view", "harbor-rb-split", "small"),
     ("toggle", "Details", "win.details-pane", "harbor-rb-details-pane", "small"),
     ("toggle", "Preview", "win.preview-pane", "harbor-rb-preview-pane", "small"),
@@ -301,7 +295,7 @@ class Ribbon(Gtk.Box):
     def _custom_groups(groups):
         """Ribbon groups minus what the quick line already has (no duplicates)."""
         quick = {e[2] for items in QUICK for e in items} | {e[2] for e in SIMPLE_END}
-        quick |= {e[1] for e in SHARE_MENU}
+        quick.add("win.view")      # the View drop-down covers the layout toggles
         groups = [(c, [e for e in items if e[2] not in quick]) for c, items in groups]
         return [(c, items) for c, items in groups if items]
 
@@ -401,9 +395,6 @@ class Ribbon(Gtk.Box):
             if provider is not None:
                 w.set_menu_model(provider())
             self.menu_buttons[action] = w
-            if action == "share":
-                # one row of colour icon buttons, like the merged menu's top row
-                w.get_popover().add_css_class("hbf-merged-menu")
             return w
         if kind == "toggle":
             w = Gtk.ToggleButton(child=inner, css_classes=cls, action_name=action)
