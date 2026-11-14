@@ -244,3 +244,30 @@ def test_share_single_file(tmp_path):
         assert r.status == 404 and (tmp_path / "app.apk").exists()
     finally:
         srv.stop()
+
+
+def test_right_click_share_is_one_off(tmp_path, monkeypatch):
+    """Sharing a selected item shares only it and leaves the saved list alone."""
+    import types
+    import gi
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw
+    from harbor import common, files_core as fc
+    from harbor.files_share_ui import ShareDialog, add_share_folder, share_folders
+    Adw.init()
+    monkeypatch.setattr(common, "DRY_RUN", True)
+    saved, one = tmp_path / "saved", tmp_path / "one"
+    saved.mkdir()
+    one.mkdir()
+    s = fc.Settings(str(tmp_path / "files.json"))
+    add_share_folder(s, str(saved))
+    win = types.SimpleNamespace(app=types.SimpleNamespace(settings=s),
+                                notify_toast=lambda *a, **k: None)
+    common.DRY_RUN_LOG.clear()
+    ShareDialog(win, add_paths=[str(one)])
+    assert common.DRY_RUN_LOG[-1] == ["share-start", [str(one)]]
+    assert [f["path"] for f in share_folders(s)] == [str(saved)]
+    common.DRY_RUN_LOG.clear()
+    ShareDialog(win).start()
+    assert common.DRY_RUN_LOG[-1] == ["share-start", [str(saved)]]

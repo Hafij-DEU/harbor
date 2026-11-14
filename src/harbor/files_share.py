@@ -206,7 +206,8 @@ class ShareServer:
     def status(self):
         return {"url": self.url, "dav_url": self.dav_url, "qr_text": self.qr_text,
                 "pin": self.pin, "host": self.host, "port": self.port,
-                "stops_at": self.stops_at}
+                "stops_at": self.stops_at,
+                "folders": [{"path": p, "upload": self.upload[n]} for n, p in self.roots.items()]}
 
     @property
     def dav_url(self):
