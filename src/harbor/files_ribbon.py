@@ -324,7 +324,7 @@ class Ribbon(Gtk.Box):
         for e in items:
             b = self._button(e, simple=True)
             lab = _find_label(b)
-            if lab is not None and e[1] not in ("Cut", "Copy", "Rename", "Delete"):
+            if lab is not None and e[1] not in ("Cut", "Copy", "Rename", "Delete", "New folder"):
                 lab.set_visible(True)
             box.append(b)
         return box
@@ -362,7 +362,7 @@ class Ribbon(Gtk.Box):
         big = size == "big"
         if simple:
             inner = Gtk.Box(spacing=6)
-            inner.append(_icon(icon, 22))
+            inner.append(_icon(icon, 24))
             # labels only on the drop-downs (Move to, Copy to, New...), the
             # rest are icon buttons with tooltips so the whole tab fits one row
             lab = Gtk.Label(label=label, visible=kind == "menu" or action in SIMPLE_LABELS)
@@ -370,7 +370,7 @@ class Ribbon(Gtk.Box):
         else:
             inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL if big
                             else Gtk.Orientation.HORIZONTAL, spacing=2 if big else 6)
-            inner.append(_icon(icon, 32 if big else 16))
+            inner.append(_icon(icon, (36 if big else 22) if self.custom else (32 if big else 16)))
             lab = Gtk.Label(label=label, wrap=big, justify=Gtk.Justification.CENTER,
                             max_width_chars=10 if big else -1)
         lab.set_wrap_mode(Pango.WrapMode.WORD)

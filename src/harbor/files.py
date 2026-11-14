@@ -133,25 +133,28 @@ UNGATED_ACTIONS = {
 # ---------------------------------------------------------------------- CSS
 
 CSS = """
-.hbf-titlebar { background: $window; padding: 0 0 0 10px; min-height: 42px; }
+.hbf-titlebar { background: $window; padding: 0 0 0 10px; min-height: 36px; }
 .hbf-titlebar tabbar, .hbf-titlebar tabbar > revealer > box {
     background: transparent; box-shadow: none; border: none; padding: 0; }
-.hbf-titlebar tabbar tabbox { padding: 6px 0 0 0; }
-.hbf-titlebar tabbar tab { border-radius: 8px 8px 0 0; min-height: 34px; margin: 0;
+.hbf-titlebar tabbar tabbox { padding: 4px 0 0 0; }
+.hbf-titlebar tabbar tab { border-radius: 8px 8px 0 0; min-height: 28px; margin: 0;
     background: transparent; box-shadow: none; }
 .hbf-titlebar tabbar tab:hover { background: $nav_hover; }
 .hbf-titlebar tabbar tab:selected, .hbf-titlebar tabbar tab:selected:hover {
     background: $surface; box-shadow: none; }
 .hbf-titlebar tabbar tab .tab-title { font-size: 13px; }
-.hbf-titlebar tabbar tabbox > separator { opacity: 0.6; margin-top: 12px; margin-bottom: 6px; }
-.hbf-titlebar windowcontrols { margin: 6px 6px 0 4px; }
-.hbf-titlebar windowcontrols > button { min-height: 24px; min-width: 24px; padding: 0; margin: 0 5px;
-    background: none; box-shadow: none; border-radius: 50%; }
-.hbf-titlebar windowcontrols > button > image { background: alpha(currentColor, 0.1); border-radius: 50%;
-    padding: 4px; -gtk-icon-size: 12px; }
-.hbf-titlebar windowcontrols > button:hover > image { background: alpha(currentColor, 0.16); }
-.hbf-titlebar windowcontrols > button:active > image { background: alpha(currentColor, 0.24); }
-button.hbf-newtab { min-height: 28px; min-width: 28px; margin: 6px 4px 0 4px; border-radius: 5px; }
+.hbf-titlebar tabbar tabbox > separator { opacity: 0.6; margin-top: 10px; margin-bottom: 6px; }
+/* Windows-style caption buttons: flat, wide, square, red close on hover */
+.hbf-titlebar windowcontrols { margin: 0; }
+.hbf-titlebar windowcontrols > button { min-height: 32px; min-width: 46px; padding: 0; margin: 0;
+    background: none; box-shadow: none; border-radius: 0; }
+.hbf-titlebar windowcontrols > button > image { background: none; box-shadow: none; padding: 0;
+    -gtk-icon-size: 14px; }
+.hbf-titlebar windowcontrols > button:hover { background: alpha(currentColor, 0.09); }
+.hbf-titlebar windowcontrols > button:active { background: alpha(currentColor, 0.15); }
+.hbf-titlebar windowcontrols > button.close:hover { background: #c42b1c; color: white; }
+.hbf-titlebar windowcontrols > button.close:active { background: #b22a1d; color: white; }
+button.hbf-newtab { min-height: 26px; min-width: 28px; margin: 4px 4px 0 4px; border-radius: 5px; }
 
 .hbf-navbar { background: $surface; padding: 6px 10px; }
 .hbf-cmdbar { background: $surface; padding: 4px 10px 6px 10px; border-bottom: 1px solid $divider; }
@@ -384,6 +387,17 @@ window.hbf-custom button.hbf-ribbon-simple-btn:hover,
 window.hbf-custom menubutton.hbf-ribbon-simple-btn > button:hover {
     background: linear-gradient(180deg, alpha(var(--accent-bg-color), 0.14), alpha(var(--accent-bg-color), 0.07)); }
 window.hbf-custom .hbf-ribbon-row { padding: 4px 8px 6px 8px; }
+/* Custom: bigger click targets in the ribbon and the quick line */
+window.hbf-custom .hbf-ribbon button.hbf-ribbon-small,
+window.hbf-custom .hbf-ribbon menubutton.hbf-ribbon-small > button {
+  min-height: 32px; padding: 2px 10px; border-radius: 8px; }
+window.hbf-custom .hbf-ribbon .hbf-ribbon-small label { font-size: 13px; }
+window.hbf-custom .hbf-ribbon button.hbf-ribbon-big,
+window.hbf-custom .hbf-ribbon menubutton.hbf-ribbon-big > button {
+  min-width: 72px; padding: 4px 8px; border-radius: 10px; }
+window.hbf-custom .hbf-quick-line button.hbf-ribbon-simple-btn,
+window.hbf-custom .hbf-quick-line menubutton.hbf-ribbon-simple-btn > button {
+  min-height: 40px; min-width: 40px; padding: 2px 6px; }
 window.hbf-custom .hbf-quick-line { border-top: 1px solid alpha(currentColor, 0.07); padding-top: 6px; }
 window.hbf-custom .hbf-ribbon-simple .hbf-ribbon-tabs.hbf-ribbon-tabline { margin: 6px 8px 0 8px; }
 window.hbf-custom .hbf-ribbon-simple .hbf-ribbon-tabs { padding: 0; border: none; }
