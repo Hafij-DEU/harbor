@@ -80,7 +80,7 @@ replace Ubuntu's built-in Settings application):
 
 ```sh
 ./packaging/build-deb.sh
-sudo apt install ./dist/win11-settings_0.5.10_amd64.deb
+sudo apt install ./dist/win11-settings_0.5.11_amd64.deb
 ```
 
 Remove it with `sudo apt remove win11-settings`.

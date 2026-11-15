@@ -145,19 +145,45 @@ pub fn install_fonts(ctx: &Context) {
         ))),
     );
 
-    if let Some(list) = fonts.families.get_mut(&FontFamily::Proportional) {
-        list.insert(0, "selawik".to_owned());
+    // Fallback for text Selawik lacks (Cyrillic, Greek, symbols in device or
+    // network names): the system's DejaVu, read at start instead of bundling
+    // egui's default fonts into the binary.
+    let mut fallback = Vec::new();
+    for (name, path) in [
+        ("sys-sans", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        ("sys-mono", "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"),
+    ] {
+        if let Ok(bytes) = std::fs::read(path) {
+            fonts
+                .font_data
+                .insert(name.to_owned(), Arc::new(FontData::from_owned(bytes)));
+            fallback.push(name);
+        }
     }
-    if let Some(list) = fonts.families.get_mut(&FontFamily::Monospace) {
-        list.push("selawik".to_owned());
-    }
+    let with_fallback = |first: &[&str]| -> Vec<String> {
+        first
+            .iter()
+            .chain(fallback.iter().filter(|n| **n == "sys-sans"))
+            .map(|n| (*n).to_owned())
+            .collect()
+    };
+    fonts
+        .families
+        .insert(FontFamily::Proportional, with_fallback(&["selawik"]));
+    let mut mono: Vec<String> = fallback
+        .iter()
+        .filter(|n| **n == "sys-mono")
+        .map(|n| (*n).to_owned())
+        .collect();
+    mono.extend(with_fallback(&["selawik"]));
+    fonts.families.insert(FontFamily::Monospace, mono);
     fonts.families.insert(
         FontFamily::Name(FAMILY_SEMIBOLD.into()),
-        vec!["selawik-semibold".to_owned(), "selawik".to_owned()],
+        with_fallback(&["selawik-semibold", "selawik"]),
     );
     fonts.families.insert(
         FontFamily::Name("selawik-light".into()),
-        vec!["selawik-light".to_owned(), "selawik".to_owned()],
+        with_fallback(&["selawik-light", "selawik"]),
     );
 
     ctx.set_fonts(fonts);

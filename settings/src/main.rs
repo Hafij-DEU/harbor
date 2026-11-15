@@ -1,5 +1,6 @@
 mod app;
 mod cleaner;
+mod desktop;
 mod hub;
 mod icons;
 mod inventory;
@@ -7,6 +8,7 @@ mod jobs;
 mod pages;
 mod system;
 mod theme;
+mod welcome;
 mod widgets;
 
 use eframe::egui;
@@ -529,6 +531,7 @@ fn main() -> eframe::Result<()> {
             .with_decorations(false)
             .with_resizable(true)
             .with_app_id("win11-settings"),
+        renderer: eframe::Renderer::Glow,
         ..Default::default()
     };
 

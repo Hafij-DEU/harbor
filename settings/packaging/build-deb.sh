@@ -42,7 +42,7 @@ Section: utils
 Priority: optional
 Architecture: ${ARCH}
 Maintainer: Hafij
-Depends: libfontconfig1, libgl1, libwayland-client0, libx11-6, libxkbcommon0, python3, python3-gi, dconf-cli, libglib2.0-bin
+Depends: libfontconfig1, libgl1, libegl1, libwayland-client0, libx11-6, libxkbcommon0, python3, python3-gi, dconf-cli, libglib2.0-bin
 Recommends: network-manager, bluez, power-profiles-daemon, systemd-timesyncd, unattended-upgrades
 Description: Windows 11 style Settings for Ubuntu
  A Rust Settings application with a Fluent-style interface, Ubuntu system

@@ -29,6 +29,8 @@ pub enum Page {
     Bluetooth,
     Network,
     Personalisation,
+    Desktop,
+    Extensions,
     Apps,
     Accounts,
     Accessibility,
@@ -39,11 +41,13 @@ pub enum Page {
 }
 
 impl Page {
-    pub const ALL: [Page; 11] = [
+    pub const ALL: [Page; 13] = [
         Page::System,
         Page::Bluetooth,
         Page::Network,
         Page::Personalisation,
+        Page::Desktop,
+        Page::Extensions,
         Page::Apps,
         Page::Accounts,
         Page::Accessibility,
@@ -59,6 +63,8 @@ impl Page {
             Page::Bluetooth => "Bluetooth & devices",
             Page::Network => "Network & internet",
             Page::Personalisation => "Personalisation",
+            Page::Desktop => "Desktop & windows",
+            Page::Extensions => "Extensions",
             Page::Apps => "Apps",
             Page::Accounts => "Accounts",
             Page::Accessibility => "Accessibility",
@@ -75,6 +81,8 @@ impl Page {
             Page::Bluetooth => Icon::Bluetooth,
             Page::Network => Icon::Wifi,
             Page::Personalisation => Icon::Personalise,
+            Page::Desktop => Icon::Display,
+            Page::Extensions => Icon::Hub,
             Page::Apps => Icon::Apps,
             Page::Accounts => Icon::Accounts,
             Page::Accessibility => Icon::Accessibility,
@@ -135,6 +143,8 @@ impl View {
             View::Page(Page::Bluetooth) => "bluetooth",
             View::Page(Page::Network) => "network",
             View::Page(Page::Personalisation) => "personalisation",
+            View::Page(Page::Desktop) => "desktop",
+            View::Page(Page::Extensions) => "extensions",
             View::Page(Page::Apps) => "apps",
             View::Page(Page::Accounts) => "accounts",
             View::Page(Page::Accessibility) => "accessibility",
@@ -224,6 +234,7 @@ pub enum ConfirmKind {
     ForgetWifi,
     InstallCompat { package: String, name: String },
     InstallFavorite { key: String },
+    RemoveExtension { uuid: String },
 }
 
 pub struct ConfirmDialog {
@@ -366,6 +377,8 @@ pub struct App {
     pub activity: Vec<ActivityEntry>,
     pub activity_log_open: bool,
 
+    pub welcome: Option<crate::welcome::Welcome>,
+    pub desk: crate::desktop::State,
     screenshot_path: Option<String>,
     screenshot_requested: bool,
     first_frame_logged: bool,
@@ -469,6 +482,8 @@ impl App {
             // Kept for old launch links: App Hub is now part of Apps.
             "apphub" => View::Page(Page::Apps),
             "accounts" => View::Page(Page::Accounts),
+            "desktop" | "tweaks" | "multitasking" => View::Page(Page::Desktop),
+            "extensions" => View::Page(Page::Extensions),
             "accessibility" => View::Page(Page::Accessibility),
             "privacy" => View::Page(Page::Privacy),
             "time" => View::Page(Page::TimeLanguage),
@@ -524,6 +539,8 @@ impl App {
             confirm: None,
             activity: Vec::new(),
             activity_log_open: false,
+            welcome: None,
+            desk: Default::default(),
             screenshot_path: std::env::var("WIN11_SETTINGS_SCREENSHOT").ok(),
             screenshot_requested: false,
             first_frame_logged: false,
@@ -537,6 +554,9 @@ impl App {
             Ok("library") => app.hub.tab = AppsTab::Library,
             Ok("allapps") => app.hub.tab = AppsTab::AllApps,
             _ => {}
+        }
+        if crate::welcome::show_at_start() {
+            app.welcome = Some(crate::welcome::Welcome::new(&app));
         }
         app.start_home_usage();
         if std::env::var("WIN11_SETTINGS_SCREENSHOT").is_err() {
@@ -1329,6 +1349,18 @@ The network will not reconnect automatically."
         });
     }
 
+    /// Ask before removing a GNOME Shell extension the user installed.
+    pub fn confirm_extension_removal(&mut self, uuid: String, name: String) {
+        self.confirm = Some(ConfirmDialog {
+            title: format!("Remove {name}?"),
+            body: "The extension is turned off and its files are deleted. You can install it again later."
+                .to_owned(),
+            confirm_label: "Remove".to_owned(),
+            kind: ConfirmKind::RemoveExtension { uuid },
+            busy: false,
+        });
+    }
+
     /// Install a compatibility package (Wine/Waydroid/Steam) through pkexec apt.
     pub fn run_compat_install(&mut self, package: &str, name: &str) {
         if self.apt_job.is_some() {
@@ -1862,6 +1894,10 @@ The network will not reconnect automatically."
     }
 
     fn handle_shortcuts(&mut self, ctx: &Context) {
+        // The welcome guide handles its own keys (Esc closes it).
+        if self.welcome.is_some() {
+            return;
+        }
         let (escape, find) = ctx.input(|i| {
             (
                 i.key_pressed(egui::Key::Escape),
@@ -2051,6 +2087,8 @@ The network will not reconnect automatically."
                                 View::Page(Page::Personalisation) => {
                                     pages::personalisation(self, ui)
                                 }
+                                View::Page(Page::Desktop) => crate::desktop::desktop_page(self, ui),
+                                View::Page(Page::Extensions) => crate::desktop::extensions_page(self, ui),
                                 View::Page(Page::Apps) => pages::apps(self, ui),
                                 View::Page(Page::Accounts) => pages::accounts(self, ui),
                                 View::Page(Page::Accessibility) => pages::accessibility(self, ui),
@@ -2359,6 +2397,7 @@ The network will not reconnect automatically."
         self.activity_log_dialog(ctx, pal);
         self.cleaner_dialog(ctx, pal);
         self.confirm_dialog(ctx, pal);
+        crate::welcome::show(self, ctx, pal);
     }
 
     fn wifi_dialog(&mut self, ctx: &Context, pal: &Palette) {
@@ -2917,6 +2956,11 @@ The network will not reconnect automatically."
                     let key = key.clone();
                     self.confirm = None;
                     self.run_favorite_install(&key);
+                }
+                ConfirmKind::RemoveExtension { uuid } => {
+                    let uuid = uuid.clone();
+                    self.confirm = None;
+                    crate::desktop::uninstall(self, ctx, uuid);
                 }
             }
         }

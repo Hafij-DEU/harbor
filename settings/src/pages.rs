@@ -85,7 +85,7 @@ fn slider_row(
 /// A row whose value is chosen from a drop-down list (Fluent-style row with a
 /// compact combo box on the right). Returns the new value when it changes.
 #[allow(clippy::too_many_arguments)]
-fn combo_row(
+pub(crate) fn combo_row(
     ui: &mut Ui,
     pal: &Palette,
     icon: Icon,
@@ -149,7 +149,7 @@ fn combo_row(
 
 /// A slider row for an arbitrary numeric range (hours, kelvin, pixels).
 #[allow(clippy::too_many_arguments)]
-fn range_row(
+pub(crate) fn range_row(
     ui: &mut Ui,
     pal: &Palette,
     icon: Icon,
@@ -2987,6 +2987,9 @@ pub fn personalisation(app: &mut App, ui: &mut Ui) {
         {
             app.use_system_appearance();
         }
+        if widgets::ghost_button(ui, &pal, "Show the welcome guide", Some(Icon::Sparkle)).clicked() {
+            app.welcome = Some(crate::welcome::Welcome::new(app));
+        }
     });
     note(
         ui,
@@ -5423,6 +5426,19 @@ pub fn search_entries() -> Vec<SearchEntry> {
         subtitle: "Time zone, clock format",
         icon: Icon::Clock,
     });
+    for (page, title, subtitle, icon) in [
+        (Page::Desktop, "Multitasking", "Hot corner, screen edges, workspaces, Alt+Tab", Icon::Apps),
+        (Page::Desktop, "Ubuntu Dock", "Auto-hide, panel mode, icon size, position", Icon::Apps),
+        (Page::Desktop, "Desktop icons", "Home folder, Trash, icon size", Icon::Image),
+        (Page::Desktop, "Title bar buttons", "Minimize, maximize, window focus, title bar clicks", Icon::Apps),
+        (Page::Desktop, "Fonts", "Interface, document and monospace fonts, hinting", Icon::Keyboard),
+        (Page::Desktop, "Themes", "Legacy app theme, icons, cursor", Icon::Personalise),
+        (Page::Desktop, "Startup apps", "Apps that start when you sign in", Icon::Power),
+        (Page::Desktop, "Tweaks", "Overview key, middle-click paste, mouse acceleration, over-amplification", Icon::Sparkle),
+        (Page::Extensions, "GNOME extensions", "Turn on or off, settings, install, remove", Icon::Hub),
+    ] {
+        entries.push(SearchEntry { page, detail: None, title, subtitle, icon });
+    }
     entries.push(SearchEntry {
         page: Page::Updates,
         detail: None,
