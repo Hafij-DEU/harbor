@@ -199,6 +199,10 @@ class Ribbon(Gtk.Box):
                                        valign=Gtk.Align.CENTER)
         self.collapse_btn.connect("clicked", lambda *_: self.set_collapsed(not self.collapsed,
                                                                            notify=True))
+        self.gear_btn = Gtk.Button(icon_name="emblem-system-symbolic", action_name="win.options",
+                                   css_classes=["flat", "hbf-nav"], tooltip_text="Settings (Ctrl+,)",
+                                   valign=Gtk.Align.CENTER)
+        tabs.append(self.gear_btn)
         tabs.append(self.collapse_btn)
         self.append(tabs)
         self.revealer = Gtk.Revealer(child=self.stack, reveal_child=True,
@@ -207,6 +211,7 @@ class Ribbon(Gtk.Box):
             # one row: [tabs] | commands (scroll sideways when the window is narrow)
             self.remove(tabs)
             tabs.remove(self.collapse_btn)
+            tabs.remove(self.gear_btn)
             for c in list(tabs):
                 if c.get_hexpand():
                     tabs.remove(c)

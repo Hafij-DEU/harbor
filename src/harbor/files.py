@@ -601,9 +601,6 @@ class FilesWindow(HarborWindow):
         self.search.connect("activate", self._on_search_changed)
         self.search.connect("stop-search", lambda *_: self._cancel_search())
         nav.append(self.search)
-        gear = Gtk.Button(icon_name="emblem-system-symbolic", action_name="win.options",
-                          tooltip_text="Settings (Ctrl+,)", css_classes=["hbf-nav"])
-        nav.append(gear)
         self.top.append(nav)
 
         # 3. command bar
@@ -659,6 +656,11 @@ class FilesWindow(HarborWindow):
                                             action_name="win.preview-pane",
                                             tooltip_text="Show the preview pane (Alt+P)")
         cmd.append(self.preview_btn)
+        cmd.append(Gtk.Box(css_classes=["hbf-vsep"]))
+        gear = Gtk.Button(icon_name="emblem-system-symbolic", action_name="win.options",
+                          tooltip_text="Settings (Ctrl+,)", css_classes=["hb-tool"])
+        gear.set_has_frame(False)
+        cmd.append(gear)
         self.cmdbar = cmd
         self.top.append(cmd)
         self.ribbon = None
