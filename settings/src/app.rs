@@ -2895,7 +2895,10 @@ The network will not reconnect automatically."
                         .color(pal.text_faint),
                 );
                 ui.add_space(18.0);
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                // A fixed-height row: a bare right-to-left layout would take the
+                // whole screen height and stretch the dialog.
+                let row = Vec2::new(ui.available_width(), 34.0);
+                ui.allocate_ui_with_layout(row, Layout::right_to_left(Align::Center), |ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
                     if widgets::button(ui, pal, pal.accent, &dialog.confirm_label, None).clicked()
                         && !dialog.busy
@@ -2978,6 +2981,12 @@ The network will not reconnect automatically."
         } else {
             pal.tooltip
         };
+        // Light fills (the light theme's tooltip colour) need dark text.
+        let ink = if u32::from(fill.r()) + u32::from(fill.g()) + u32::from(fill.b()) > 3 * 150 {
+            pal.text
+        } else {
+            Color32::WHITE
+        };
         egui::Area::new(Id::new("toast"))
             .order(egui::Order::Foreground)
             .anchor(Align2::CENTER_BOTTOM, Vec2::new(0.0, -22.0))
@@ -2988,10 +2997,20 @@ The network will not reconnect automatically."
                     .corner_radius(6)
                     .inner_margin(Margin::symmetric(16, 9))
                     .show(ui, |ui| {
-                        ui.label(
-                            egui::RichText::new(&toast.text)
-                                .font(regular(13.0))
-                                .color(Color32::WHITE),
+                        // One line up to 520 px, wrapping only past that.
+                        let w = ui
+                            .painter()
+                            .layout_no_wrap(toast.text.clone(), regular(13.0), ink)
+                            .size()
+                            .x;
+                        ui.set_width(w.min(520.0));
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(&toast.text)
+                                    .font(regular(13.0))
+                                    .color(ink),
+                            )
+                            .wrap(),
                         );
                     });
             });

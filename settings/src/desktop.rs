@@ -180,6 +180,8 @@ pub struct Extension {
     pub version: String,
     pub path: String,
     pub schema: String,
+    /// Version on disk when it differs from the running one (update waits for a new login).
+    pub pending: String,
 }
 
 #[derive(Clone)]
@@ -646,12 +648,22 @@ from gi.repository import Gio, GLib
 bus = Gio.bus_get_sync(Gio.BusType.SESSION)
 r = bus.call_sync('org.gnome.Shell.Extensions', '/org/gnome/Shell/Extensions',
     'org.gnome.Shell.Extensions', 'ListExtensions', None, None, 0, 5000, None).unpack()[0]
+def ver(d):
+    v = d.get('version-name', d.get('version', ''))
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    return str(v)
+def disk(path):
+    try:
+        return ver(json.load(open(path + '/metadata.json')))
+    except Exception:
+        return ''
 s = Gio.Settings.new('org.gnome.shell')
 on = set(s.get_strv('enabled-extensions'))
 out = [dict(uuid=u, name=d.get('name', u), description=d.get('description', ''),
     enabled=u in on, state=int(d.get('state', 0)), user=int(d.get('type', 2)) == 2,
-    has_prefs=bool(d.get('hasPrefs', False)), version=str(d.get('version-name', d.get('version', ''))),
-    path=d.get('path', ''), schema=d.get('settings-schema', ''))
+    has_prefs=bool(d.get('hasPrefs', False)), version=ver(d),
+    path=d.get('path', ''), schema=d.get('settings-schema', ''), disk=disk(d.get('path', '')))
     for u, d in r.items()]
 print(json.dumps(dict(user_on=not s.get_boolean('disable-user-extensions'), list=out)))
 "#;
@@ -791,6 +803,38 @@ fn run(cmd: &str, args: &[&str]) -> Result<String, String> {
     }
 }
 
+/// Stop the org.gnome.Shell.Extensions service (D-Bus starts it again on the next call).
+fn restart_prefs_service() -> bool {
+    const NAME: &str = "org.gnome.Shell.Extensions";
+    let dbus = |method: &str| {
+        run("gdbus", &["call", "--session", "-d", "org.freedesktop.DBus", "-o", "/org/freedesktop/DBus",
+            "-m", &format!("org.freedesktop.DBus.{method}"), NAME])
+    };
+    let Ok(out) = dbus("GetConnectionUnixProcessID") else { return false };
+    // gdbus prints "(uint32 1234,)".
+    let pid: String = out
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or("")
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    let cmdline = std::fs::read(format!("/proc/{pid}/cmdline")).unwrap_or_default();
+    if pid.is_empty() || !String::from_utf8_lossy(&cmdline).contains(NAME) {
+        return false;
+    }
+    if run("kill", &[&pid]).is_err() {
+        return false;
+    }
+    for _ in 0..30 {
+        if dbus("NameHasOwner").is_ok_and(|o| o.contains("false")) {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    false
+}
+
 fn spawn(app: &mut App, ctx: &Context, job: impl FnOnce() -> Done + Send + 'static) {
     let (tx, rx) = mpsc::channel();
     let ctx = ctx.clone();
@@ -823,6 +867,10 @@ fn refresh_extensions(app: &mut App, ctx: &Context) {
                         version: e["version"].as_str().unwrap_or("").to_owned(),
                         path: e["path"].as_str().unwrap_or("").to_owned(),
                         schema: e["schema"].as_str().unwrap_or("").to_owned(),
+                        pending: {
+                            let (run, disk) = (e["version"].as_str().unwrap_or(""), e["disk"].as_str().unwrap_or(""));
+                            if disk.is_empty() || disk == run { String::new() } else { disk.to_owned() }
+                        },
                     })
                     .collect()
             })
@@ -831,7 +879,7 @@ fn refresh_extensions(app: &mut App, ctx: &Context) {
         // The master switch rides along as a fake first entry.
         let user_on = v["user_on"].as_bool().unwrap_or(true);
         exts.insert(0, Extension { uuid: String::new(), name: String::new(), description: String::new(),
-            enabled: user_on, state: 0, user: true, has_prefs: false, version: String::new(), path: String::new(), schema: String::new() });
+            enabled: user_on, state: 0, user: true, has_prefs: false, version: String::new(), path: String::new(), schema: String::new(), pending: String::new() });
         Done::Extensions(exts)
     });
 }
@@ -952,7 +1000,10 @@ pub fn extensions_page(app: &mut App, ui: &mut Ui) {
             Done::Message(match picked {
                 Ok(path) if !path.is_empty() => run("gnome-extensions", &["install", "--force", &path])
                     .map(|_| "Extension installed — log out and back in to load it".to_owned()),
-                _ => Err("No file was chosen".to_owned()),
+                Ok(_) => Ok(String::new()),
+                // zenity exits 1 when the picker is closed: nothing to report.
+                Err(e) if e == "failed" || e.is_empty() => Ok(String::new()),
+                Err(e) => Err(format!("Could not open the file picker: {e}")),
             })
         });
     }
@@ -1019,6 +1070,7 @@ pub fn extensions_page(app: &mut App, ui: &mut Ui) {
         spawn(app, &ctx, move || {
             Done::Message(match run("python3", &["-c", REMOTE_PY, &uuid]).as_deref() {
                 Ok("successful") => Ok("Extension installed".to_owned()),
+                Ok("cancelled") => Ok("Install cancelled".to_owned()),
                 Ok(other) => Err(format!("Not installed ({other})")),
                 Err(e) => Err(e.to_string()),
             })
@@ -1051,7 +1103,11 @@ pub fn extensions_page(app: &mut App, ui: &mut Ui) {
                 let mut sub = format!(
                     "{}{}{}",
                     state_text(e),
-                    if e.version.is_empty() { String::new() } else { format!(" · version {}", e.version) },
+                    match (e.version.is_empty(), e.pending.is_empty()) {
+                        (true, _) => String::new(),
+                        (false, true) => format!(" · version {}", e.version),
+                        (false, false) => format!(" · version {} ({} after you sign out)", e.version, e.pending),
+                    },
                     if e.description.is_empty() { String::new() } else { format!(" · {}", e.description) }
                 );
                 if sub.chars().count() > 70 {
@@ -1075,7 +1131,7 @@ pub fn extensions_page(app: &mut App, ui: &mut Ui) {
                         action = Some(("uninstall", e.uuid.clone()));
                     }
                 });
-                if !e.schema.is_empty() {
+                if !e.schema.is_empty() && e.uuid.starts_with("fusion-desk@") {
                     let open = app.desk.open.contains(&e.uuid);
                     ui.horizontal(|ui| {
                         ui.add_space(ROW_PAD + 42.0);
@@ -1141,9 +1197,16 @@ pub fn extensions_page(app: &mut App, ui: &mut Ui) {
             app.confirm_extension_removal(uuid, name);
         } else {
             spawn(app, &ctx, move || {
-                let res = run("gnome-extensions", &[verb, &uuid]);
+                let mut res = run("gnome-extensions", &[verb, &uuid]);
+                let mut note = String::new();
+                // GNOME shows one extension settings window at a time; a hidden
+                // or stuck one blocks every later open until its service restarts.
+                if verb == "prefs" && res.as_ref().is_err_and(|e| e.contains("Already showing")) && restart_prefs_service() {
+                    res = run("gnome-extensions", &[verb, &uuid]);
+                    note = "Closed the other extension settings window".to_owned();
+                }
                 Done::Message(match verb {
-                    "prefs" => res.map(|_| String::new()).map_err(|e| format!("Could not open settings: {e}")),
+                    "prefs" => res.map(|_| note).map_err(|e| format!("Could not open settings: {e}")),
                     _ => res.map(|_| format!("Extension turned {}", if verb == "enable" { "on" } else { "off" })),
                 })
             });
