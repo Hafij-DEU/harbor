@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Settings
+GenericName=System Settings
+Comment=Windows 11 style settings for Ubuntu, with App Hub built in
+Exec=win11-settings
+Icon=win11-settings
+Terminal=false
+Categories=Settings;DesktopSettings;GTK;
+Keywords=settings;control;panel;system;app;hub;update;
+StartupWMClass=win11-settings

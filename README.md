@@ -90,18 +90,27 @@ gradle --offline testDebugUnitTest assembleRelease
 
 Release builds are signed when `HARBOR_KEYSTORE_FILE`, `HARBOR_KEYSTORE_PASSWORD`, `HARBOR_KEY_ALIAS` and `HARBOR_KEY_PASSWORD` are set; otherwise the debug key is used. `HARBOR_DAV="<port> <pin>"` runs an extra test against a live desktop share.
 
+## Harbor Settings
+
+A Windows 11-style Settings app for Ubuntu, written in Rust (`eframe`/`egui`),
+in [`settings/`](settings/). It edits the real system (gsettings, PipeWire,
+NetworkManager, BlueZ, Mutter display config, AccountsService, apt) without
+handing off to GNOME Settings, and has app management (installed apps,
+updates, App Hub catalogue) built in. See [settings/README.md](settings/README.md).
+
 ## Install
 
-Each app is its own package. Download `harbor-files_<version>_all.deb`
-and/or `harbor-taskmgr_<version>_all.deb` from the
+Each app is its own package. Download `harbor-files_<version>_all.deb`,
+`harbor-taskmgr_<version>_all.deb` and/or `win11-settings_<version>_amd64.deb` from the
 [releases](https://github.com/Hafij-DEU/harbor/releases) (tags
-`files-v…` and `taskmgr-v…`) and run:
+`files-v…`, `taskmgr-v…` and `settings-v…`) and run:
 
 ```bash
 sudo apt install ./harbor-files_0.5.1_all.deb ./harbor-taskmgr_0.3.0_all.deb
 ```
 
-They replace the older combined `harbor` package.
+They replace the older combined `harbor` package. Settings installs under
+`/usr/local` and never replaces Ubuntu's own Settings app.
 
 Then open **Harbor Files** or **Harbor Task Manager** from the app menu,
 or run `harbor-files [folder]` / `harbor-taskmgr`
@@ -114,6 +123,8 @@ or run `harbor-files [folder]` / `harbor-taskmgr`
 PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider tests/test_files.py tests/test_taskmgr.py tests/test_taskmgr_sweep.py
 tools/shot.sh taskmgr shot.png --do "win.show_page('performance')"
 ```
+
+Settings: `cd settings && cargo test --release && ./packaging/build-deb.sh`.
 
 `tools/shot.sh` renders the window in a private headless GNOME Shell with
 `HARBOR_DRY_RUN=1`, so nothing on the real system changes.
