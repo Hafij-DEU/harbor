@@ -19,35 +19,83 @@ def _msg(err):
     return msg
 
 
+def _needs_unmount(msg):
+    """ntfslabel, exfatlabel and friends refuse to touch a mounted drive."""
+    m = (msg or "").lower()
+    return "mounted" in m and ("cannot" in m or "can't" in m or "busy" in m or "must" in m)
+
+
 def set_system_label(device, label, done):
     """Write the filesystem label of /dev node `device` through UDisks2.
-    done(error_text_or_None). UDisks asks for the password itself (polkit)."""
+    done(error_text_or_None, remounted_bool). UDisks asks for the password
+    itself (polkit). Drives whose label tool refuses to work while mounted
+    (NTFS, exFAT) are unmounted, relabelled and mounted again."""
     try:
         bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
     except GLib.Error as e:
-        done(e.message)
+        done(e.message, False)
         return
+    fs = UDISKS + ".Filesystem"
+    state = {"path": None, "retried": False}
+
+    def call(meth, args, sig, cb, timeout=180000):
+        bus.call(UDISKS, state["path"], fs, meth, GLib.Variant(sig, args), None,
+                 Gio.DBusCallFlags.NONE, timeout, None, cb)
+
+    def set_label():
+        call("SetLabel", (label, {}), "(sa{sv})", on_set)
 
     def on_set(conn, res):
         try:
             conn.call_finish(res)
         except GLib.Error as e:
-            done(_msg(e) or "Couldn't rename the drive")
+            msg = _msg(e)
+            if not state["retried"] and _needs_unmount(msg):
+                state["retried"] = True
+                call("Unmount", ({},), "(a{sv})", on_unmount)
+                return
+            if state["retried"]:
+                remount(msg or "Couldn't rename the drive")
+                return
+            done(msg or "Couldn't rename the drive", False)
             return
-        done(None)
+        if state["retried"]:
+            remount(None)
+        else:
+            done(None, False)
+
+    def on_unmount(conn, res):
+        try:
+            conn.call_finish(res)
+        except GLib.Error as e:
+            msg = _msg(e)
+            if "busy" in msg.lower() or "target is busy" in msg.lower():
+                msg = "the drive is in use. Close files and apps using it, then try again"
+            done(msg, False)
+            return
+        set_label()
+
+    def remount(err):
+        def on_mount(conn, res):
+            try:
+                conn.call_finish(res)
+            except GLib.Error as e:
+                done(err or "renamed, but mounting it again failed: %s" % _msg(e), True)
+                return
+            done(err, True)
+        call("Mount", ({},), "(a{sv})", on_mount)
 
     def on_resolve(conn, res):
         try:
             paths = conn.call_finish(res).unpack()[0]
         except GLib.Error as e:
-            done(_msg(e))
+            done(_msg(e), False)
             return
         if not paths:
-            done("UDisks doesn't know this drive")
+            done("UDisks doesn't know this drive", False)
             return
-        conn.call(UDISKS, paths[0], UDISKS + ".Filesystem", "SetLabel",
-                  GLib.Variant("(sa{sv})", (label, {})), None, Gio.DBusCallFlags.NONE,
-                  180000, None, on_set)
+        state["path"] = paths[0]
+        set_label()
 
     bus.call(UDISKS, "/org/freedesktop/UDisks2/Manager", UDISKS + ".Manager", "ResolveDevice",
              GLib.Variant("(a{sv}a{sv})", ({"path": GLib.Variant("s", device)}, {})),
@@ -76,8 +124,8 @@ class RenameDriveDialog(Adw.AlertDialog):
         self.system = Gtk.CheckButton(group=self.local, sensitive=device is not None)
         self.system.set_child(self._choice(
             "Drive label (every app)",
-            "Written to the drive. Your password may be asked; some drives must be "
-            "unmounted first." if device else "Not available for this drive."))
+            "Written to the drive. Your password may be asked; NTFS and exFAT drives "
+            "are unmounted for a moment." if device else "Not available for this drive."))
         box.append(self.local)
         box.append(self.system)
         self.set_extra_child(box)
@@ -103,7 +151,9 @@ class RenameDriveDialog(Adw.AlertDialog):
             sb.names_changed()
         elif resp == "rename" and name:
             if self.system.get_active() and self.device:
-                def done(err):
+                def done(err, remounted):
+                    if remounted:
+                        sb.names_changed()
                     if err:
                         sb.win.notify_toast("Couldn't rename: %s" % err)
                         return

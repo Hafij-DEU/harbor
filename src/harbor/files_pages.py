@@ -278,7 +278,7 @@ class HomePage(Gtk.ScrolledWindow):
 
 class ThisPCPage(Gtk.ScrolledWindow):
     def __init__(self, win):
-        super().__init__(vexpand=True, hexpand=True, css_classes=["hbf-page"])
+        super().__init__(vexpand=True, hexpand=True, css_classes=["hbf-page", "hbf-thispc"])
         self.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.win = win
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_start=28,

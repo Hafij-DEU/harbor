@@ -241,6 +241,11 @@ progressbar.hbf-bar-warn progress { background: #e74856; }
 .hbf-section-text { font-size: 14px; font-weight: 600; }
 .hbf-section-icon { color: $dim; }
 separator.hbf-rule { background: $divider; min-height: 1px; margin-left: 6px; }
+scrolledwindow.hbf-thispc { background-color: $surface;
+  background-image: radial-gradient(ellipse at 100% 0%, alpha(var(--accent-bg-color), 0.28), transparent 60%),
+                    radial-gradient(ellipse at 0% 100%, alpha(var(--accent-bg-color), 0.16), transparent 55%),
+                    linear-gradient(180deg, alpha(var(--accent-bg-color), 0.10), transparent 70%); }
+scrolledwindow.hbf-thispc > viewport { background: none; }
 flowbox.hbf-cards > flowboxchild { background: $entry; border: 1px solid $border; border-radius: 10px;
     box-shadow: 0 1px 3px $shadow; }
 flowbox.hbf-cards > flowboxchild:hover { background: $card_hover; }
@@ -2240,6 +2245,11 @@ class FilesWindow(HarborWindow):
 
     def _on_mouse(self, gesture, _n, _x, _y):
         b = gesture.get_current_button()
+        # the right-click menu is its own surface, so any press that reaches the
+        # window is outside it: close the menu (some compositors drop the grab)
+        pop = self._popover
+        if pop is not None and pop.get_visible():
+            pop.popdown()
         if b == 8:
             self.activate_action("win.back", None)
         elif b == 9:
