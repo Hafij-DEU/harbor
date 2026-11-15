@@ -134,6 +134,7 @@ def section_header(icon, text):
 
 
 USE_MID, USE_HIGH = 0.75, 0.90      # drive bar turns amber, then red
+SPACE_POLL_SECS = 3                 # This PC re-reads drive free space this often while shown
 
 
 # ---------------------------------------------------------------------- Home
@@ -300,9 +301,64 @@ class ThisPCPage(Gtk.ScrolledWindow):
                 self._drive_menu, lambda c: c.location and win.open_location(c.location, True))
         outer.append(self.drives)
         self.set_child(outer)
+        self._space = []        # (gfile, bar, sub_label, pct) for each mounted drive card
+        self._space_id = 0
+        self._rebuild_id = 0
+        # Drive cards must follow the disk: re-read free space while the page is shown,
+        # and rebuild the cards when something is mounted, unmounted or changed.
+        self.vm = Gio.VolumeMonitor.get()
+        self._vm_ids = [self.vm.connect(sig, lambda *_: self._queue_rebuild())
+                        for sig in ("mount-added", "mount-removed", "mount-changed",
+                                    "volume-added", "volume-removed", "volume-changed")]
+        self.connect("map", lambda *_: self._start_space_poll())
+        self.connect("unmap", lambda *_: self._stop_space_poll())
+        self.connect("destroy", self._on_destroy)
         self.refresh()
 
+    def _on_destroy(self, *_):
+        self._stop_space_poll()
+        for hid in self._vm_ids:
+            self.vm.disconnect(hid)
+        self._vm_ids = []
+        if self._rebuild_id:
+            GLib.source_remove(self._rebuild_id)
+            self._rebuild_id = 0
+
+    def _queue_rebuild(self):
+        if not self._rebuild_id:
+            self._rebuild_id = GLib.timeout_add(300, self._do_rebuild)
+
+    def _do_rebuild(self):
+        self._rebuild_id = 0
+        if self.get_mapped():
+            self.refresh()
+        return False
+
+    def _start_space_poll(self):
+        self.update_space()
+        if not self._space_id:
+            self._space_id = GLib.timeout_add_seconds(SPACE_POLL_SECS, self._space_tick)
+
+    def _stop_space_poll(self):
+        if self._space_id:
+            GLib.source_remove(self._space_id)
+            self._space_id = 0
+
+    def _space_tick(self):
+        self.update_space(local_only=True)
+        return True
+
+    def update_space(self, local_only=False):
+        """Re-read size/free of every drive card in place (no rebuild, no flicker).
+        Timer ticks skip non-local mounts (phone FTP, network): a query there costs a
+        round trip and can stall, so those update on page show / rebuild only."""
+        for gfile, bar, sub, pct in self._space:
+            if local_only and not gfile.is_native():
+                continue
+            self._fill_space(gfile, bar, sub, pct)
+
     def refresh(self):
+        self._space = []
         self.folders.remove_all()
         home = os.path.normpath(fc.home_dir())
         rows = [(home, "My files", "user-home")]
@@ -333,7 +389,8 @@ class ThisPCPage(Gtk.ScrolledWindow):
             child.location, child.obj, child.key = loc, obj, key
             self.drives.append(child)
             if loc is not None:
-                self._fill_space(Gio.File.new_for_uri(loc), bar, t.sub_label, pct)
+                self._space.append((Gio.File.new_for_uri(loc), bar, t.sub_label, pct))
+        self.update_space()
 
     def _fill_space(self, gfile, bar, sub, pct):
         def done(f, res):
@@ -349,6 +406,9 @@ class ThisPCPage(Gtk.ScrolledWindow):
                 return
             frac = max(0.0, min(1.0, (size - free) / size))
             bar.set_fraction(frac)
+            for old in ("warn", "mid"):       # level may drop after files are moved away
+                bar.remove_css_class("hbf-bar-" + old)
+                pct.remove_css_class("hbf-pct-" + old)
             level = "warn" if frac >= USE_HIGH else "mid" if frac >= USE_MID else None
             if level:
                 bar.add_css_class("hbf-bar-" + level)
