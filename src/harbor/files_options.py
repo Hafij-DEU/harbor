@@ -183,6 +183,7 @@ class SettingsDialog(Adw.PreferencesDialog):
         self._fm_state = "unknown"
         self.refresh_fm()
         self.refresh_cache()
+        self.refresh_wifi()
 
     # ------------------------------------------------------------ pages
     def _page(self, name, title, icon):
@@ -290,6 +291,16 @@ class SettingsDialog(Adw.PreferencesDialog):
         for key in ("show_hidden", "show_extensions", "show_quick_access", "show_recent"):
             g2.add(self._switch(key))
         p.add(g2)
+        g3 = Adw.PreferencesGroup(title="Network")
+        self.wifi_row = Adw.SwitchRow(
+            title="Wi-Fi power saving",
+            subtitle="Off keeps phone and network folders quick. Uses a little more battery.",
+            sensitive=False)
+        self._wifi_conns = []
+        self._wifi_sync = False
+        self.wifi_row.connect("notify::active", self._wifi_toggled)
+        g3.add(self.wifi_row)
+        p.add(g3)
 
     def _build_preview(self):
         p = self._page("preview", "Preview", "view-paged-symbolic")
@@ -501,6 +512,43 @@ class SettingsDialog(Adw.PreferencesDialog):
                 self.win.notify_toast("Can't change the default: %s" % (err.strip() or "error"))
             self.refresh_fm()
         common.run_cmd(fc.default_fm_set_argv(target), done)
+
+    # ------------------------------------------------------------ Wi-Fi power saving
+    def refresh_wifi(self):
+        common.run_cmd(fc.wifi_ps_query_argv(), self._wifi_got, mutating=False)
+
+    def _wifi_got(self, ok, out, _err):
+        state = fc.wifi_ps_state(out if ok else "")
+        saved = fc.wifi_ps_saved_on(state)
+        self._wifi_conns = list(state["conns"])
+        if saved is None:
+            self.wifi_row.set_sensitive(False)
+            self.wifi_row.set_subtitle("No Wi-Fi networks saved")
+            return
+        self._wifi_sync = True
+        self.wifi_row.set_active(saved)
+        self._wifi_sync = False
+        self.wifi_row.set_sensitive(True)
+        live = state["live"]
+        if live and any(v != saved for v in live.values()):
+            self.wifi_row.set_subtitle("Saved %s. Takes effect when Wi-Fi reconnects."
+                                       % ("on" if saved else "off"))
+
+    def _wifi_toggled(self, row, _p):
+        if self._wifi_sync or not self._wifi_conns:
+            return
+        on = row.get_active()
+        row.set_sensitive(False)
+
+        def done(ok, _out, err):
+            if common.DRY_RUN:
+                self.win.notify_toast("Dry run: would turn Wi-Fi power saving %s"
+                                      % ("on" if on else "off"))
+            elif not ok:
+                self.win.notify_toast("Can't change Wi-Fi power saving: %s"
+                                      % (err.strip() or "error"))
+            self.refresh_wifi()
+        common.run_cmd(fc.wifi_ps_set_argv(self._wifi_conns, on), done)
 
 
 OptionsDialog = SettingsDialog

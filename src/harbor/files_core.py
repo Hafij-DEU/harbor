@@ -1421,6 +1421,71 @@ def default_fm_state(query_output, ours=FILES_DESKTOP):
     return "harbor" if cur == ours else "other"
 
 
+# ------------------------------------------------------------------ Wi-Fi power saving
+# Power saving on the PC's Wi-Fi card adds up to seconds of delay per round
+# trip, which makes phone and network folders slow. NetworkManager keeps the
+# choice per Wi-Fi profile (802-11-wireless.powersave: 2 = off, 3 = on);
+# the user can change it without a password. It can't be reapplied to a live
+# connection, so it takes effect the next time Wi-Fi connects.
+
+WIFI_PS_QUERY = r"""
+for d in $(nmcli -t -f DEVICE,TYPE device 2>/dev/null | sed -n 's/:wifi$//p'); do
+  printf 'live %s %s\n' "$d" "$(iw dev "$d" get power_save 2>/dev/null | sed -n 's/.*: *//p')"
+done
+nmcli -t -f UUID,TYPE connection show 2>/dev/null | sed -n 's/:802-11-wireless$//p' | while read -r u; do
+  printf 'conn %s %s\n' "$u" "$(nmcli -g 802-11-wireless.powersave connection show "$u" 2>/dev/null)"
+done
+printf 'global %s\n' "$(cat /usr/lib/NetworkManager/conf.d/*.conf /etc/NetworkManager/NetworkManager.conf \
+  /etc/NetworkManager/conf.d/*.conf 2>/dev/null | sed -n 's/^[[:space:]]*wifi\.powersave[[:space:]]*=[[:space:]]*//p' | tail -n1)"
+"""
+
+
+def wifi_ps_query_argv():
+    return ["sh", "-c", WIFI_PS_QUERY]
+
+
+def wifi_ps_state(output):
+    """{"live": {device: bool}, "conns": {uuid: value}} from the query output."""
+    live, conns, glob = {}, {}, ""
+    for line in (output or "").splitlines():
+        parts = line.split()
+        if parts and parts[0] == "global":
+            glob = parts[1] if len(parts) > 1 else ""
+        elif len(parts) >= 2 and parts[0] == "live":
+            v = parts[2].lower() if len(parts) > 2 else ""
+            if v in ("on", "off"):
+                live[parts[1]] = v == "on"
+        elif len(parts) >= 2 and parts[0] == "conn":
+            conns[parts[1]] = parts[2].lower() if len(parts) > 2 else ""
+    return {"live": live, "conns": conns, "global": glob}
+
+
+def wifi_ps_saved_on(state):
+    """True/False for what the Wi-Fi profiles ask for, None without Wi-Fi.
+
+    A profile set to "default" follows NetworkManager's global
+    wifi.powersave (2 = off); anything else there counts as on."""
+    vals = list(state["conns"].values())
+    if not vals:
+        return None
+    glob_on = state.get("global", "") not in ("2", "disable")
+
+    def on(v):
+        if v in ("disable", "2"):
+            return False
+        if v in ("enable", "3"):
+            return True
+        return glob_on
+    return any(on(v) for v in vals)
+
+
+def wifi_ps_set_argv(uuids, on):
+    value = "3" if on else "2"
+    return ["sh", "-c",
+            'for u; do nmcli connection modify "$u" 802-11-wireless.powersave %s || exit 1; done'
+            % value, "sh"] + list(uuids)
+
+
 # ------------------------------------------------------------------ Send to / shortcuts
 
 def shortcut_name(name, exists, is_dir=False):

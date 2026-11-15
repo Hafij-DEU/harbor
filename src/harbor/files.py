@@ -1621,12 +1621,18 @@ class FilesWindow(HarborWindow):
             _tab, items = self._sel()
             paths = [it.path for it in items if it.path]
         from .files_share_ui import ShareDialog
-        ShareDialog(self, add_paths=paths).present(self)
+        self.wifi_power_first(lambda: ShareDialog(self, add_paths=paths).present(self))
+
+    def wifi_power_first(self, then):
+        """Before a phone share: while Wi-Fi power saving is on, warn and offer
+        to turn it off, then run then()."""
+        from . import files_wifi_ps
+        files_wifi_ps.ask_if_on(self, then)
 
     def scan_phone(self):
         """Scan Harbor for Android's QR code with the webcam and open the phone."""
         from .files_scan import ScanDialog
-        ScanDialog(self).present(self)
+        self.wifi_power_first(lambda: ScanDialog(self).present(self))
 
     def set_preview_width(self, width):
         self.preview.set_pane_width(width)
