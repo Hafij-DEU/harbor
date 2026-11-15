@@ -125,7 +125,7 @@ UNGATED_ACTIONS = {
     "show-hidden", "more-options", "ribbon-toggle", "refresh", "paste-into", "terminal-sel",
     "open-location-of", "properties-at", "terminal-at", "copy-path-at", "pin-at", "unpin",
     "open-location", "open-location-tab", "open-uri", "open-uri-location", "forget-recent",
-    "empty-trash", "about", "new-tab", "undo", "sb-mount", "sb-eject", "sb-unmount",
+    "empty-trash", "about", "new-tab", "undo", "sb-mount", "sb-eject", "sb-unmount", "drive-rename",
     "copy-name", "add-network", "net-edit", "net-remove", "share-wifi", "scan-phone",
 }
 
@@ -235,7 +235,27 @@ list.hbf-recent > row:selected { background: $nav_sel; color: $text; }
 .hbf-recent-head { font-size: 12px; color: $dim; }
 progressbar.hbf-bar trough { min-height: 8px; border-radius: 4px; background: $divider; }
 progressbar.hbf-bar progress { min-height: 8px; border-radius: 4px; background: var(--accent-bg-color); }
+progressbar.hbf-bar-mid progress { background: #e8a10c; }
 progressbar.hbf-bar-warn progress { background: #e74856; }
+.hbf-section-head { margin-top: 20px; margin-bottom: 8px; }
+.hbf-section-text { font-size: 14px; font-weight: 600; }
+.hbf-section-icon { color: $dim; }
+separator.hbf-rule { background: $divider; min-height: 1px; margin-left: 6px; }
+flowbox.hbf-cards > flowboxchild { background: $entry; border: 1px solid $border; border-radius: 10px;
+    box-shadow: 0 1px 3px $shadow; }
+flowbox.hbf-cards > flowboxchild:hover { background: $card_hover; }
+flowbox.hbf-cards > flowboxchild:selected { background: alpha(var(--accent-bg-color), 0.14);
+    border-color: alpha(var(--accent-bg-color), 0.55); }
+flowbox.hbf-cards .hbf-qtile { padding: 12px 14px; }
+flowbox.hbf-cards .hbf-qtile-title { font-weight: 600; }
+flowbox.hbf-cards progressbar.hbf-bar trough, flowbox.hbf-cards progressbar.hbf-bar progress {
+    min-height: 10px; border-radius: 5px; }
+flowbox.hbf-cards progressbar.hbf-bar progress { background: #2f7de1; }
+flowbox.hbf-cards progressbar.hbf-bar-mid progress { background: #e8a10c; }
+flowbox.hbf-cards progressbar.hbf-bar-warn progress { background: #e74856; }
+.hbf-pct { font-size: 12px; font-weight: 600; color: $dim; }
+.hbf-pct-mid { color: #c27c00; }
+.hbf-pct-warn { color: #d13438; }
 popover.hbf-rename > contents { padding: 4px; }
 list.hbf-apps { background: transparent; }
 list.hbf-apps > row { border-radius: 5px; }
@@ -1272,6 +1292,7 @@ class FilesWindow(HarborWindow):
         A("net-remove", self._net_remove, "s")
         A("sb-eject", lambda key: self.sidebar.unmount(key, eject=True), "s")
         A("sb-unmount", lambda key: self.sidebar.unmount(key, eject=False), "s")
+        A("drive-rename", self.sidebar.rename_drive, "s")
         view_key = "details" if s.get("view") == "details" else s.get("icon_size")
         self._stateful("view", GLib.Variant("s", view_key), self._set_view)
         self._stateful("sort", GLib.Variant("s", s.get("sort")), self._set_sort_field)

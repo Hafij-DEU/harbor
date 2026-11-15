@@ -309,7 +309,7 @@ class Settings:
                 "hidden_defaults": [], "open_to": "thispc", "style": "win11",
                 "icons": "modern", "menu_style": "win11", "command_bar": "win11",
                 "preview_pane": False, "ribbon_collapsed": False, "show_recent": True,
-                "nav_pane": True,
+                "nav_pane": True, "drive_names": {},
                 # 0.5.0
                 "theme": "follow", "folder_color": "classic", "folder_color_custom": "#9141ac",
                 "restore_tabs": False, "last_folder": "", "last_tabs": [],
@@ -404,6 +404,9 @@ class Settings:
             {"path": os.path.normpath(n["path"]), "upload": bool(n.get("upload"))}
             for n in self.data["share_folders"]
             if isinstance(n, dict) and isinstance(n.get("path"), str) and n["path"].startswith("/")]
+        self.data["drive_names"] = {
+            k: v.strip()[:80] for k, v in self.data["drive_names"].items()
+            if isinstance(k, str) and isinstance(v, str) and v.strip()}
         if not 1024 <= self.data["share_port"] <= 65535:
             self.data["share_port"] = self.DEFAULTS["share_port"]
         if self.data["share_autostop"] not in SHARE_AUTOSTOP:
@@ -441,6 +444,18 @@ class Settings:
 
     def set(self, key, value):
         self.data[key] = value
+        self.save()
+
+    # drive names shown only inside Harbor (key: drive_id())
+    def drive_name(self, did):
+        return self.data["drive_names"].get(did) if did else None
+
+    def set_drive_name(self, did, name):
+        name = (name or "").strip()[:80]
+        if name:
+            self.data["drive_names"][did] = name
+        else:
+            self.data["drive_names"].pop(did, None)
         self.save()
 
     # network locations: never with a password

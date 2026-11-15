@@ -76,3 +76,27 @@ def test_phone_banner_and_label():
     assert phone_label(uri) == "Redmi Pad 2"
     PHONE_NAMES.pop(uri)
     assert phone_label("smb://host/share") is None
+
+
+def test_drive_names_saved_and_cleaned(tmp_path):
+    """0.5.35: Harbor-only drive names."""
+    p = str(tmp_path / "files.json")
+    s = fc.Settings(p)
+    s.set_drive_name("uuid:ABC", "  Games  ")
+    s.set_drive_name("root", "System")
+    assert fc.Settings(p).drive_name("uuid:ABC") == "Games"
+    s.set_drive_name("root", "")
+    assert fc.Settings(p).drive_name("root") is None
+    with open(p, "w") as f:
+        f.write('{"drive_names": {"a": 3, "b": " ", "c": "OK"}}')
+    assert fc.Settings(p).get("drive_names") == {"c": "OK"}
+
+
+def test_drive_id_and_rename_dialog_imports():
+    from harbor.files_drive_rename import RenameDriveDialog, _msg  # noqa: F401
+    from harbor.files_sidebar import drive_id
+    assert drive_id(None) == "root"
+
+    class E:
+        message = "GDBus.Error:org.freedesktop.UDisks2.Error.Failed: Busy"
+    assert _msg(E()) == "Busy"

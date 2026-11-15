@@ -108,6 +108,47 @@ def mount_label(mount):
     return mount.get_name() or "Drive"
 
 
+def drive_volume(obj):
+    if obj is None:
+        return None
+    return obj if isinstance(obj, Gio.Volume) else obj.get_volume()
+
+
+def drive_id(obj):
+    """Stable key for a drive's Harbor-only name: the filesystem UUID when known,
+    else the device node or mount root. "root" is the File System entry."""
+    if obj is None:
+        return "root"
+    vol = drive_volume(obj)
+    uuid = (vol.get_uuid() if vol is not None else None) or (
+        obj.get_uuid() if isinstance(obj, Gio.Mount) else None)
+    if uuid:
+        return "uuid:" + uuid
+    dev = vol.get_identifier("unix-device") if vol is not None else None
+    if dev:
+        return "dev:" + dev
+    if isinstance(obj, Gio.Mount):
+        return "loc:" + obj.get_root().get_uri()
+    return None
+
+
+def drive_device(obj):
+    """/dev node of a drive (None = not a local block device)."""
+    if obj is None:
+        try:
+            with open("/proc/self/mounts", encoding="utf-8") as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) > 2 and parts[1] == "/" and parts[0].startswith("/dev/"):
+                        return parts[0]
+        except OSError:
+            pass
+        return None
+    vol = drive_volume(obj)
+    dev = vol.get_identifier("unix-device") if vol is not None else None
+    return dev if dev and dev.startswith("/dev/") else None
+
+
 class SideList(NavList):
     """NavList that can be rebuilt and takes Gio icons and indented rows."""
 
@@ -226,14 +267,43 @@ class Sidebar(Gtk.Box):
             if phone:
                 out.append(("mount:%d" % i, phone, Gio.ThemedIcon.new("phone-symbolic"), m, uri))
                 continue
-            out.append(("mount:%d" % i, mount_label(m), m.get_symbolic_icon() or m.get_icon(), m,
-                        uri))
+            out.append(("mount:%d" % i, self.drive_label(m), m.get_symbolic_icon() or m.get_icon(),
+                        m, uri))
         for i, v in enumerate(self.vm.get_volumes()):
             if v in seen_vol or v.get_mount() is not None or not v.can_mount():
                 continue
-            out.append(("volume:%d" % i, v.get_name() or "Drive",
+            out.append(("volume:%d" % i, self.drive_label(v),
                         v.get_symbolic_icon() or v.get_icon(), v, None))
         return out
+
+    def drive_label(self, obj):
+        """Harbor-only name if one is set, else the system name."""
+        alias = self.settings.drive_name(drive_id(obj))
+        if alias:
+            return alias
+        if obj is None:
+            return "File System"
+        if isinstance(obj, Gio.Mount):
+            return mount_label(obj)
+        return obj.get_name() or "Drive"
+
+    def rename_drive(self, key):
+        obj = None if key == "root" else self.objects.get(key)
+        if key != "root" and obj is None:
+            return
+        did = drive_id(obj)
+        if did is None:
+            self.win.notify_toast("This drive can't be renamed")
+            return
+        from .files_drive_rename import RenameDriveDialog
+        system = ("File System" if obj is None else mount_label(obj)
+                  if isinstance(obj, Gio.Mount) else obj.get_name() or "Drive")
+        RenameDriveDialog(self, did, self.drive_label(obj), system,
+                          drive_device(obj)).present(self.win)
+
+    def names_changed(self):
+        self.rebuild()
+        self.win.lookup_action("refresh").activate(None)
 
     def rebuild(self):
         lst = self.list
@@ -251,7 +321,7 @@ class Sidebar(Gtk.Box):
                 tooltip=q["path"], pinned=not q["default"])
         lst.add_separator()
         add("thispc", "This PC", "computer-symbolic", fc.THIS_PC)
-        add("root", "File System", "drive-harddisk-symbolic", fc.location_for("/"), indent=14)
+        add("root", self.drive_label(None), "drive-harddisk-symbolic", fc.location_for("/"), indent=14)
         for key, text, icon, obj, loc in self.drives():
             self.objects[key] = obj
             phone = loc and phone_share_addr(loc)
@@ -505,6 +575,11 @@ class Sidebar(Gtk.Box):
         if key.startswith("pin:"):
             s2.append_item(mi("Unpin from Quick access", "win.unpin", key[4:]))
             s2.append_item(mi("Open in Terminal", "win.terminal-at", key[4:]))
+        if key.startswith(("mount:", "volume:")) and drive_id(self.objects.get(key)) \
+                and not phone_share_addr(self.targets.get(key) or ""):
+            s2.append_item(mi("Rename…", "win.drive-rename", key))
+        if key == "root":
+            s2.append_item(mi("Rename…", "win.drive-rename", "root"))
         if key.startswith("mount:"):
             obj = self.objects.get(key)
             if obj is not None and obj.can_eject():

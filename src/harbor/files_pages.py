@@ -86,12 +86,21 @@ class _Clicks:
             on_middle(child)
 
 
-def tile(icon, title, sub=None, extra=None, icon_size=40):
+def tile(icon, title, sub=None, extra=None, icon_size=40, badge=None):
     box = Gtk.Box(spacing=12, css_classes=["hbf-qtile"])
     box.append(_image(icon, icon_size))
-    col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, valign=Gtk.Align.CENTER,
+    col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER,
                   hexpand=True)
-    col.append(_label(title, "hbf-qtile-title"))
+    title_lab = _label(title, "hbf-qtile-title")
+    title_lab.set_ellipsize(Pango.EllipsizeMode.END)
+    if badge is not None:
+        head = Gtk.Box(spacing=8)
+        title_lab.set_hexpand(True)
+        head.append(title_lab)
+        head.append(badge)
+        col.append(head)
+    else:
+        col.append(title_lab)
     if extra is not None:
         col.append(extra)
     sub_lab = _label(sub or "", "hb-dim", "hb-small")
@@ -113,6 +122,18 @@ def tile_flow(min_w=230):
 
 def section_label(text):
     return _label(text, "hbf-section")
+
+
+def section_header(icon, text):
+    """Section title with an icon and a hairline rule running to the right."""
+    row = Gtk.Box(spacing=8, css_classes=["hbf-section-head"])
+    row.append(Gtk.Image(icon_name=icon, pixel_size=16, css_classes=["hbf-section-icon"]))
+    row.append(_label(text, "hbf-section-text"))
+    row.append(Gtk.Separator(hexpand=True, valign=Gtk.Align.CENTER, css_classes=["hbf-rule"]))
+    return row
+
+
+USE_MID, USE_HIGH = 0.75, 0.90      # drive bar turns amber, then red
 
 
 # ---------------------------------------------------------------------- Home
@@ -262,14 +283,16 @@ class ThisPCPage(Gtk.ScrolledWindow):
         self.win = win
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_start=28,
                         margin_end=28, margin_top=18, margin_bottom=24)
-        outer.append(section_label("Quick access"))
+        outer.append(section_header("folder-symbolic", "Quick access"))
         self.folders = tile_flow()
+        self.folders.add_css_class("hbf-cards")
         self.folders.connect("child-activated", lambda _f, c: win.open_location(c.location))
         _Clicks(self.folders, lambda x, y: self.folders.get_child_at_pos(x, y),
                 self._folder_menu, lambda c: win.open_location(c.location, new_tab=True))
         outer.append(self.folders)
-        outer.append(section_label("Devices and drives"))
+        outer.append(section_header("drive-harddisk-symbolic", "Devices and drives"))
         self.drives = tile_flow(min_w=280)
+        self.drives.add_css_class("hbf-cards")
         self.drives.connect("child-activated", self._drive_activated)
         _Clicks(self.drives, lambda x, y: self.drives.get_child_at_pos(x, y),
                 self._drive_menu, lambda c: c.location and win.open_location(c.location, True))
@@ -293,22 +316,24 @@ class ThisPCPage(Gtk.ScrolledWindow):
             child.set_tooltip_text(path)
             self.folders.append(child)
         self.drives.remove_all()
-        entries = [("root", "File System", Gio.ThemedIcon.new("drive-harddisk"), None,
-                    fc.location_for("/"))]
+        entries = [("root", self.win.sidebar.drive_label(None),
+                    Gio.ThemedIcon.new_from_names(["drive-harddisk-system", "drive-harddisk"]), None, fc.location_for("/"))]
         for key, text, icon, obj, loc in self.win.sidebar.drives():
             big = obj.get_icon() if obj is not None else icon
             entries.append((key, text, big, obj, loc))
         for key, text, icon, obj, loc in entries:
             bar = Gtk.ProgressBar(css_classes=["hbf-bar"], fraction=0.0)
-            t = tile(icon, text, "Not mounted" if loc is None else "", extra=bar)
+            pct = Gtk.Label(css_classes=["hbf-pct"], visible=False, valign=Gtk.Align.END)
+            t = tile(icon, text, "Not mounted" if loc is None else "", extra=bar, icon_size=48,
+                     badge=pct)
             bar.set_visible(loc is not None)
             child = Gtk.FlowBoxChild(child=t)
             child.location, child.obj, child.key = loc, obj, key
             self.drives.append(child)
             if loc is not None:
-                self._fill_space(Gio.File.new_for_uri(loc), bar, t.sub_label)
+                self._fill_space(Gio.File.new_for_uri(loc), bar, t.sub_label, pct)
 
-    def _fill_space(self, gfile, bar, sub):
+    def _fill_space(self, gfile, bar, sub, pct):
         def done(f, res):
             try:
                 info = f.query_filesystem_info_finish(res)
@@ -322,8 +347,12 @@ class ThisPCPage(Gtk.ScrolledWindow):
                 return
             frac = max(0.0, min(1.0, (size - free) / size))
             bar.set_fraction(frac)
-            if frac >= 0.9:
-                bar.add_css_class("hbf-bar-warn")
+            level = "warn" if frac >= USE_HIGH else "mid" if frac >= USE_MID else None
+            if level:
+                bar.add_css_class("hbf-bar-" + level)
+                pct.add_css_class("hbf-pct-" + level)
+            pct.set_label("%d%% used" % round(frac * 100))
+            pct.set_visible(True)
             sub.set_label("%s free of %s" % (human_size(free), human_size(size)))
             sub.set_visible(True)
         gfile.query_filesystem_info_async("filesystem::size,filesystem::free",
@@ -344,6 +373,10 @@ class ThisPCPage(Gtk.ScrolledWindow):
         self.drives.select_child(child)
         if child.key == "root" or not child.key.startswith(("mount:", "volume:")):
             m = fm.path_menu(child.location, True, can_unpin=False)
+            if child.key == "root":
+                ren = Gio.Menu()
+                ren.append("Rename…", "win.drive-rename::root")
+                m.append_section(None, ren)
         else:
             m = self.win.sidebar.menu_for(child.key)
         self.win.popup_menu(self.drives, x, y, m)
