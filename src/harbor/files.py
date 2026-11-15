@@ -993,7 +993,17 @@ class FilesWindow(HarborWindow):
                 Gio.AppInfo.get_default_for_type(content_type, False) is None:
             self.choose_app(gfile, content_type)
             return False
-        return self.launch(gfile.get_uri(), app)
+        uri = gfile.get_uri()
+        if not gfile.is_native():
+            # GIO's default for ftp://, sftp://... files is the scheme's
+            # handler (often a web browser), not the file type's app. Pick
+            # the type's app and hand it the local gvfs path when there is one.
+            if app is None and content_type:
+                app = Gio.AppInfo.get_default_for_type(content_type, False)
+            path = gfile.get_path()
+            if path:
+                uri = Gio.File.new_for_path(path).get_uri()
+        return self.launch(uri, app)
 
     def choose_app(self, gfile, content_type):
         from .files_pages import AppChooser
