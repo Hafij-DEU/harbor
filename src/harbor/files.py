@@ -244,12 +244,27 @@ separator.hbf-rule { background: $divider; min-height: 1px; margin-left: 6px; }
 flowbox.hbf-cards > flowboxchild { background: $entry; border: 1px solid $border; border-radius: 10px;
     box-shadow: 0 1px 3px $shadow; }
 flowbox.hbf-cards > flowboxchild:hover { background: $card_hover; }
+/* 3D: light top edge, dark bottom edge, layered drop shadow, lift on hover */
+flowbox.hbf-cards-folders > flowboxchild, flowbox.hbf-cards-drives > flowboxchild {
+    box-shadow: inset 0 1px shade($entry, 1.3), inset 0 -2px alpha(black, 0.07),
+                0 1px 1px alpha(black, 0.10), 0 4px 10px alpha(black, 0.10);
+    transition: transform 160ms ease-out, box-shadow 160ms ease-out; }
+flowbox.hbf-cards-folders > flowboxchild:hover, flowbox.hbf-cards-drives > flowboxchild:hover {
+    transform: translateY(-2px);
+    box-shadow: inset 0 1px shade($entry, 1.3), inset 0 -2px alpha(black, 0.07),
+                0 2px 3px alpha(black, 0.10), 0 10px 22px alpha(black, 0.16); }
+flowbox.hbf-cards-folders > flowboxchild:active, flowbox.hbf-cards-drives > flowboxchild:active {
+    transform: translateY(0);
+    box-shadow: inset 0 2px 4px alpha(black, 0.12), 0 1px 1px alpha(black, 0.08); }
+flowbox.hbf-cards image { -gtk-icon-shadow: 0 2px 3px alpha(black, 0.28); }
 /* accent-tinted cards: a light shade for Quick access, a deeper one for drives */
 flowbox.hbf-cards-folders > flowboxchild { border-color: alpha(var(--accent-bg-color), 0.25);
-    background-image: linear-gradient(135deg, alpha(shade(var(--accent-bg-color), 1.25), 0.22),
+    background-image: linear-gradient(180deg, alpha(white, 0.35), alpha(white, 0) 55%),
+                      linear-gradient(135deg, alpha(shade(var(--accent-bg-color), 1.25), 0.22),
                                               alpha(shade(var(--accent-bg-color), 1.25), 0.06)); }
 flowbox.hbf-cards-drives > flowboxchild { border-color: alpha(shade(var(--accent-bg-color), 0.7), 0.30);
-    background-image: linear-gradient(135deg, alpha(shade(var(--accent-bg-color), 0.7), 0.06),
+    background-image: linear-gradient(180deg, alpha(white, 0.35), alpha(white, 0) 55%),
+                      linear-gradient(135deg, alpha(shade(var(--accent-bg-color), 0.7), 0.06),
                                               alpha(shade(var(--accent-bg-color), 0.7), 0.24)); }
 flowbox.hbf-cards-folders > flowboxchild:hover, flowbox.hbf-cards-drives > flowboxchild:hover {
     border-color: alpha(var(--accent-bg-color), 0.55); }
