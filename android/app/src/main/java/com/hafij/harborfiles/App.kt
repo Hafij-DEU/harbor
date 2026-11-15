@@ -194,9 +194,12 @@ fun Root(state: AppState) {
     BackHandler(enabled = state.stack.size == 1 && state.tab != 0) { state.tab = 0 }
     val width = LocalConfiguration.current.screenWidthDp
     val wide = width >= 600
-    CompositionLocalProvider(LocalWide provides wide) { Row(Modifier.fillMaxSize()) {
-    // Landscape tablets get the full sidebar; portrait tablets the slim rail.
-    if (width >= 840) Sidebar(state) else if (wide) SideRail(state)
+    val side = width >= 840
+    // Landscape tablets get the sidebar. Portrait tablets keep the bottom pill
+    // (easy to reach) and One UI style tall headers that start lower down.
+    CompositionLocalProvider(LocalWide provides wide, LocalSidebar provides side, LocalTall provides (wide && !side)) {
+    Row(Modifier.fillMaxSize()) {
+    if (side) Sidebar(state)
     Box(Modifier.weight(1f).fillMaxHeight()) {
         when (val s = state.stack.last()) {
             Screen.Home -> Home(state)
@@ -208,52 +211,10 @@ fun Root(state: AppState) {
             Screen.Settings -> SettingsScreen(state)
             Screen.Search -> SearchScreen(state)
         }
-        SnackbarHost(state.snack, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = if (wide) 16.dp else 80.dp))
+        SnackbarHost(state.snack, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = if (side) 16.dp else 80.dp))
     }
     } }
     state.busy?.let { BusyDialog(it) }
-}
-
-/** Tablet navigation: a rail on the left replaces the bottom pill. */
-@Composable
-private fun SideRail(state: AppState) {
-    val rail = state.stack.lastOrNull { it == Screen.Search || it == Screen.Favorites || it == Screen.Trash || it == Screen.Settings }
-    fun home(tab: Int) { while (state.stack.size > 1) state.pop(); state.tab = tab }
-    fun open(s: Screen) { while (state.stack.size > 1) state.pop(); state.push(s) }
-    Column(
-        Modifier.fillMaxHeight().width(96.dp).statusBarsPadding().navigationBarsPadding()
-            .verticalScroll(rememberScrollState()).padding(vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        RailItem("Recent", Icons.Rounded.History, rail == null && state.tab == 0) { home(0) }
-        RailItem("Browse", Icons.Rounded.GridView, rail == null && state.tab == 1) { home(1) }
-        RailItem("Connect", Icons.Rounded.Lan, rail == null && state.tab == 2) { home(2) }
-        RailItem("Search", Icons.Rounded.Search, rail == Screen.Search) { open(Screen.Search) }
-        HorizontalDivider(Modifier.width(48.dp).padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
-        RailItem("Favourites", Icons.Rounded.Star, rail == Screen.Favorites) { open(Screen.Favorites) }
-        RailItem("Deleted", Icons.Rounded.Delete, rail == Screen.Trash) { open(Screen.Trash) }
-        RailItem("Settings", Icons.Rounded.Settings, rail == Screen.Settings) { open(Screen.Settings) }
-    }
-}
-
-@Composable
-private fun RailItem(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
-    val c = MaterialTheme.colorScheme
-    Column(
-        Modifier.width(80.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            Modifier.size(56.dp, 32.dp).clip(CircleShape).background(if (selected) c.primaryContainer else Color.Transparent),
-            contentAlignment = Alignment.Center,
-        ) { Icon(icon, null, Modifier.size(22.dp), tint = if (selected) c.primary else c.onSurfaceVariant) }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            label, style = MaterialTheme.typography.labelMedium, maxLines = 1,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) c.primary else c.onSurfaceVariant,
-        )
-    }
 }
 
 @Composable
@@ -277,7 +238,7 @@ fun Home(state: AppState) {
             1 -> BrowseScreen(state)
             else -> ConnectScreen(state)
         }
-        if (!isWide()) BottomPill(state, Modifier.align(Alignment.BottomCenter))
+        if (!LocalSidebar.current) BottomPill(state, Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -326,8 +287,26 @@ private fun PillItem(label: String, icon: ImageVector, selected: Boolean, onClic
 /** Big page title like the Mi file manager. */
 @Composable
 fun BigTitle(text: String, modifier: Modifier = Modifier, trailing: @Composable () -> Unit = {}) {
+    if (LocalTall.current) { TallTitle(text, modifier, trailing); return }
     Row(modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(text, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        trailing()
+    }
+}
+
+/**
+ * One UI style header for portrait tablets: the title sits low in an empty top
+ * area, so the first rows land within thumb reach. It scrolls away with the page.
+ */
+@Composable
+fun TallTitle(text: String, modifier: Modifier = Modifier, trailing: @Composable () -> Unit = {}) {
+    val h = LocalConfiguration.current.screenHeightDp * 0.26f
+    Row(
+        modifier.fillMaxWidth().height(h.dp).padding(start = 28.dp, end = 12.dp, bottom = 20.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        Text(text, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold,
+            maxLines = 2, modifier = Modifier.weight(1f))
         trailing()
     }
 }
