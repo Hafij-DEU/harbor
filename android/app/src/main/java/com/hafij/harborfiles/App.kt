@@ -19,7 +19,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -54,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -181,7 +192,12 @@ fun Root(state: AppState) {
     }
     BackHandler(enabled = state.stack.size > 1) { state.pop() }
     BackHandler(enabled = state.stack.size == 1 && state.tab != 0) { state.tab = 0 }
-    Box(Modifier.fillMaxSize()) {
+    val width = LocalConfiguration.current.screenWidthDp
+    val wide = width >= 600
+    CompositionLocalProvider(LocalWide provides wide) { Row(Modifier.fillMaxSize()) {
+    // Landscape tablets get the full sidebar; portrait tablets the slim rail.
+    if (width >= 840) Sidebar(state) else if (wide) SideRail(state)
+    Box(Modifier.weight(1f).fillMaxHeight()) {
         when (val s = state.stack.last()) {
             Screen.Home -> Home(state)
             is Screen.Folder -> FolderScreen(state, s)
@@ -192,8 +208,51 @@ fun Root(state: AppState) {
             Screen.Settings -> SettingsScreen(state)
             Screen.Search -> SearchScreen(state)
         }
-        SnackbarHost(state.snack, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 80.dp))
-        state.busy?.let { BusyDialog(it) }
+        SnackbarHost(state.snack, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = if (wide) 16.dp else 80.dp))
+    }
+    } }
+    state.busy?.let { BusyDialog(it) }
+}
+
+/** Tablet navigation: a rail on the left replaces the bottom pill. */
+@Composable
+private fun SideRail(state: AppState) {
+    val rail = state.stack.lastOrNull { it == Screen.Search || it == Screen.Favorites || it == Screen.Trash || it == Screen.Settings }
+    fun home(tab: Int) { while (state.stack.size > 1) state.pop(); state.tab = tab }
+    fun open(s: Screen) { while (state.stack.size > 1) state.pop(); state.push(s) }
+    Column(
+        Modifier.fillMaxHeight().width(96.dp).statusBarsPadding().navigationBarsPadding()
+            .verticalScroll(rememberScrollState()).padding(vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        RailItem("Recent", Icons.Rounded.History, rail == null && state.tab == 0) { home(0) }
+        RailItem("Browse", Icons.Rounded.GridView, rail == null && state.tab == 1) { home(1) }
+        RailItem("Connect", Icons.Rounded.Lan, rail == null && state.tab == 2) { home(2) }
+        RailItem("Search", Icons.Rounded.Search, rail == Screen.Search) { open(Screen.Search) }
+        HorizontalDivider(Modifier.width(48.dp).padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+        RailItem("Favourites", Icons.Rounded.Star, rail == Screen.Favorites) { open(Screen.Favorites) }
+        RailItem("Deleted", Icons.Rounded.Delete, rail == Screen.Trash) { open(Screen.Trash) }
+        RailItem("Settings", Icons.Rounded.Settings, rail == Screen.Settings) { open(Screen.Settings) }
+    }
+}
+
+@Composable
+private fun RailItem(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Column(
+        Modifier.width(80.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier.size(56.dp, 32.dp).clip(CircleShape).background(if (selected) c.primaryContainer else Color.Transparent),
+            contentAlignment = Alignment.Center,
+        ) { Icon(icon, null, Modifier.size(22.dp), tint = if (selected) c.primary else c.onSurfaceVariant) }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            label, style = MaterialTheme.typography.labelMedium, maxLines = 1,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) c.primary else c.onSurfaceVariant,
+        )
     }
 }
 
@@ -218,7 +277,7 @@ fun Home(state: AppState) {
             1 -> BrowseScreen(state)
             else -> ConnectScreen(state)
         }
-        BottomPill(state, Modifier.align(Alignment.BottomCenter))
+        if (!isWide()) BottomPill(state, Modifier.align(Alignment.BottomCenter))
     }
 }
 

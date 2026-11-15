@@ -28,6 +28,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -145,18 +148,23 @@ fun RecentScreen(state: AppState) {
             }.getOrDefault(emptyList()).let(::groupRecent)
         }
     }
-    LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), contentPadding = PaddingValues(bottom = 110.dp)) {
-        item { BigTitle("Recent") }
+    // Phones: one column. Tablets: cards flow into columns at least 420 dp wide.
+    val full = StaggeredGridItemSpan.FullLine
+    LazyVerticalStaggeredGrid(
+        StaggeredGridCells.Adaptive(420.dp), Modifier.fillMaxSize().statusBarsPadding(),
+        contentPadding = PaddingValues(start = if (isWide()) 6.dp else 0.dp, end = if (isWide()) 6.dp else 0.dp, bottom = 110.dp),
+    ) {
+        item(span = full) { BigTitle("Recent") }
         val g = groups
         when {
-            g == null -> item { Empty("Loading…") }
-            g.isEmpty() -> item { Empty("No recent files") }
+            g == null -> item(span = full) { Empty("Loading…") }
+            g.isEmpty() -> item(span = full) { Empty("No recent files") }
             else -> {
                 var lastDay = ""
                 for (grp in g) {
                     if (grp.day != lastDay) {
                         lastDay = grp.day
-                        item(key = "d" + grp.day + grp.source) {
+                        item(key = "d" + grp.day + grp.source, span = full) {
                             Text(grp.day, Modifier.padding(start = 22.dp, top = 12.dp, bottom = 2.dp),
                                 style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -264,68 +272,76 @@ fun BrowseScreen(state: AppState) {
                 }
             }
         }
-        Card {
-            Cat.entries.chunked(3).forEach { row ->
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                    row.forEach { c ->
-                        val (ic, k) = catIcon(c)
-                        Column(
-                            Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).clickable { state.push(Screen.Category(c)) }.padding(vertical = 12.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(kindColor(k).copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                                Icon(ic, null, tint = kindColor(k))
+        val left: @Composable () -> Unit = {
+            Card {
+                Cat.entries.chunked(3).forEach { row ->
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                        row.forEach { c ->
+                            val (ic, k) = catIcon(c)
+                            Column(
+                                Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).clickable { state.push(Screen.Category(c)) }.padding(vertical = 12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(kindColor(k).copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                                    Icon(ic, null, tint = kindColor(k))
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text(c.label, style = MaterialTheme.typography.bodyMedium)
+                                Text(counts[c]?.toString() ?: "–", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            Spacer(Modifier.height(6.dp))
-                            Text(c.label, style = MaterialTheme.typography.bodyMedium)
-                            Text(counts[c]?.toString() ?: "–", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
             }
-        }
-        Card {
-            NavRow("Downloads", Icons.Rounded.Download) {
-                val d = File(PHONE_ROOT, "Download"); state.openFolder(state.local, d.path, d.path, "Downloads")
-            }
-            Divider()
-            NavRow("Favourites", Icons.Rounded.Star, "${state.prefs.favorites.size}") { state.push(Screen.Favorites) }
-            Divider()
-            NavRow("Recently deleted", Icons.Rounded.Delete) { state.push(Screen.Trash) }
-        }
-        vols.forEach { v ->
             Card {
-                Row(
-                    Modifier.fillMaxWidth().clickable { state.openFolder(state.local, v.path, v.path, v.title) }.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(if (v.path == PHONE_ROOT) Icons.Rounded.PhoneAndroid else Icons.Rounded.SdStorage, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(v.title, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(6.dp))
-                        LinearProgressIndicator(
-                            progress = { if (v.total > 0) 1f - v.free.toFloat() / v.total else 0f },
-                            Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text("${fmtSize(v.total - v.free)} used of ${fmtSize(v.total)}", style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                NavRow("Downloads", Icons.Rounded.Download) {
+                    val d = File(PHONE_ROOT, "Download"); state.openFolder(state.local, d.path, d.path, "Downloads")
+                }
+                Divider()
+                NavRow("Favourites", Icons.Rounded.Star, "${state.prefs.favorites.size}") { state.push(Screen.Favorites) }
+                Divider()
+                NavRow("Recently deleted", Icons.Rounded.Delete) { state.push(Screen.Trash) }
+            }
+        }
+        val right: @Composable () -> Unit = {
+            vols.forEach { v ->
+                Card {
+                    Row(
+                        Modifier.fillMaxWidth().clickable { state.openFolder(state.local, v.path, v.path, v.title) }.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(if (v.path == PHONE_ROOT) Icons.Rounded.PhoneAndroid else Icons.Rounded.SdStorage, null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(16.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(v.title, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(6.dp))
+                            LinearProgressIndicator(
+                                progress = { if (v.total > 0) 1f - v.free.toFloat() / v.total else 0f },
+                                Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text("${fmtSize(v.total - v.free)} used of ${fmtSize(v.total)}", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null)
                     }
-                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null)
+                }
+            }
+            if (sources.isNotEmpty()) {
+                Text("Sources", Modifier.padding(start = 22.dp, top = 12.dp, bottom = 2.dp), style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Card {
+                    sources.forEachIndexed { i, (n, f) ->
+                        if (i > 0) Divider()
+                        NavRow(n, Icons.Rounded.Folder) { state.openFolder(state.local, f.path, f.path, n) }
+                    }
                 }
             }
         }
-        if (sources.isNotEmpty()) {
-            Text("Sources", Modifier.padding(start = 22.dp, top = 12.dp, bottom = 2.dp), style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Card {
-                sources.forEachIndexed { i, (n, f) ->
-                    if (i > 0) Divider()
-                    NavRow(n, Icons.Rounded.Folder) { state.openFolder(state.local, f.path, f.path, n) }
-                }
-            }
-        }
+        if (isWide()) Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp)) {
+            Column(Modifier.weight(1f)) { left() }
+            Column(Modifier.weight(1f)) { right() }
+        } else { left(); right() }
     }
 }
 
@@ -510,7 +526,7 @@ fun TrashScreen(state: AppState) {
         when {
             l == null -> Empty("Loading…")
             l.isEmpty() -> Empty(if (days > 0) "Deleted files stay here for $days days" else "Recently deleted is off in Settings")
-            else -> LazyColumn(contentPadding = PaddingValues(bottom = 40.dp)) {
+            else -> LazyColumn(Modifier.readable(), contentPadding = PaddingValues(bottom = 40.dp)) {
                 items(l, key = { it.id }) { t ->
                     val e = Entry(t.name, File(trash.dir, t.id).path, t.isDir, t.size, t.deletedAt)
                     val left = trash.daysLeft(t, days)
@@ -543,7 +559,7 @@ fun SettingsScreen(state: AppState) {
     val version = remember { runCatching { state.ctx.packageManager.getPackageInfo(state.ctx.packageName, 0).versionName }.getOrNull() ?: "" }
     Column(Modifier.fillMaxSize()) {
         TopBar("Settings", { state.pop() })
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 40.dp)) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 40.dp).readable()) {
             Section("Files")
             Card {
                 SwitchRow("Show hidden files", "Names starting with a dot", p.showHidden) { p.showHidden = it }
@@ -632,7 +648,7 @@ fun ConnectScreen(state: AppState) {
     var editing by remember { mutableStateOf<Server?>(null) }
     var adding by remember { mutableStateOf(false) }
     var removing by remember { mutableStateOf<Server?>(null) }
-    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = 110.dp)) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = 110.dp).readable()) {
         BigTitle("Connect")
         Section("This phone")
         Card {

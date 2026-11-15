@@ -27,6 +27,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -227,6 +230,17 @@ fun Empty(text: String, modifier: Modifier = Modifier) {
  * List (or photo grid) of entries with Mi-style selection: long-press to select,
  * bottom bar Send / Move / Delete / More. [pasteDir] shows the Paste bar when a clip is waiting.
  */
+/** True on tablets and other wide windows (600 dp and up): side rail, multi-column lists. */
+val LocalWide = compositionLocalOf { false }
+
+@Composable
+fun isWide() = LocalWide.current
+
+/** On wide windows, keep text-heavy pages at a readable width, centred. */
+@Composable
+fun Modifier.readable(): Modifier =
+    if (isWide()) fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 760.dp) else this
+
 @Composable
 fun FilesView(
     state: AppState,
@@ -255,6 +269,8 @@ fun FilesView(
     }
     val hold: (Entry) -> Unit = { e -> sel = sel + e.path }
     androidx.activity.compose.BackHandler(enabled = selecting) { sel = emptySet() }
+    val wide = isWide()
+    val thumb = if (wide) 140.dp else 100.dp
 
     Column(Modifier.fillMaxSize()) {
         if (selecting) {
@@ -272,16 +288,26 @@ fun FilesView(
                 entries == null -> Empty("Loading…")
                 list.isEmpty() -> Column { header(); Empty("Nothing here") }
                 grid -> LazyVerticalGrid(
-                    GridCells.Adaptive(100.dp), Modifier.fillMaxSize(),
+                    GridCells.Adaptive(thumb), Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(8.dp, 0.dp, 8.dp, 120.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     item(span = { GridItemSpan(maxLineSpan) }) { header() }
                     items(list, key = { it.path }) { e ->
                         Box(Modifier.aspectRatio(1f).combinedClickable(onClick = { tap(e) }, onLongClick = { hold(e) })) {
-                            Thumb(e, fs.isLocal, 100.dp, fill = true, corner = 6.dp)
+                            Thumb(e, fs.isLocal, thumb, fill = true, corner = 6.dp)
                             if (selecting) Box(Modifier.align(Alignment.TopEnd).padding(6.dp)) { RoundCheck(e.path in sel) }
                         }
+                    }
+                }
+                // Tablets: rows flow into as many columns as fit (each at least 340 dp).
+                wide -> LazyVerticalGrid(
+                    GridCells.Adaptive(340.dp), Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 120.dp),
+                ) {
+                    item(span = { GridItemSpan(maxLineSpan) }) { header() }
+                    items(list, key = { it.path }) { e ->
+                        FileRow(e, fs.isLocal, if (selecting) e.path in sel else null, { tap(e) }, { hold(e) }, detail(e))
                     }
                 }
                 else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 120.dp)) {
