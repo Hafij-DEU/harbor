@@ -11,8 +11,12 @@ from . import files_network as fn
 from . import files_icons
 from .common import NavList
 
-PHONE_CHECK_SECS = 5
-PHONE_MISSES = 2
+PHONE_CHECK_SECS = 10
+# Drop a phone share only after it has been unreachable this long.
+# Refused = the phone's FTP server was stopped; silence = Wi-Fi asleep
+# or screen off, which usually recovers, so give it much longer.
+PHONE_GONE_REFUSED_SECS = 30
+PHONE_GONE_SILENT_SECS = 180
 PHONE_NAMES = {}    # share uri -> device name the phone sent in its FTP banner
 
 
@@ -228,7 +232,8 @@ class Sidebar(Gtk.Box):
         for sig in ("mount-added", "mount-removed", "mount-changed", "volume-added",
                     "volume-removed", "volume-changed"):
             self.vm.connect(sig, lambda *_: self.queue_rebuild())
-        self._phone_miss = {}    # phone share uri -> failed reach checks in a row
+        self._phone_miss = {}    # phone share uri -> time of first failed check in a row
+        self._phone_busy = set() # phone share uris with a probe in flight
         GLib.timeout_add_seconds(PHONE_CHECK_SECS, self._check_phones)
         self._trash_mon = None
         try:
@@ -441,27 +446,39 @@ class Sidebar(Gtk.Box):
         if self.get_root() is None:     # window closed
             return False
         live = set()
+
+        def live_now():
+            return {x.get_root().get_uri() for x in self.vm.get_mounts()}
         for m in self.vm.get_mounts():
             uri = m.get_root().get_uri()
             addr = phone_share_addr(uri)
             if addr is None:
                 continue
             live.add(uri)
-            client = Gio.SocketClient(timeout=3)
+            if uri in self._phone_busy:
+                continue
+            self._phone_busy.add(uri)
+            client = Gio.SocketClient(timeout=8)
 
             def done(c, res, m=m, uri=uri):
+                self._phone_busy.discard(uri)
                 try:
                     conn = c.connect_finish(res)
-                    self._phone_miss[uri] = 0
+                    self._phone_miss.pop(uri, None)
                     if uri in PHONE_NAMES:
                         conn.close(None)
                     else:
                         self._read_name(conn, uri)
                     return
-                except GLib.Error:
-                    pass
-                self._phone_miss[uri] = self._phone_miss.get(uri, 0) + 1
-                if self._phone_miss[uri] >= PHONE_MISSES:
+                except GLib.Error as e:
+                    refused = e.matches(Gio.io_error_quark(),
+                                        Gio.IOErrorEnum.CONNECTION_REFUSED)
+                if uri not in live_now():
+                    return
+                now = GLib.get_monotonic_time() / 1e6
+                first = self._phone_miss.setdefault(uri, now)
+                limit = PHONE_GONE_REFUSED_SECS if refused else PHONE_GONE_SILENT_SECS
+                if now - first >= limit:
                     self._phone_miss.pop(uri, None)
                     self._drop_phone(m, uri)
             client.connect_async(Gio.NetworkAddress.new(*addr), None, done)
