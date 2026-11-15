@@ -241,14 +241,18 @@ progressbar.hbf-bar-warn progress { background: #e74856; }
 .hbf-section-text { font-size: 14px; font-weight: 600; }
 .hbf-section-icon { color: $dim; }
 separator.hbf-rule { background: $divider; min-height: 1px; margin-left: 6px; }
-scrolledwindow.hbf-thispc { background-color: $surface;
-  background-image: radial-gradient(ellipse at 100% 0%, alpha(var(--accent-bg-color), 0.28), transparent 60%),
-                    radial-gradient(ellipse at 0% 100%, alpha(var(--accent-bg-color), 0.16), transparent 55%),
-                    linear-gradient(180deg, alpha(var(--accent-bg-color), 0.10), transparent 70%); }
-scrolledwindow.hbf-thispc > viewport { background: none; }
 flowbox.hbf-cards > flowboxchild { background: $entry; border: 1px solid $border; border-radius: 10px;
     box-shadow: 0 1px 3px $shadow; }
 flowbox.hbf-cards > flowboxchild:hover { background: $card_hover; }
+/* accent-tinted cards: a light shade for Quick access, a deeper one for drives */
+flowbox.hbf-cards-folders > flowboxchild { border-color: alpha(var(--accent-bg-color), 0.25);
+    background-image: linear-gradient(135deg, alpha(shade(var(--accent-bg-color), 1.25), 0.22),
+                                              alpha(shade(var(--accent-bg-color), 1.25), 0.06)); }
+flowbox.hbf-cards-drives > flowboxchild { border-color: alpha(shade(var(--accent-bg-color), 0.7), 0.30);
+    background-image: linear-gradient(135deg, alpha(shade(var(--accent-bg-color), 0.7), 0.06),
+                                              alpha(shade(var(--accent-bg-color), 0.7), 0.24)); }
+flowbox.hbf-cards-folders > flowboxchild:hover, flowbox.hbf-cards-drives > flowboxchild:hover {
+    border-color: alpha(var(--accent-bg-color), 0.55); }
 flowbox.hbf-cards > flowboxchild:selected { background: alpha(var(--accent-bg-color), 0.14);
     border-color: alpha(var(--accent-bg-color), 0.55); }
 flowbox.hbf-cards .hbf-qtile { padding: 12px 14px; }

@@ -278,7 +278,7 @@ class HomePage(Gtk.ScrolledWindow):
 
 class ThisPCPage(Gtk.ScrolledWindow):
     def __init__(self, win):
-        super().__init__(vexpand=True, hexpand=True, css_classes=["hbf-page", "hbf-thispc"])
+        super().__init__(vexpand=True, hexpand=True, css_classes=["hbf-page"])
         self.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.win = win
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_start=28,
@@ -286,6 +286,7 @@ class ThisPCPage(Gtk.ScrolledWindow):
         outer.append(section_header("folder-symbolic", "Quick access"))
         self.folders = tile_flow()
         self.folders.add_css_class("hbf-cards")
+        self.folders.add_css_class("hbf-cards-folders")
         self.folders.connect("child-activated", lambda _f, c: win.open_location(c.location))
         _Clicks(self.folders, lambda x, y: self.folders.get_child_at_pos(x, y),
                 self._folder_menu, lambda c: win.open_location(c.location, new_tab=True))
@@ -293,6 +294,7 @@ class ThisPCPage(Gtk.ScrolledWindow):
         outer.append(section_header("drive-harddisk-symbolic", "Devices and drives"))
         self.drives = tile_flow(min_w=280)
         self.drives.add_css_class("hbf-cards")
+        self.drives.add_css_class("hbf-cards-drives")
         self.drives.connect("child-activated", self._drive_activated)
         _Clicks(self.drives, lambda x, y: self.drives.get_child_at_pos(x, y),
                 self._drive_menu, lambda c: c.location and win.open_location(c.location, True))
