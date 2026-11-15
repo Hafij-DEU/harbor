@@ -178,7 +178,10 @@ class FtpServer(
                     val a = arg.split(' ').filterNot { it.startsWith("-") }.joinToString(" ")
                     val r = resolve(cwd, a)
                     if (r == null || !r.second.exists()) { reply(550, "No such folder"); return true }
-                    val files = if (r.second.isDirectory) r.second.listFiles()?.toList() ?: emptyList() else listOf(r.second)
+                    // One stat per entry: File.isDirectory/length/lastModified each
+                    // go through Android's slow storage FUSE layer, so a big
+                    // camera folder took 10+ s to list.
+                    val files = entries(r.second)
                     val text = buildString {
                         for (f in files.sortedBy { it.name.lowercase() }) append(
                             when (cmd) {
@@ -279,20 +282,51 @@ class FtpServer(
     }
 
     companion object {
-        private fun stamp(ms: Long): String = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
-            .apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(ms))
+        // Thread-safe formatters made once (sessions run on many threads),
+        // not a new SimpleDateFormat for every listed file.
+        private val stampFmt = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss", Locale.US)
+            .withZone(java.time.ZoneOffset.UTC)
+        private val recentFmt = java.time.format.DateTimeFormatter.ofPattern("MMM dd HH:mm", Locale.US)
+            .withZone(java.time.ZoneId.systemDefault())
+        private val oldFmt = java.time.format.DateTimeFormatter.ofPattern("MMM dd  yyyy", Locale.US)
+            .withZone(java.time.ZoneId.systemDefault())
 
-        fun mlsx(f: File): String =
-            if (f.isDirectory) "type=dir;modify=${stamp(f.lastModified())};"
-            else "type=file;size=${f.length()};modify=${stamp(f.lastModified())};"
+        private fun stamp(ms: Long): String = stampFmt.format(java.time.Instant.ofEpochMilli(ms))
 
-        fun lsLine(f: File): String {
-            val ms = f.lastModified()
-            val recent = System.currentTimeMillis() - ms < 180L * 86_400_000L
-            val date = SimpleDateFormat(if (recent) "MMM dd HH:mm" else "MMM dd  yyyy", Locale.US).format(Date(ms))
-            val perm = if (f.isDirectory) "drwxr-xr-x" else "-rw-r--r--"
-            val size = if (f.isDirectory) 0 else f.length()
-            return String.format(Locale.US, "%s 1 owner group %13d %s %s\r\n", perm, size, date, f.name)
+        class Entry(val name: String, val isDir: Boolean, val size: Long, val ms: Long)
+
+        fun entry(f: File, name: String = f.name): Entry = try {
+            val a = java.nio.file.Files.readAttributes(f.toPath(),
+                java.nio.file.attribute.BasicFileAttributes::class.java)
+            Entry(name, a.isDirectory, if (a.isDirectory) 0 else a.size(), a.lastModifiedTime().toMillis())
+        } catch (e: Exception) {
+            Entry(name, f.isDirectory, f.length(), f.lastModified())
+        }
+
+        fun entries(dir: File): List<Entry> {
+            if (!dir.isDirectory) return listOf(entry(dir))
+            val out = ArrayList<Entry>()
+            try {
+                java.nio.file.Files.newDirectoryStream(dir.toPath()).use { ds ->
+                    for (p in ds) out.add(entry(p.toFile()))
+                }
+            } catch (e: Exception) {
+                dir.listFiles()?.forEach { out.add(entry(it)) }
+            }
+            return out
+        }
+
+        fun mlsx(f: File): String = mlsx(entry(f))
+
+        fun mlsx(e: Entry): String =
+            if (e.isDir) "type=dir;modify=${stamp(e.ms)};"
+            else "type=file;size=${e.size};modify=${stamp(e.ms)};"
+
+        fun lsLine(e: Entry): String {
+            val recent = System.currentTimeMillis() - e.ms < 180L * 86_400_000L
+            val date = (if (recent) recentFmt else oldFmt).format(java.time.Instant.ofEpochMilli(e.ms))
+            val perm = if (e.isDir) "drwxr-xr-x" else "-rw-r--r--"
+            return String.format(Locale.US, "%s 1 owner group %13d %s %s\r\n", perm, e.size, date, e.name)
         }
     }
 }

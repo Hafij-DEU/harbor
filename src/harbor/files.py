@@ -993,17 +993,36 @@ class FilesWindow(HarborWindow):
                 Gio.AppInfo.get_default_for_type(content_type, False) is None:
             self.choose_app(gfile, content_type)
             return False
-        uri = gfile.get_uri()
         if not gfile.is_native():
             # GIO's default for ftp://, sftp://... files is the scheme's
-            # handler (often a web browser), not the file type's app. Pick
-            # the type's app and hand it the local gvfs path when there is one.
+            # handler (often a web browser), not the file type's app. Copy the
+            # file to a local cache first (sandboxed apps can't read gvfs
+            # paths, and FTP reads through FUSE are slow), then open the copy
+            # in the file type's app.
             if app is None and content_type:
                 app = Gio.AppInfo.get_default_for_type(content_type, False)
-            path = gfile.get_path()
-            if path:
-                uri = Gio.File.new_for_path(path).get_uri()
-        return self.launch(uri, app)
+            return self._open_remote_copy(gfile, app)
+        return self.launch(gfile.get_uri(), app)
+
+    def _open_remote_copy(self, gfile, app):
+        import hashlib
+        name = gfile.get_basename() or "file"
+        key = hashlib.sha1(gfile.get_uri().encode()).hexdigest()[:16]
+        folder = os.path.join(GLib.get_user_cache_dir(), "harbor", "remote", key)
+        os.makedirs(folder, exist_ok=True)
+        dest = Gio.File.new_for_path(os.path.join(folder, name))
+        self.notify_toast("Opening %s…" % name, timeout=2)
+
+        def done(src, res):
+            try:
+                src.copy_finish(res)
+            except GLib.Error as e:
+                self.notify_toast("Can't open %s: %s" % (name, e.message), timeout=5)
+                return
+            self.launch(dest.get_uri(), app)
+        gfile.copy_async(dest, Gio.FileCopyFlags.OVERWRITE, GLib.PRIORITY_DEFAULT,
+                         None, None, done)
+        return True
 
     def choose_app(self, gfile, content_type):
         from .files_pages import AppChooser
