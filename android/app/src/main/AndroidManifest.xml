@@ -27,6 +27,7 @@
         android:theme="@style/Theme.Harbor"
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
+        android:requestRawExternalStorageAccess="true"
         android:supportsRtl="true">
 
         <activity

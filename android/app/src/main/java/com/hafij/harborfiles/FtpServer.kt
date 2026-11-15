@@ -140,7 +140,7 @@ class FtpServer(
                 "AUTH" -> reply(502, "TLS not supported")
                 "SYST" -> reply(215, "UNIX Type: L8")
                 "FEAT" -> {
-                    out.write("211-Features:\r\n UTF8\r\n MLST type*;size*;modify*;\r\n SIZE\r\n MDTM\r\n EPSV\r\n PASV\r\n REST STREAM\r\n")
+                    out.write("211-Features:\r\n UTF8\r\n MLST type*;size*;modify*;\r\n SIZE\r\n EPSV\r\n PASV\r\n REST STREAM\r\n")
                     reply(211, "End")
                 }
                 "OPTS" -> reply(200, "OK")
@@ -305,15 +305,12 @@ class FtpServer(
 
         fun entries(dir: File): List<Entry> {
             if (!dir.isDirectory) return listOf(entry(dir))
-            val out = ArrayList<Entry>()
-            try {
-                java.nio.file.Files.newDirectoryStream(dir.toPath()).use { ds ->
-                    for (p in ds) out.add(entry(p.toFile()))
-                }
-            } catch (e: Exception) {
-                dir.listFiles()?.forEach { out.add(entry(it)) }
-            }
-            return out
+            val names = dir.listFiles() ?: return emptyList()
+            if (names.size < 64) return names.map { entry(it) }
+            // Stat big folders on a few threads: each lookup through the
+            // storage layer waits on its own round trip, not on the CPU.
+            return names.asList().parallelStream().map { entry(it) }
+                .collect(java.util.stream.Collectors.toList())
         }
 
         fun mlsx(f: File): String = mlsx(entry(f))
