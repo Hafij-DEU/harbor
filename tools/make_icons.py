@@ -11,6 +11,10 @@ shape; the SVGs are checked in.
 
 import math
 import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
+from harbor import files_icons  # noqa: E402  (the extension table lives there)
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "icons", "hicolor",
                     "scalable")
@@ -175,6 +179,41 @@ def file_icon(kind=None):
     return svg(PAGE + mark, defs)
 
 
+# ------------------------------------------------------------------ per-extension
+
+def _luma(hexc):
+    r, g, b = (int(hexc[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+EXT_FONT = {1: 17, 2: 16, 3: 14, 4: 11.6, 5: 9.4}
+SMALL_ARCHIVE = ("".join('<rect x="%s" y="%d" width="3" height="2.6" rx=".6" fill="#8d6e63"/>'
+                         % (30 if i % 2 else 33, 7 + i * 3) for i in range(4))
+                 + '<rect x="28.5" y="18.6" width="9" height="10" rx="2.4" fill="#6d4c41"/>'
+                 '<rect x="31" y="22.4" width="4" height="4" rx="1" fill="#d7ccc8"/>')
+
+
+def ext_icon(kind, color, label):
+    """A page with its category glyph (small, top) and a badge naming the extension."""
+    full = file_icon(kind)
+    defs = full[full.index("<defs>") + 6:full.index("</defs>")]
+    if kind in ("pdf", "document", "spreadsheet", "presentation", "text"):
+        glyph = lines((20, 25))
+    elif kind == "archive":
+        glyph = SMALL_ARCHIVE
+    else:
+        mark = full[full.index("</defs>") + 7:full.index("</svg>")][len(PAGE):]
+        glyph = '<g transform="translate(29.5 19.2) scale(.52) translate(-33 -38)">%s</g>' % mark
+    ink = "#1f2328" if _luma(color) > 0.6 else "#ffffff"
+    size = EXT_FONT[min(len(label), 5)]
+    badge = ('<rect x="6" y="32" width="40" height="22" rx="4" fill="%s"/>'
+             '<rect x="6" y="32" width="40" height="9" rx="4" fill="#fff" opacity=".16"/>'
+             '<text x="26" y="%.1f" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, '
+             'sans-serif" font-weight="700" font-size="%s" fill="%s">%s</text>'
+             % (color, 43 + size * 0.36, size, ink, label))
+    return svg(PAGE + glyph + badge, defs)
+
+
 # ------------------------------------------------------------------ places
 
 
@@ -267,6 +306,9 @@ def main():
     for k in ("text", "code", "image", "audio", "video", "archive", "pdf", "document",
               "spreadsheet", "presentation", "executable", "diskimage", "font", "web"):
         out[("mimetypes", "harbor-file-" + k)] = file_icon(k)
+    for row in files_icons.EXT_TABLE:
+        out[("mimetypes", "harbor-ext-" + row[0])] = ext_icon(row[1], row[2],
+                                                              files_icons.ext_label(row))
     for k in ("drive", "usb", "optical"):
         out[("devices", "harbor-drive" + ("" if k == "drive" else "-" + k))] = place(k)
     for k in ("network", "thispc", "trash", "trash-full", "quick-access"):

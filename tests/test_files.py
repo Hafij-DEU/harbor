@@ -830,10 +830,21 @@ def test_right_click_handler_emits_context_menu():
 def test_icon_mapping_and_bundled_files():
     from harbor import files_icons as fi
     assert fi.icon_for_type("application/octet-stream", "noext") == fi.FILE
-    assert fi.icon_for_type("", "backup.tar.gz") == "harbor-file-archive"
-    assert fi.icon_for_type("application/pdf") != fi.FILE
-    assert fi.icon_for_type("image/png") != fi.FILE
-    assert fi.icon_for_type("", "photo.JPG") == fi.icon_for_type("image/jpeg")
+    assert fi.icon_for_type("", "backup.tar.gz") == "harbor-ext-tgz"
+    assert fi.icon_for_type("", "backup.gz") == "harbor-ext-gz"
+    assert fi.icon_for_type("application/pdf") == "harbor-file-pdf"
+    assert fi.icon_for_type("image/png") == "harbor-file-image"
+    assert fi.icon_for_type("", "photo.JPG") == fi.icon_for_type("image/jpeg", "a.jpeg")
+    # the extension wins over the content type, everywhere
+    assert fi.icon_for_type("application/vnd.debian.binary-package", "x.deb") == "harbor-ext-deb"
+    assert fi.icon_for_type("application/zip", "app.apk") == "harbor-ext-apk"
+    assert fi.icon_for_type("text/plain", "Makefile") == "harbor-ext-mk"
+    assert fi.icon_for_type("text/x-python", "tool.PY") == "harbor-ext-py"
+    # unknown extension -> category from the content type, then plain file
+    assert fi.icon_for_type("audio/x-foo", "a.zzz") == "harbor-file-audio"
+    assert fi.icon_for_type("", ".bashrc") == fi.FILE
+    assert len({row[0] for row in fi.EXT_TABLE}) == len(fi.EXT_TABLE)
+    assert all(len(fi.ext_label(r)) <= 5 for r in fi.EXT_TABLE)
     assert fi.icon_name_for("inode/directory", "x", is_dir=True).startswith("harbor-folder")
     assert set(fi.THEMED.values()) <= set(fi.ALL_ICONS)
     svgs = {}

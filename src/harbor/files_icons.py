@@ -85,6 +85,183 @@ TYPE_TABLE = (
     ("harbor-file-text", ("text/",), (".txt", ".md", ".log", ".rst", ".nfo")),
 )
 
+# Per-extension icons: one harbor-ext-<key> SVG each (tools/make_icons.py
+# draws them: the category glyph, then a coloured badge with the label).
+# The extension wins over the content type, so every .deb, .py or .mp4 looks
+# the same everywhere in the app. Rows: (key, category, badge colour, exts[, label]).
+EXT_TABLE = (
+    # archives and packages
+    ("zip", "archive", "#d68910", (".zip",)),
+    ("rar", "archive", "#8e44ad", (".rar",)),
+    ("7z", "archive", "#2e7d32", (".7z",)),
+    ("tar", "archive", "#6d4c41", (".tar",)),
+    ("tgz", "archive", "#8d6e63", (".tar.gz", ".tgz")),
+    ("gz", "archive", "#a1887f", (".gz",)),
+    ("txz", "archive", "#5d4037", (".tar.xz", ".txz")),
+    ("xz", "archive", "#4e342e", (".xz",)),
+    ("tbz", "archive", "#795548", (".tar.bz2", ".tbz2", ".tbz")),
+    ("bz2", "archive", "#6d5a4f", (".bz2",)),
+    ("tzst", "archive", "#455a64", (".tar.zst",)),
+    ("zst", "archive", "#37474f", (".zst",)),
+    ("deb", "archive", "#a80030", (".deb",)),
+    ("rpm", "archive", "#cc0000", (".rpm",)),
+    ("apk", "archive", "#3ddc84", (".apk", ".apks", ".xapk")),
+    ("aab", "archive", "#2e9d5b", (".aab",)),
+    ("jar", "archive", "#e76f00", (".jar", ".war")),
+    ("snap", "archive", "#e95420", (".snap",)),
+    ("flatpak", "archive", "#4a86cf", (".flatpak", ".flatpakref"), "FPAK"),
+    # programs
+    ("exe", "executable", "#0078d4", (".exe",)),
+    ("msi", "executable", "#00a4ef", (".msi",)),
+    ("appimage", "executable", "#4a90d9", (".appimage",), "AIMG"),
+    ("sh", "executable", "#2f3b40", (".sh", ".bash", ".zsh")),
+    ("run", "executable", "#546e7a", (".run",)),
+    ("bin", "executable", "#607d8b", (".bin",)),
+    ("desktop", "executable", "#5c6bc0", (".desktop",), "DESK"),
+    ("so", "executable", "#78909c", (".so",)),
+    ("bat", "executable", "#455a64", (".bat", ".cmd")),
+    ("ps1", "executable", "#012456", (".ps1",)),
+    # disk images
+    ("iso", "diskimage", "#546e7a", (".iso",)),
+    ("img", "diskimage", "#607d8b", (".img",)),
+    ("dmg", "diskimage", "#8e8e93", (".dmg",)),
+    ("qcow2", "diskimage", "#ef6c00", (".qcow2", ".qcow"), "QCOW"),
+    ("vdi", "diskimage", "#1565c0", (".vdi",)),
+    ("vmdk", "diskimage", "#607d8b", (".vmdk",)),
+    ("vhd", "diskimage", "#0078d4", (".vhd", ".vhdx")),
+    # documents
+    ("pdf", "pdf", "#d93838", (".pdf",)),
+    ("docx", "document", "#2b579a", (".docx",)),
+    ("doc", "document", "#3b6cb5", (".doc",)),
+    ("odt", "document", "#0e7ac4", (".odt",)),
+    ("rtf", "document", "#5c6bc0", (".rtf",)),
+    ("epub", "document", "#7cb342", (".epub",)),
+    ("xlsx", "spreadsheet", "#1e7145", (".xlsx",)),
+    ("xls", "spreadsheet", "#2e8b57", (".xls",)),
+    ("ods", "spreadsheet", "#43a047", (".ods",)),
+    ("csv", "spreadsheet", "#16a085", (".csv",)),
+    ("tsv", "spreadsheet", "#00897b", (".tsv",)),
+    ("pptx", "presentation", "#c43e1c", (".pptx",)),
+    ("ppt", "presentation", "#d35230", (".ppt",)),
+    ("odp", "presentation", "#e8590c", (".odp",)),
+    ("key", "presentation", "#1e88e5", (".key",)),
+    ("txt", "text", "#78909c", (".txt",)),
+    ("md", "text", "#37474f", (".md", ".markdown")),
+    ("log", "text", "#8d6e63", (".log",)),
+    ("rst", "text", "#546e7a", (".rst",)),
+    ("nfo", "text", "#6d8086", (".nfo",)),
+    ("srt", "text", "#f9a825", (".srt",)),
+    ("ass", "text", "#fbc02d", (".ass", ".ssa")),
+    ("vtt", "text", "#ffb300", (".vtt",)),
+    # web and fonts
+    ("html", "web", "#e44d26", (".html", ".htm", ".xhtml")),
+    ("ttf", "font", "#3f51b5", (".ttf",)),
+    ("otf", "font", "#5e35b1", (".otf",)),
+    ("woff", "font", "#3949ab", (".woff", ".woff2")),
+    # images
+    ("png", "image", "#1e88e5", (".png",)),
+    ("jpg", "image", "#00897b", (".jpg", ".jpeg", ".jpe")),
+    ("gif", "image", "#8e24aa", (".gif",)),
+    ("webp", "image", "#43a047", (".webp",)),
+    ("svg", "image", "#ff9800", (".svg", ".svgz")),
+    ("bmp", "image", "#5d4037", (".bmp",)),
+    ("tif", "image", "#6d4c41", (".tif", ".tiff")),
+    ("heic", "image", "#ef6c00", (".heic", ".heif")),
+    ("avif", "image", "#c2185b", (".avif",)),
+    ("jxl", "image", "#3949ab", (".jxl",)),
+    ("ico", "image", "#0097a7", (".ico",)),
+    ("psd", "image", "#1565c0", (".psd",)),
+    ("xcf", "image", "#6d6150", (".xcf",)),
+    ("raw", "image", "#424242", (".raw", ".dng", ".cr2", ".cr3", ".nef", ".arw", ".orf", ".rw2")),
+    # audio
+    ("mp3", "audio", "#e8590c", (".mp3",)),
+    ("flac", "audio", "#f57c00", (".flac",)),
+    ("wav", "audio", "#0288d1", (".wav",)),
+    ("ogg", "audio", "#7b1fa2", (".ogg", ".oga")),
+    ("opus", "audio", "#00796b", (".opus",)),
+    ("m4a", "audio", "#c2185b", (".m4a",)),
+    ("aac", "audio", "#5d4037", (".aac",)),
+    ("wma", "audio", "#1565c0", (".wma",)),
+    ("mid", "audio", "#6a1b9a", (".mid", ".midi")),
+    ("amr", "audio", "#455a64", (".amr",)),
+    # video
+    ("mp4", "video", "#5e35b1", (".mp4",)),
+    ("mkv", "video", "#2e7d32", (".mkv",)),
+    ("webm", "video", "#00838f", (".webm",)),
+    ("avi", "video", "#455a64", (".avi",)),
+    ("mov", "video", "#1565c0", (".mov",)),
+    ("m4v", "video", "#7e57c2", (".m4v",)),
+    ("wmv", "video", "#0277bd", (".wmv",)),
+    ("flv", "video", "#c62828", (".flv",)),
+    ("3gp", "video", "#558b2f", (".3gp",)),
+    ("mpg", "video", "#4527a0", (".mpg", ".mpeg")),
+    # code and config
+    ("py", "code", "#3776ab", (".py", ".pyw", ".pyi")),
+    ("ipynb", "code", "#f37626", (".ipynb",), "NB"),
+    ("c", "code", "#283593", (".c",)),
+    ("h", "code", "#5c6bc0", (".h", ".hpp", ".hh")),
+    ("cpp", "code", "#00599c", (".cpp", ".cc", ".cxx")),
+    ("rs", "code", "#b7410e", (".rs",)),
+    ("go", "code", "#00add8", (".go",)),
+    ("js", "code", "#f7df1e", (".js", ".mjs", ".cjs")),
+    ("ts", "code", "#3178c6", (".ts", ".mts", ".cts")),
+    ("tsx", "code", "#0288d1", (".tsx",)),
+    ("jsx", "code", "#00acc1", (".jsx",)),
+    ("vue", "code", "#41b883", (".vue",)),
+    ("json", "code", "#616161", (".json", ".jsonc", ".json5")),
+    ("java", "code", "#b07219", (".java",)),
+    ("kt", "code", "#7f52ff", (".kt", ".kts")),
+    ("php", "code", "#777bb4", (".php",)),
+    ("rb", "code", "#cc342d", (".rb",)),
+    ("pl", "code", "#39457e", (".pl", ".pm")),
+    ("lua", "code", "#000080", (".lua",)),
+    ("css", "code", "#264de4", (".css",)),
+    ("scss", "code", "#cd6799", (".scss", ".sass")),
+    ("xml", "code", "#0060ac", (".xml",)),
+    ("yml", "code", "#cb171e", (".yml", ".yaml")),
+    ("toml", "code", "#9c4221", (".toml",)),
+    ("ini", "code", "#6d8086", (".ini", ".conf", ".cfg")),
+    ("sql", "code", "#e38c00", (".sql", ".sqlite", ".db")),
+    ("cs", "code", "#68217a", (".cs",)),
+    ("swift", "code", "#f05138", (".swift",)),
+    ("dart", "code", "#0175c2", (".dart",)),
+    ("vala", "code", "#7239b3", (".vala",)),
+    ("mk", "code", "#427819", (".mk",)),
+    ("cmake", "code", "#064f8c", (".cmake",), "CMK"),
+    ("gradle", "code", "#02303a", (".gradle",), "GRDL"),
+    ("tex", "code", "#008080", (".tex", ".bib")),
+    ("r", "code", "#276dc3", (".r", ".rmd")),
+    ("m", "code", "#e16737", (".m",)),
+)
+
+# Files known by their whole name rather than an extension.
+NAME_ICONS = {"makefile": "harbor-ext-mk", "gnumakefile": "harbor-ext-mk",
+              "cmakelists.txt": "harbor-ext-cmake", "build.gradle": "harbor-ext-gradle"}
+
+
+def ext_label(row):
+    return (row[4] if len(row) > 4 else row[0]).upper()
+
+
+EXT_ICONS = {e: "harbor-ext-" + row[0] for row in EXT_TABLE for e in row[3]}
+# multi-part extensions (".tar.gz") are checked first, longest first
+_COMPOUND = sorted((e for e in EXT_ICONS if e.count(".") > 1), key=len, reverse=True)
+
+
+def ext_icon(name):
+    """harbor-ext-* icon for a file name, or None."""
+    low = os.path.basename(name or "").lower()
+    if not low:
+        return None
+    if low in NAME_ICONS:
+        return NAME_ICONS[low]
+    for e in _COMPOUND:
+        if low.endswith(e) and len(low) > len(e):
+            return EXT_ICONS[e]
+    ext = os.path.splitext(low)[1]
+    return EXT_ICONS.get(ext) if ext else None
+
+
 # Folder emblems for the XDG user folders.
 SPECIAL_DIRS = (
     (GLib.UserDirectory.DIRECTORY_DESKTOP, "harbor-folder-desktop"),
@@ -130,7 +307,8 @@ THEMED = {
 ALL_ICONS = sorted({FOLDER, FILE, "harbor-folder-home", "harbor-thispc", "harbor-drive",
                     "harbor-drive-usb", "harbor-drive-optical", "harbor-network", "harbor-trash",
                     "harbor-trash-full", "harbor-quick-access"}
-                   | {n for _w, n in SPECIAL_DIRS} | {row[0] for row in TYPE_TABLE})
+                   | {n for _w, n in SPECIAL_DIRS} | {row[0] for row in TYPE_TABLE}
+                   | set(EXT_ICONS.values()) | set(NAME_ICONS.values()))
 
 
 def modern():
@@ -149,7 +327,10 @@ def _is_a(ct, want):
 
 
 def icon_for_type(content_type, name=""):
-    """Bundled file icon name for a content type (falls back to the extension)."""
+    """Bundled file icon: the extension's own icon, else the content type's category."""
+    own = ext_icon(name)
+    if own:
+        return own
     ct = (content_type or "").lower()
     if ct and ct not in ("application/octet-stream", "inode/x-unknown"):
         for icon, mimes, _exts in TYPE_TABLE:
