@@ -1,134 +1,110 @@
+<div align="center">
+
+<img src="design/app-icon-512.png" width="112" alt="Harbor icon">
+
 # Harbor
 
-Windows 11-style apps for GNOME, written in Python with GTK 4 and libadwaita.
-They follow the GNOME light/dark mode and accent colour.
+**Windows 11-style Files, Task Manager and Settings for GNOME, plus a file manager for Android.**
 
-## Harbor Task Manager
+They follow your GNOME light/dark mode and accent colour, and they edit the real system.
 
-- **Processes** grouped into Apps, Background processes and System processes,
-  with live CPU, memory, disk and network columns, End task, Efficiency mode,
-  Run new task and Properties.
-- **Performance**: 60-second graphs for CPU (overall or per core), Memory
-  (with compressed zram memory), Swap, every disk, every network adapter and
-  the GPU.
-- **Memory Sweep**: what fills your RAM, suggestions to free it, and the
-  files held in `/tmp` and `/dev/shm`.
-- **App history**, **Startup apps**, **Users**, **Details** (End process
-  tree, Set priority) and **Services** (start, stop, restart).
-- **Settings**: update speed, start page, high-memory warning, and Memory
-  optimization (zram size and compression, swap file, zswap, swappiness,
-  cache pressure). Changes that need root ask for your password through
-  polkit.
+[![Files](https://img.shields.io/github/v/release/Hafij-DEU/harbor?filter=files-v*&label=&logo=github&color=e8590c)](https://github.com/Hafij-DEU/harbor/releases?q=files-v&expanded=true)
+[![Task Manager](https://img.shields.io/github/v/release/Hafij-DEU/harbor?filter=taskmgr-v*&label=&logo=github&color=1e88e5)](https://github.com/Hafij-DEU/harbor/releases?q=taskmgr-v&expanded=true)
+[![Settings](https://img.shields.io/github/v/release/Hafij-DEU/harbor?filter=settings-v*&label=&logo=github&color=5e35b1)](https://github.com/Hafij-DEU/harbor/releases?q=settings-v&expanded=true)
+[![Android](https://img.shields.io/github/v/release/Hafij-DEU/harbor?filter=android-v*&label=&logo=github&color=3ddc84)](https://github.com/Hafij-DEU/harbor/releases?q=android-v&expanded=true)
+<br>
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-informational)](LICENSE)
+![GNOME](https://img.shields.io/badge/GNOME-GTK%204%20%C2%B7%20libadwaita-4a86cf?logo=gnome&logoColor=white)
+![Ubuntu](https://img.shields.io/badge/Ubuntu-.deb-e95420?logo=ubuntu&logoColor=white)
 
-Linux has no per-process network speed without root, so the Network column
-shows open connections per process; the total at the top is real.
+[Apps](#apps) · [Screenshots](#screenshots) · [Install](#install) · [Build](#build-and-test) · [Docs](#documentation)
 
-## Harbor Files
+</div>
 
-- **Tabs**, back / forward / up, a breadcrumb address bar you can type a
-  path into (Ctrl+L), and search in the current folder (Ctrl+F).
-- **Command bar**: New folder or file, cut, copy, paste, rename, delete,
-  Sort, View (large icons, medium icons, details, hidden items) and a
-  Details pane.
-- **Sidebar**: Home, Quick access pins, This PC with every drive (mount and
-  eject), Network and Trash (restore, empty).
-- **Home** page with Quick access and recent files; **This PC** with
-  used/free bars for each drive.
-- **Right-click menu**: Open, Open with, Open in new tab, Copy as path, Pin
-  to Quick access, Compress to ZIP, Extract all, Open in Terminal and
-  Properties (size counted in the background).
-- Delete sends to the Trash. Permanent delete and Empty trash ask first.
-  Copy and move show progress and ask when a name already exists.
-- **Preview pane** (resizable) for images, text, PDF and Office files. Office
-  previews use Craft Suite or LibreOffice, whichever is installed.
-- **7-Zip**: Add to archive (7z, zip, tar.xz…), Extract here, Extract to
-  folder, and Test archive, from the right-click menu.
-- **Folder colours** follow your accent colour, or pick one per folder with
-  **Customize folder** (colour, icon, emblem, your own picture, Restore
-  default).
-- **Network locations**: add FTP, SFTP, SMB, WebDAV, NFS or AFP addresses to
-  the sidebar. Passwords are asked when you connect and kept by the GNOME
-  keyring if you choose, never in Harbor's settings.
-- **Share over Wi-Fi**: open chosen folders from a phone or another computer
-  in a web browser, or as a WebDAV network drive. A 6-digit PIN protects
-  each session; 5 wrong tries lock it for 5 minutes. Folders are read-only
-  unless you turn uploads on, and uploads never overwrite a file. Sharing
-  never starts by itself and stops after 30 minutes (you can change this).
-  The QR code carries the PIN: the phone camera opens the page and signs
-  in, and Harbor Files for Android connects with no typing. Sharing keeps
-  going after you quit Harbor Files; a "Send by Wi-Fi" tray icon shows
-  the QR code and PIN, copies the address and stops the share.
-- **Scan phone QR**: open Harbor Files for Android's storage in a new tab
-  (FTP; the PIN is never saved). Two ways:
-  - *Scan with this PC*: hold the phone's QR code up to the webcam (virtual
-    cameras such as v4l2loopback are skipped).
-  - *Scan with the phone*: the PC shows a one-time code (5 minutes); scan it
-    in Harbor Files › Connect and the phone shares itself and sends its
-    address and PIN back. Needs Harbor Files for Android 0.1.2 or later.
+---
 
-Harbor Files does not make itself your default file manager.
+## Apps
 
-The Settings app is in progress.
+| | App | What it is | Stack | Guide |
+| :-: | --- | --- | --- | --- |
+| <img src="data/icons/io.github.hafij_deu.Harbor.Files.svg" width="40"> | **Harbor Files** | File manager with tabs, a ribbon or command bar, previews, folder colours, an icon for every file type, 7-Zip, network places and Share over Wi-Fi. | Python · GTK 4 | [docs/files.md](docs/files.md) |
+| <img src="data/icons/io.github.hafij_deu.Harbor.TaskManager.svg" width="40"> | **Harbor Task Manager** | Processes, live performance graphs, Memory Sweep, startup apps, services and memory tuning (zram, swap, zswap). | Python · GTK 4 | [docs/taskmgr.md](docs/taskmgr.md) |
+| <img src="settings/assets/win11-settings.svg" width="40"> | **Harbor Settings** | Settings app that edits the real system: display, sound, network, Bluetooth, apps, updates, desktop and GNOME extensions. | Rust · egui | [settings/README.md](settings/README.md) |
+| <img src="android/app/src/main/res/drawable-nodpi/ic_launcher_art.png" width="40"> | **Harbor Files for Android** | Phone file manager with a Recent feed, categories, an FTP server and a one-scan link to the PC. | Java · Android 10+ | [android/README.md](android/README.md) |
 
+Each app is a separate package with its own version. Release tags are `files-v…`, `taskmgr-v…`, `settings-v…` and `android-v…`.
 
-## Harbor Files for Android
+## Screenshots
 
-`android/` holds a phone version of Harbor Files (package `com.hafij.harborfiles`, Android 10+), styled after the Xiaomi file manager.
+<table>
+<tr>
+<td width="50%"><a href="docs/files.md"><img src="docs/files-home-light.png" alt="Harbor Files home page"></a><br><sub><b>Files</b>: Home with Quick access and recent files</sub></td>
+<td width="50%"><a href="docs/files.md#file-type-icons"><img src="docs/files-type-icons.png" alt="Harbor Files file-type icons"></a><br><sub><b>Files</b>: an icon for every file extension</sub></td>
+</tr>
+<tr>
+<td><a href="docs/taskmgr.md"><img src="docs/taskmgr-processes.png" alt="Task Manager processes"></a><br><sub><b>Task Manager</b>: Processes grouped by Apps, Background and System</sub></td>
+<td><a href="settings/README.md"><img src="settings/assets/screenshot.png" alt="Harbor Settings"></a><br><sub><b>Settings</b>: System page</sub></td>
+</tr>
+<tr>
+<td><a href="docs/taskmgr.md#performance"><img src="docs/taskmgr-performance-cpu.png" alt="Task Manager CPU graph"></a><br><sub><b>Task Manager</b>: Performance › CPU</sub></td>
+<td><a href="docs/files.md#share-over-wi-fi"><img src="docs/files-share-wifi.png" alt="Share over Wi-Fi"></a><br><sub><b>Files</b>: Share over Wi-Fi with a QR code and PIN</sub></td>
+</tr>
+</table>
 
-- **Recent** first: every new file of any kind, grouped by day and by the app or folder it came from.
-- **Browse**: categories (images, videos, audio, documents, APKs, archives), Downloads, favourites, Recently deleted and storage volumes.
-- **Connect**: start an FTP server on the phone (user `harbor`, a 6-digit PIN, QR code with the PIN, optional read-only, idle stop; the notification has Show QR and Stop), or open a Harbor PC share (scan its QR code, or type the address and PIN) or any FTP server.
-- **Send** through MeshDrop when it is installed, or through any other app.
-- Own settings: hidden and system folders, screenshots in Recent, Recently deleted keep time, theme and accent colour, server port.
-
-Build and test:
-
-```bash
-cd android
-gradle --offline testDebugUnitTest assembleRelease
-```
-
-Release builds are signed when `HARBOR_KEYSTORE_FILE`, `HARBOR_KEYSTORE_PASSWORD`, `HARBOR_KEY_ALIAS` and `HARBOR_KEY_PASSWORD` are set; otherwise the debug key is used. `HARBOR_DAV="<port> <pin>"` runs an extra test against a live desktop share.
-
-## Harbor Settings
-
-A Windows 11-style Settings app for Ubuntu, written in Rust (`eframe`/`egui`),
-in [`settings/`](settings/). It edits the real system (gsettings, PipeWire,
-NetworkManager, BlueZ, Mutter display config, AccountsService, apt) without
-handing off to GNOME Settings, and has app management (installed apps,
-updates, App Hub catalogue) built in. See [settings/README.md](settings/README.md).
+More pictures are in the [Files guide](docs/files.md#gallery) and the [Task Manager guide](docs/taskmgr.md#gallery).
 
 ## Install
 
-Each app is its own package. Download `harbor-files_<version>_all.deb`,
-`harbor-taskmgr_<version>_all.deb` and/or `win11-settings_<version>_amd64.deb` from the
-[releases](https://github.com/Hafij-DEU/harbor/releases) (tags
-`files-v…`, `taskmgr-v…` and `settings-v…`) and run:
+Download the packages you want from [Releases](https://github.com/Hafij-DEU/harbor/releases) and install them with apt:
 
 ```bash
-sudo apt install ./harbor-files_0.5.1_all.deb ./harbor-taskmgr_0.3.0_all.deb
+sudo apt install ./harbor-files_*_all.deb ./harbor-taskmgr_*_all.deb ./win11-settings_*_amd64.deb
 ```
 
-They replace the older combined `harbor` package. Settings installs under
-`/usr/local` and never replaces Ubuntu's own Settings app.
+| Package | Command | Notes |
+| --- | --- | --- |
+| `harbor-files` | `harbor-files [folder]` | Does not make itself your default file manager. |
+| `harbor-taskmgr` | `harbor-taskmgr [--page performance:memory]` | Root-only changes ask through polkit. |
+| `win11-settings` | `win11-settings` | Installs under `/usr/local`; Ubuntu's Settings stays. |
+| `HarborFiles-<v>.apk` | Android app | Install on the phone; Android 10 or later. |
 
-Then open **Harbor Files** or **Harbor Task Manager** from the app menu,
-or run `harbor-files [folder]` / `harbor-taskmgr`
-(`harbor-taskmgr --page performance:memory` opens a page directly).
+The packages replace the old combined `harbor` package.
 
 ## Build and test
 
 ```bash
-./build-deb.sh            # both apps; ./build-deb.sh files for one
-PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider tests/test_files.py tests/test_taskmgr.py tests/test_taskmgr_sweep.py
-tools/shot.sh taskmgr shot.png --do "win.show_page('performance')"
+./build-deb.sh                 # Files and Task Manager; ./build-deb.sh files for one
+PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider tests/
+tools/shot.sh files shot.png   # screenshot in a private headless GNOME Shell
 ```
 
-Settings: `cd settings && cargo test --release && ./packaging/build-deb.sh`.
+- **Settings**: `cd settings && cargo test --release && ./packaging/build-deb.sh`
+- **Android**: `cd android && gradle --offline testDebugUnitTest assembleRelease`
 
-`tools/shot.sh` renders the window in a private headless GNOME Shell with
-`HARBOR_DRY_RUN=1`, so nothing on the real system changes.
+`tools/shot.sh` runs the app with `HARBOR_DRY_RUN=1` and private XDG folders, so nothing on the real system changes.
+
+## Documentation
+
+| Guide | Covers |
+| --- | --- |
+| [docs/files.md](docs/files.md) | Every Harbor Files feature, the file-type icons, sharing and phone links |
+| [docs/taskmgr.md](docs/taskmgr.md) | Task Manager pages, Memory Sweep and memory optimisation |
+| [settings/README.md](settings/README.md) | Settings pages, App Hub integration, cleaner, environment variables |
+| [android/README.md](android/README.md) | Android app features, build and signing |
+
+## Repository layout
+
+```text
+src/harbor/      Files and Task Manager (Python, GTK 4, libadwaita)
+data/            desktop files, polkit policy, bundled harbor-* icon set
+settings/        Harbor Settings (Rust, eframe/egui)
+android/         Harbor Files for Android (Gradle)
+tools/           icon generators and the headless screenshot harness
+tests/           pytest suite
+docs/            guides and screenshots
+design/          app icon sources
+```
 
 ## Licence
 
-MIT. Author: Md. Hafijur Rahman.
+[MIT](LICENSE) © Md. Hafijur Rahman
