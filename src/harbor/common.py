@@ -245,6 +245,29 @@ def fusion_settings():
     return None
 
 
+def fusion_blurs_windows(fusion=None):
+    """Whether Fusion Desk blurs the desktop behind Harbor windows.
+
+    Without that blur a see-through window shows sharp windows behind it, so
+    Harbor then keeps the window solid. HARBOR_GLASS_BLUR=0|1 overrides.
+    """
+    env = os.environ.get("HARBOR_GLASS_BLUR")
+    if env is not None:
+        return env != "0"
+    fusion = fusion or fusion_settings()
+    if fusion is None or "harbor-glass-blur" not in fusion.props.settings_schema.list_keys():
+        return False
+    if not fusion.get_boolean("harbor-glass-blur"):
+        return False
+    try:
+        shell = Gio.Settings(schema_id="org.gnome.shell")
+        return (FUSION_UUID in shell.get_strv("enabled-extensions")
+                and FUSION_UUID not in shell.get_strv("disabled-extensions")
+                and not shell.get_boolean("disable-user-extensions"))
+    except Exception:
+        return False
+
+
 def global_glass(fusion=None):
     """The desktop's glass: Fusion Desk's settings, or Harbor's copy of them."""
     fusion = fusion or fusion_settings()
@@ -335,7 +358,7 @@ def accent(a):
     return "alpha(var(--accent-bg-color),%.3f)" % max(0.0, min(1.0, a))
 
 
-def glass_palette(pal, spec, dark):
+def glass_palette(pal, spec, dark, see_through=None):
     """Palette colours for a glass spec: the style's tint and the opacity."""
     if spec["effect"] == "OFF":
         return pal
@@ -363,14 +386,16 @@ def glass_palette(pal, spec, dark):
         pal[key] = _alpha(tint(pal[key]), min(1.0, a + extra))
     if spec["rim"]:
         pal["border"] = white((0.13 if dark else 0.75) * (1 if spec["effect"] == "STRONG" else 0.7))
-    if spec["opacity"] < 100:
+    if see_through is None:
+        see_through = spec["opacity"] < 100
+    if see_through:
         page = max(0.35, spec["opacity"] / 100)
         pal["window"] = _alpha(pal["window"], page)
         pal["sidebar"] = _alpha(pal["sidebar"], page * 0.8)
     return pal
 
 
-def glass_css(spec, dark):
+def glass_css(spec, dark, see_through=None):
     """CSS layers for a glass spec, drawn like Fusion Desk's glass: style
     shading, gloss band, corner glare, rim and shadow on every card, tile,
     button, selected nav row and search box."""
@@ -435,7 +460,8 @@ def glass_css(spec, dark):
         spot = f"radial-gradient(circle at 50% 50%, {white((0.12 if dark else 0.35) * ls)}, {white(0)} 70%)"
         css += ("button.hb-card:hover, button.hb-tile:hover, button.hb-plain:hover, "
                 f"list.hb-nav > row:hover {{ background-image: {spot}, {layers(wk)}; }}\n")
-    see_through = spec["opacity"] < 100
+    if see_through is None:
+        see_through = spec["opacity"] < 100
     if spec["style"] == "GLOW":
         a = (0.42 if dark else 0.26) * ss
         blobs = ", ".join(
@@ -519,7 +545,13 @@ class _Theme:
         self._fusion = fusion_settings()
         if self._fusion is not None:
             self._fusion.connect(
-                "changed", lambda _s, key: key.startswith("glass-") and self.reload())
+                "changed", lambda _s, key: (key.startswith("glass-") or key == "harbor-glass-blur")
+                and self.reload())
+            try:
+                self._shell = Gio.Settings(schema_id="org.gnome.shell")
+                self._shell.connect("changed::enabled-extensions", lambda *_: self.reload())
+            except Exception:
+                self._shell = None
 
     def set_style(self, style):
         style = "system" if style == "system" else "harbor"
@@ -529,11 +561,12 @@ class _Theme:
 
     def reload(self):
         spec = self.glass
-        pal = glass_palette(self.palette(), spec, self.dark)
+        see = spec["opacity"] < 100 and fusion_blurs_windows(self._fusion)
+        pal = glass_palette(self.palette(), spec, self.dark, see)
         css = CSS.substitute(pal)
         for tmpl in self.extra:
             css += tmpl.substitute(pal)
-        css += glass_css(spec, self.dark)
+        css += glass_css(spec, self.dark, see)
         self.provider.load_from_string(css)
 
 

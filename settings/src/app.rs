@@ -858,7 +858,7 @@ impl App {
             home_links: system::saved_home_links(),
             glass_scopes: system::GlassScope::ALL.map(system::scope_glass),
             glass_edit: system::GlassScope::Harbor,
-            glass_window: system::effective_glass().see_through(),
+            glass_window: system::glass_window(),
             pointer: None,
             glass_dirty: None,
             last_mode: mode,
@@ -1995,7 +1995,11 @@ The network will not reconnect automatically."
             self.notify_error("Fusion Desk did not take the glass settings; update Fusion Desk");
         }
         if self.glass().see_through() && !self.glass_window {
-            self.notify("Reopen Settings to see the desktop through the window");
+            if crate::desktop::fusion_blurs_windows() {
+                self.notify("Reopen Settings to see the desktop through the window");
+            } else {
+                self.notify("Turn on Fusion Desk › Blur behind Harbor apps to see the desktop through the window");
+            }
         }
     }
 

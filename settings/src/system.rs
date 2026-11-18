@@ -3375,6 +3375,12 @@ pub fn effective_glass() -> crate::theme::Glass {
     resolve_glass(GlassScope::Settings)
 }
 
+/// Whether the Settings window opens see-through: the glass asks for it
+/// and Fusion Desk blurs what is behind.
+pub fn glass_window() -> bool {
+    effective_glass().see_through() && crate::desktop::fusion_blurs_windows()
+}
+
 /// Whether the Windows 10 home cards list their pages. On unless turned off;
 /// `WIN11_SETTINGS_HOME_LINKS=0|1` overrides it for screenshot runs.
 pub fn saved_home_links() -> bool {

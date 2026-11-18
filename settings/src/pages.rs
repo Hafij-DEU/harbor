@@ -6598,6 +6598,23 @@ fn apt_job_panel(app: &mut App, ui: &mut Ui, pal: &Palette) -> bool {
 /// Personalisation › Glass effects: Fusion Desk's glass settings for the
 /// whole desktop ("Global"), for every Harbor app, and for each app. A
 /// scope can follow the one above it or have its own values.
+/// Ready-made glass looks (Settings › Personalisation › Glass effects).
+const GLASS_PRESETS: [(&str, &str); 12] = [
+    // The owner's Fusion Desk setup of 2026-11-19.
+    ("Fusion Desk", "effect=SOFT,material=GLOSS,style=FROSTED,opacity=40,rim=true,glare=true,shadow=false,light-follows=false,style-strength=100,shine-strength=100,rim-strength=100,glare-strength=100,shadow-strength=100,light-strength=100"),
+    ("Liquid", "effect=STRONG,material=GLOSS,style=CLEAR,opacity=55,rim=true,glare=true,shadow=true,light-follows=true,style-strength=100,shine-strength=80,rim-strength=160,glare-strength=120,shadow-strength=70,light-strength=130"),
+    ("Frosted", "effect=STRONG,material=GLASS,style=FROSTED,opacity=75,rim=true,glare=true,shadow=true,light-follows=false,style-strength=120,shine-strength=100,rim-strength=100,glare-strength=80,shadow-strength=80,light-strength=100"),
+    ("Glow", "effect=STRONG,material=GLASS,style=GLOW,opacity=60,rim=true,glare=false,shadow=true,light-follows=true,style-strength=110,shine-strength=100,rim-strength=120,glare-strength=100,shadow-strength=100,light-strength=100"),
+    ("Smoke", "effect=STRONG,material=GLASS,style=SMOKE,opacity=70,rim=true,glare=true,shadow=true,light-follows=false,style-strength=100,shine-strength=100,rim-strength=90,glare-strength=70,shadow-strength=120,light-strength=100"),
+    ("Aqua", "effect=STRONG,material=GLOSS,style=GEL,opacity=85,rim=true,glare=true,shadow=true,light-follows=true,style-strength=110,shine-strength=140,rim-strength=130,glare-strength=130,shadow-strength=90,light-strength=120"),
+    ("Subtle", "effect=SOFT,material=GLASS,style=FROSTED,opacity=90,rim=true,glare=false,shadow=false,light-follows=false,style-strength=70,shine-strength=60,rim-strength=70,glare-strength=100,shadow-strength=100,light-strength=100"),
+    ("Acrylic", "effect=STRONG,material=GLASS,style=FROSTED,opacity=70,rim=true,glare=false,shadow=true,light-follows=false,style-strength=130,shine-strength=100,rim-strength=60,glare-strength=100,shadow-strength=90,light-strength=100"),
+    ("Mica", "effect=SOFT,material=GLASS,style=TINTED,opacity=92,rim=false,glare=false,shadow=false,light-follows=false,style-strength=80,shine-strength=100,rim-strength=100,glare-strength=100,shadow-strength=100,light-strength=100"),
+    ("Aero", "effect=STRONG,material=GLOSS,style=TINTED,opacity=65,rim=true,glare=true,shadow=true,light-follows=false,style-strength=130,shine-strength=150,rim-strength=140,glare-strength=150,shadow-strength=100,light-strength=100"),
+    ("Glassmorphism", "effect=STRONG,material=GLASS,style=CLEAR,opacity=40,rim=true,glare=false,shadow=true,light-follows=false,style-strength=100,shine-strength=100,rim-strength=120,glare-strength=100,shadow-strength=110,light-strength=100"),
+    ("Vision", "effect=STRONG,material=GLASS,style=SMOKE,opacity=60,rim=true,glare=true,shadow=true,light-follows=true,style-strength=80,shine-strength=100,rim-strength=170,glare-strength=90,shadow-strength=60,light-strength=110"),
+];
+
 fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
     use crate::system::GlassScope;
     use crate::theme::{GlassEffect, GlassMaterial, GlassStyle};
@@ -6653,6 +6670,21 @@ fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
         if own.is_none() {
             return;
         }
+        widgets::divider(ui, pal);
+        glass_row(
+            ui,
+            pal,
+            "Presets",
+            "Start from a ready-made look, then fine-tune it below",
+            |ui| {
+                for (name, text) in GLASS_PRESETS {
+                    let preset = crate::theme::Glass::from_text(text);
+                    if segment(ui, pal, name, values.to_text() == preset.to_text()) {
+                        values = preset;
+                    }
+                }
+            },
+        );
         widgets::divider(ui, pal);
         glass_row(
             ui,

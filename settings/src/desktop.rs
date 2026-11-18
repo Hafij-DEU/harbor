@@ -1672,6 +1672,31 @@ pub fn fusion_glass() -> Option<crate::theme::Glass> {
     Some(glass)
 }
 
+/// Whether Fusion Desk is running and blurs the desktop behind Harbor
+/// windows. Without it a see-through window shows sharp windows behind it,
+/// so Settings stays solid. `WIN11_SETTINGS_BLUR=0|1` overrides.
+pub fn fusion_blurs_windows() -> bool {
+    if let Ok(v) = std::env::var("WIN11_SETTINGS_BLUR") {
+        return v != "0";
+    }
+    let on = gsettings_dump(FUSION_SCHEMA)
+        .iter()
+        .any(|(k, v)| k == "harbor-glass-blur" && v == "true");
+    if !on {
+        return false;
+    }
+    let get = |key: &str| {
+        Command::new("gsettings")
+            .args(["get", "org.gnome.shell", key])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default()
+    };
+    get("enabled-extensions").contains(FUSION_UUID)
+        && !get("disabled-extensions").contains(FUSION_UUID)
+        && get("disable-user-extensions").trim() != "true"
+}
+
 /// Write every glass setting to Fusion Desk.
 pub fn set_fusion_glass(glass: &crate::theme::Glass) -> bool {
     let extra = schema_args(FUSION_SCHEMA);

@@ -123,8 +123,14 @@ Every scope has the same options: effect (Off, Soft, Strong), material
 (clear glass or gloss), style (Clear, Frosted, Gel, Tinted, Smoke, Halo,
 Glow), opacity, rim highlight, corner glare, soft shadow and light that
 follows the pointer. **Glow** is smoked glass with coloured light shining
-through it. Below 100 % opacity the window shows the desktop through it
-(GNOME cannot blur behind app windows; Fusion Desk blurs its own surfaces).
+through it. Below 100 % opacity the window shows the desktop through it,
+blurred, while Fusion Desk 46 or later runs with **Blur behind Harbor apps**
+on. Without that blur GNOME cannot blur behind app windows, so the window
+stays solid and only the cards are glass.
+
+**Presets** set every option at once: Fusion Desk, Liquid, Frosted, Glow,
+Smoke, Aqua, Subtle, Acrylic, Mica, Aero, Glassmorphism and Vision. Fine-tune
+from there.
 
 The values live in `~/.config/harbor/glass` (all apps, or `global`),
 `glass-settings`, `glass-files` and `glass-taskmgr` (or `harbor` to follow),
