@@ -56,8 +56,7 @@ Both designs have a **Win 10 | Win 11** switch and a light/dark button at
 the top right of the title bar. The Windows 11 System page has the same Quick
 settings, and its Desktop & windows page ends with the Fusion Desk groups.
 
-Switch in **Personalisation → Interface**, start the separate **Settings
-(Windows 10)** launcher entry, or force it for one run:
+Switch in **Personalisation → Interface**, or force it for one run:
 
 ```bash
 win11-settings --ui win10
@@ -93,7 +92,7 @@ inventory, uninstalls, cleaner and disk bar work on their own
 | Storage | Root usage plus mounted volumes with progress bars |
 | About | Full specifications and clipboard copy |
 | Bluetooth / Network | Adapter switch, discoverable switch, non-blocking background scan, pair/connect/disconnect; Wi-Fi radio switch, Wi-Fi scan and password-based connection, plus manual/automatic proxy (HTTP, HTTPS, SOCKS, ignored hosts) |
-| Personalisation | Light, dark and “follow Ubuntu” modes; 8 accent swatches plus any custom colour; wallpaper picker applied to light/dark/lock screens; pointer size; writes the theme and accent back to GNOME |
+| Personalisation | Light, dark and “follow Ubuntu” modes; 8 accent swatches plus any custom colour; wallpaper picker applied to light/dark/lock screens; pointer size; writes the theme and accent back to GNOME; [glass effects](#glass-effects) |
 | Desktop & windows | Taskbar and dock (position, auto-hide, icon size), title-bar buttons and actions, window focus and placement, hot corner, workspaces, desktop icons, fonts and antialiasing |
 | Extensions | Every GNOME Shell extension with on/off switches and a master switch, install from extensions.gnome.org or a `.zip`, remove with confirmation, open each extension's own settings; Fusion Desk options are edited in place |
 | Apps | Windows-11–style tab bar — **My Apps**, **Updates** (badged with pending apt + App Hub updates), **Library** and **All Apps**. The first two manage the App Hub catalogue exactly as App Hub 1.7 reports it — real app icons, per-app errors, stale-cache markers, update-all, install/update/open/uninstall; **Library** groups the GitHub projects publishing .deb releases by owner with Install/Update/Open/Remove-from-Library, then lists **Saved installs** (App Hub's Favorites: Deb, Snap, Flatpak and catalogue recipes) with one-click install through PolicyKit; **All Apps** lists every installed apt/snap/flatpak/local app with icon, version, source, size and Open/Uninstall (protected system packages are marked and cannot be removed) |
@@ -107,6 +106,30 @@ inventory, uninstalls, cleaner and disk bar work on their own
 | Compatibility | Wine, Waydroid and Steam detection with one-click “Install” through PolicyKit apt when missing |
 | Software updates | apt, snap and Flatpak app updates checked once at start (the same list App Hub shows), install all of them with one PolicyKit prompt (including Ubuntu’s phased rollouts), refresh package lists, automatic security updates switch (unattended-upgrades), restart-required banner |
 | Search | Live filtering across every page with <kbd>Ctrl</kbd>+<kbd>F</kbd> |
+
+
+### Glass effects
+
+Personalisation → **Glass effects** holds Fusion Desk's glass settings for
+every place they apply:
+
+| Apply to | What it changes |
+| --- | --- |
+| Global | The desktop: Fusion Desk's own glass settings (taskbar, start menu, popups). Same values as Fusion Desk › Appearance. |
+| All Harbor apps | Files, Task Manager and Settings. Can follow Global. |
+| Settings, Files, Task Manager | One app. Each can follow All Harbor apps. |
+
+Every scope has the same options: effect (Off, Soft, Strong), material
+(clear glass or gloss), style (Clear, Frosted, Gel, Tinted, Smoke, Halo,
+Glow), opacity, rim highlight, corner glare, soft shadow and light that
+follows the pointer. **Glow** is smoked glass with coloured light shining
+through it. Below 100 % opacity the window shows the desktop through it
+(GNOME cannot blur behind app windows; Fusion Desk blurs its own surfaces).
+
+The values live in `~/.config/harbor/glass` (all apps, or `global`),
+`glass-settings`, `glass-files` and `glass-taskmgr` (or `harbor` to follow),
+as `effect=STRONG` lines. Files and Task Manager also have a quick
+**Glass effect** choice in their own settings.
 
 ## Install
 
@@ -127,7 +150,6 @@ Settings app. Remove it with `sudo apt remove win11-settings`.
 ```sh
 sudo install -Dm755 target/release/win11-settings /usr/local/bin/win11-settings
 sudo install -Dm644 win11-settings.desktop /usr/local/share/applications/win11-settings.desktop
-sudo install -Dm644 win11-settings-win10.desktop /usr/local/share/applications/win11-settings-win10.desktop
 sudo install -Dm644 assets/win11-settings.svg \
   /usr/local/share/icons/hicolor/scalable/apps/win11-settings.svg
 ```
@@ -243,6 +265,8 @@ falls back to `pkexec systemctl reboot` and then
 | `WIN11_SETTINGS_UI=win11\|win10` | Start with that interface (does not change the saved choice) |
 | `WIN11_SETTINGS_UPDATES=1` | Print every pending apt, snap and Flatpak update and exit |
 | `WIN11_SETTINGS_HOME_LINKS=0\|1` | Hide or show the page links on the Windows 10 home cards for one run |
+| `WIN11_SETTINGS_PHOTO=<file>` | Use this picture as the account picture for one run |
+| `WIN11_SETTINGS_GLASS=off\|glossy\|liquid\|key=value,…` | Paint with this glass for one run, e.g. `style=GLOW,opacity=60` |
 | `WIN11_SETTINGS_FAKE_JOB=apt\|apt-done\|hub\|hub-error` | Screenshot runs only: show the job panel with a sample log |
 | `WIN11_SETTINGS_MODE=dark\|light` | Force a mode instead of following Ubuntu |
 | `WIN11_SETTINGS_VIEW=<page>` | Open a page at start (e.g. `apps`, `display`, `privacy`) |

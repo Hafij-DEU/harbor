@@ -51,6 +51,8 @@ Linux has no per-process network speed without root. The Network column shows op
 
 Memory optimisation sets zram size and compression, the swap file, zswap, swappiness and cache pressure. Changes that need root ask for your password through polkit.
 
+**Glass effect** picks Off, Soft, Strong or the same glass as all Harbor apps; the full set of options is in [Harbor Settings › Personalisation](../settings/README.md#glass-effects).
+
 ![Settings](taskmgr-settings.png)
 
 ## Gallery

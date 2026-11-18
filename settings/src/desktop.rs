@@ -1321,6 +1321,7 @@ const ITEMS: &[Item] = &[
             ("TINTED", "Tinted"),
             ("SMOKE", "Smoke"),
             ("HALO", "Halo"),
+            ("GLOW", "Glow"),
         ]),
     },
     Item {
@@ -1648,6 +1649,45 @@ pub struct State {
 
 /// Extension schemas are not in the system schema path: point gsettings at
 /// the extension's own `schemas` folder.
+/// Whether Fusion Desk's settings schema is installed.
+pub fn fusion_installed() -> bool {
+    !schema_args(FUSION_SCHEMA).is_empty()
+}
+
+/// Fusion Desk's glass settings, or `None` when it is not installed.
+pub fn fusion_glass() -> Option<crate::theme::Glass> {
+    if !fusion_installed() {
+        return None;
+    }
+    let values = gsettings_dump(FUSION_SCHEMA);
+    if values.is_empty() {
+        return None;
+    }
+    let mut glass = crate::theme::Glass::default();
+    for (key, value) in &values {
+        if key.starts_with("glass-") {
+            glass.set(key, &plain(value));
+        }
+    }
+    Some(glass)
+}
+
+/// Write every glass setting to Fusion Desk.
+pub fn set_fusion_glass(glass: &crate::theme::Glass) -> bool {
+    let extra = schema_args(FUSION_SCHEMA);
+    if extra.is_empty() {
+        return false;
+    }
+    crate::theme::Glass::KEYS.iter().all(|key| {
+        Command::new("gsettings")
+            .args(&extra)
+            .args(["set", FUSION_SCHEMA, key, &glass.get(key)])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    })
+}
+
 fn schema_args(schema: &str) -> Vec<String> {
     if schema != FUSION_SCHEMA {
         return Vec::new();

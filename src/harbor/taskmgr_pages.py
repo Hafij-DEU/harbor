@@ -1514,6 +1514,8 @@ class SettingsPage(Page):
                  suffix=switch(bool(st["group_by_type"]), self._group)),
             Card("App theme", "Follows the system light or dark style",
                  icon="display-brightness-symbolic"),
+            Card("Glass effect", "Style, opacity, rim and glare: Harbor Settings > Personalisation",
+                 icon="weather-clear-night-symbolic", suffix=self._glass_dropdown(st)),
         ))
         body.append(section("Notifications"))
         self.notify_at = spin(70, 98, 1, int(st["notify_at"]),
@@ -1544,6 +1546,20 @@ class SettingsPage(Page):
         self.scroller = sc
         self.box.append(sc)
         self._opt_t = 0.0
+
+    from .common import GLASS_APP_LABELS as GLASS_LABELS
+
+    def _glass_dropdown(self, st):
+        keys = [k for k, _l in self.GLASS_LABELS]
+        current = st["glass"] if st["glass"] in keys else "harbor"
+        return dropdown([l for _k, l in self.GLASS_LABELS], keys.index(current),
+                        lambda i: self._set_glass(keys[i]))
+
+    def _set_glass(self, value):
+        self._set("glass", value)
+        from . import common
+        if common.THEME is not None:
+            common.THEME.set_glass(value)
 
     def on_show(self, sub=None):
         self.optimization.load(keep_form=self.optimization.form is not None)

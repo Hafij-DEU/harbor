@@ -2,7 +2,7 @@
 //! settings through the standard Ubuntu tools (gsettings, pactl, nmcli, ...).
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use serde::{Deserialize, Serialize};
@@ -3236,6 +3236,145 @@ fn design_path() -> Option<std::path::PathBuf> {
     Some(base.join("win11-settings").join("ui"))
 }
 
+/// `~/.config/harbor/<name>`: settings shared by every Harbor app.
+fn harbor_path(name: &str) -> Option<PathBuf> {
+    design_path().and_then(|p| p.parent()?.parent().map(|c| c.join("harbor").join(name)))
+}
+
+fn write_config(path: Option<PathBuf>, text: &str) {
+    let Some(path) = path else {
+        return;
+    };
+    if let Some(dir) = path.parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    let _ = fs::write(path, text);
+}
+
+/// Where a glass style is set: the desktop (Fusion Desk, "global"), every
+/// Harbor app, or one app.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum GlassScope {
+    Global,
+    Harbor,
+    Settings,
+    Files,
+    TaskManager,
+}
+
+impl GlassScope {
+    pub const ALL: [GlassScope; 5] = [
+        GlassScope::Global,
+        GlassScope::Harbor,
+        GlassScope::Settings,
+        GlassScope::Files,
+        GlassScope::TaskManager,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            GlassScope::Global => "Global",
+            GlassScope::Harbor => "All Harbor apps",
+            GlassScope::Settings => "Settings",
+            GlassScope::Files => "Files",
+            GlassScope::TaskManager => "Task Manager",
+        }
+    }
+
+    /// The scope this one follows when it has no values of its own.
+    pub fn parent(self) -> Option<GlassScope> {
+        match self {
+            GlassScope::Global => None,
+            GlassScope::Harbor => Some(GlassScope::Global),
+            _ => Some(GlassScope::Harbor),
+        }
+    }
+
+    /// `~/.config/harbor/<file>`; Python apps read the same files.
+    fn file(self) -> &'static str {
+        match self {
+            GlassScope::Global => "glass-global",
+            GlassScope::Harbor => "glass",
+            GlassScope::Settings => "glass-settings",
+            GlassScope::Files => "glass-files",
+            GlassScope::TaskManager => "glass-taskmgr",
+        }
+    }
+}
+
+/// A scope's own values; `None` follows its parent scope. All Harbor apps
+/// start with glass off; each app starts following them.
+pub fn scope_glass(scope: GlassScope) -> Option<crate::theme::Glass> {
+    use crate::theme::Glass;
+    if scope == GlassScope::Global {
+        return Some(global_glass());
+    }
+    let mut text = harbor_path(scope.file()).and_then(|p| fs::read_to_string(p).ok());
+    if text.is_none() && scope == GlassScope::Settings {
+        // 0.5.18 previews kept this app's choice next to its design file.
+        text = design_path().and_then(|p| fs::read_to_string(p.with_file_name("glass")).ok());
+    }
+    match text.as_deref().map(str::trim) {
+        None if scope == GlassScope::Harbor => Some(Glass::OFF),
+        None | Some("") | Some("global") | Some("harbor") => None,
+        Some(t) => Some(Glass::from_text(t)),
+    }
+}
+
+/// Save a scope's values, or make it follow its parent (`None`). The global
+/// scope is Fusion Desk's own glass settings when it is installed.
+pub fn save_scope_glass(scope: GlassScope, glass: Option<crate::theme::Glass>) -> bool {
+    if scope == GlassScope::Global {
+        let glass = glass.unwrap_or_default();
+        write_config(harbor_path(scope.file()), &glass.to_text());
+        return !crate::desktop::fusion_installed() || crate::desktop::set_fusion_glass(&glass);
+    }
+    let follow = if scope == GlassScope::Harbor {
+        "global"
+    } else {
+        "harbor"
+    };
+    let text = glass
+        .map(|g| g.to_text())
+        .unwrap_or_else(|| follow.to_owned());
+    write_config(harbor_path(scope.file()), &text);
+    true
+}
+
+/// The desktop's glass: Fusion Desk's settings, or Harbor's copy of them
+/// when Fusion Desk is not installed.
+pub fn global_glass() -> crate::theme::Glass {
+    crate::desktop::fusion_glass().unwrap_or_else(|| {
+        harbor_path(GlassScope::Global.file())
+            .and_then(|p| fs::read_to_string(p).ok())
+            .map(|t| crate::theme::Glass::from_text(&t))
+            .unwrap_or_default()
+    })
+}
+
+/// The values a scope paints with, after following its parents.
+pub fn resolve_glass(scope: GlassScope) -> crate::theme::Glass {
+    let mut at = scope;
+    loop {
+        if let Some(g) = scope_glass(at) {
+            return g;
+        }
+        match at.parent() {
+            Some(p) => at = p,
+            None => return crate::theme::Glass::OFF,
+        }
+    }
+}
+
+/// The glass this app paints with. `WIN11_SETTINGS_GLASS` (`off`, `glossy`,
+/// `liquid` or `key=value,...`) overrides it for screenshot runs.
+pub fn effective_glass() -> crate::theme::Glass {
+    if let Ok(v) = std::env::var("WIN11_SETTINGS_GLASS") {
+        return crate::theme::Glass::from_text(&v);
+    }
+    resolve_glass(GlassScope::Settings)
+}
+
 /// Whether the Windows 10 home cards list their pages. On unless turned off;
 /// `WIN11_SETTINGS_HOME_LINKS=0|1` overrides it for screenshot runs.
 pub fn saved_home_links() -> bool {
@@ -3480,6 +3619,75 @@ pub fn set_autologin(on: bool, user: &str) -> Result<(), String> {
             .status(),
         "The login manager refused the change",
     )
+}
+
+/// This account's AccountsService object path on the system bus.
+fn account_object_path() -> Result<String, String> {
+    let uid = sh("id -u");
+    let reply = sh(&format!(
+        "gdbus call --system --dest org.freedesktop.Accounts --object-path /org/freedesktop/Accounts --method org.freedesktop.Accounts.FindUserById {} 2>&1",
+        uid.trim()
+    ));
+    let start = reply
+        .find('\'')
+        .ok_or_else(|| clean_error(&reply, "Could not find this account"))?;
+    let len = reply[start + 1..]
+        .find('\'')
+        .ok_or_else(|| clean_error(&reply, "Could not find this account"))?;
+    Ok(reply[start + 1..start + 1 + len].to_owned())
+}
+
+/// The account picture: AccountsService's IconFile (what the login screen
+/// shows), else `~/.face`. `WIN11_SETTINGS_PHOTO` overrides it for tests.
+pub fn user_photo() -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("WIN11_SETTINGS_PHOTO") {
+        return Some(PathBuf::from(path)).filter(|p| p.is_file());
+    }
+    if let Ok(object) = account_object_path() {
+        let reply = sh(&format!(
+            "gdbus call --system --dest org.freedesktop.Accounts --object-path {} --method org.freedesktop.DBus.Properties.Get org.freedesktop.Accounts.User IconFile 2>/dev/null",
+            shell_quote(&object)
+        ));
+        if let Some(start) = reply.find('\'') {
+            if let Some(len) = reply[start + 1..].find('\'') {
+                let path = PathBuf::from(&reply[start + 1..start + 1 + len]);
+                if path.is_file() {
+                    return Some(path);
+                }
+            }
+        }
+    }
+    let face = PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".face");
+    face.is_file().then_some(face)
+}
+
+/// Set (or with an empty path, remove) the account picture. AccountsService
+/// keeps its own copy, so the login and lock screens show it too.
+pub fn set_user_photo(path: &str) -> Result<(), String> {
+    let object = account_object_path()?;
+    let out = sh(&format!(
+        "gdbus call --system --dest org.freedesktop.Accounts --object-path {} --method org.freedesktop.Accounts.User.SetIconFile {} 2>&1",
+        shell_quote(&object),
+        shell_quote(path)
+    ));
+    if out.contains("Error") || out.contains("error") {
+        Err(clean_error(&out, "The account service refused the picture"))
+    } else {
+        Ok(())
+    }
+}
+
+/// Read a picture and cut a centred square of `size` pixels for the avatar.
+pub fn load_photo(path: &Path, size: u32) -> Option<(usize, Vec<u8>)> {
+    let img = image::open(path).ok()?;
+    let side = img.width().min(img.height());
+    let x = (img.width() - side) / 2;
+    let y = (img.height() - side) / 2;
+    let square = img
+        .crop_imm(x, y, side, side)
+        .resize_exact(size, size, image::imageops::FilterType::Triangle)
+        .to_rgba8();
+    Some((size as usize, square.into_raw()))
 }
 
 /// Change the account's display name through AccountsService.

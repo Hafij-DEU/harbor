@@ -50,6 +50,7 @@ The table lives in `EXT_TABLE` in [`src/harbor/files_icons.py`](../src/harbor/fi
 - Large icons, medium icons or details view, with hidden items on demand.
 - **Folder colours** follow your accent colour. **Customize folder** sets a colour, icon, emblem or your own picture per folder.
 - A first-run **welcome tour** sets the design, colours and layout.
+- **Glass effect** (Options): Off, Soft, Strong or the same as all Harbor apps. Every glass option (style, opacity, rim, glare, Glow) is in [Harbor Settings › Personalisation](../settings/README.md#glass-effects).
 
 | Command bar | Ribbon |
 | --- | --- |

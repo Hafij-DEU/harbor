@@ -135,11 +135,336 @@ columnview.hb-table > header > button { background: transparent; border: none; b
 """)
 
 
+# ------------------------------------------------------------------ glass
+
+# Glass shared by every Harbor app and Fusion Desk. The values are Fusion
+# Desk's glass-* settings. Harbor Settings > Personalisation writes them to
+# ~/.config/harbor/: "glass" (all Harbor apps, or "global" = follow Fusion
+# Desk), "glass-files" / "glass-taskmgr" / "glass-settings" (one app, or
+# "harbor" = follow all Harbor apps) and "glass-global" (a copy of the
+# desktop values, used when Fusion Desk is not installed).
+FUSION_SCHEMA = "org.gnome.shell.extensions.fusion-desk"
+FUSION_UUID = "fusion-desk@hafij-deu.github.io"
+GLASS_STRENGTHS = ("style-strength", "shine-strength", "rim-strength", "glare-strength",
+                   "shadow-strength", "light-strength")   # percent, 0-200, 100 = normal
+GLASS_KEYS = ("effect", "material", "style", "opacity", "rim", "glare", "shadow",
+              "light-follows") + GLASS_STRENGTHS
+GLASS_EFFECTS = ("OFF", "SOFT", "STRONG")
+GLASS_MATERIALS = ("GLASS", "GLOSS")
+GLASS_STYLES = ("CLEAR", "FROSTED", "GEL", "TINTED", "SMOKE", "HALO", "GLOW")
+GLASS_DEFAULT = {"effect": "STRONG", "material": "GLASS", "style": "FROSTED", "opacity": 75,
+                 "rim": True, "glare": True, "shadow": False, "light-follows": False,
+                 **{k: 100 for k in GLASS_STRENGTHS}}
+GLASS_OFF = dict(GLASS_DEFAULT, effect="OFF", opacity=100)
+# An app's own quick choice (Files > Options, Task Manager > Settings);
+# "custom" means Harbor Settings gave it its own full set of values.
+GLASS_APP_CHOICES = ("harbor", "off", "soft", "strong", "custom")
+GLASS_APP_LABELS = (("harbor", "Same as all Harbor apps"), ("off", "Off"), ("soft", "Soft"),
+                    ("strong", "Strong"), ("custom", "Custom (Harbor Settings)"))
+
+
+def harbor_config_path(name):
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(base, "harbor", name)
+
+
+def _read_config(name):
+    try:
+        with open(harbor_config_path(name), encoding="utf-8") as fh:
+            return fh.read().strip()
+    except OSError:
+        return None
+
+
+def _write_config(name, text):
+    path = harbor_config_path(name)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+    except OSError:
+        pass
+
+
+def glass_set(spec, key, value):
+    """Set one glass value from text ('STRONG', '75', 'true'); bad values are ignored."""
+    key = key.strip().removeprefix("glass-")
+    value = str(value).strip().strip("'")
+    if key == "effect" and value.upper() in GLASS_EFFECTS:
+        spec[key] = value.upper()
+    elif key == "material" and value.upper() in GLASS_MATERIALS:
+        spec[key] = value.upper()
+    elif key == "style" and value.upper() in GLASS_STYLES:
+        spec[key] = value.upper()
+    elif key == "opacity" and value.isdigit():
+        spec[key] = max(10, min(100, int(value)))
+    elif key in GLASS_STRENGTHS and value.isdigit():
+        spec[key] = min(200, int(value))
+    elif key in ("rim", "glare", "shadow", "light-follows"):
+        spec[key] = value == "true"
+
+
+def parse_glass(text):
+    """`key=value` pairs (lines or commas) into a glass dict. The old one-word
+    styles off / glossy / liquid still work."""
+    text = (text or "").strip()
+    if text == "off":
+        return dict(GLASS_OFF)
+    if text == "glossy":
+        return dict(GLASS_DEFAULT, effect="SOFT", material="GLOSS", style="GEL", opacity=100)
+    if text == "liquid":
+        return dict(GLASS_DEFAULT, style="CLEAR", opacity=80)
+    spec = dict(GLASS_DEFAULT)
+    for pair in text.replace(",", "\n").splitlines():
+        if "=" in pair:
+            glass_set(spec, *pair.split("=", 1))
+    return spec
+
+
+def glass_text(spec):
+    def show(v):
+        return ("true" if v else "false") if isinstance(v, bool) else str(v)
+    return "".join(f"{k}={show(spec[k])}\n" for k in GLASS_KEYS)
+
+
+def fusion_settings():
+    """Fusion Desk's Gio.Settings, or None when it is not installed."""
+    for base in (os.path.join(GLib.get_user_data_dir(), "gnome-shell", "extensions"),
+                 "/usr/share/gnome-shell/extensions", "/usr/local/share/gnome-shell/extensions"):
+        folder = os.path.join(base, FUSION_UUID, "schemas")
+        if not os.path.exists(os.path.join(folder, "gschemas.compiled")):
+            continue
+        try:
+            source = Gio.SettingsSchemaSource.new_from_directory(
+                folder, Gio.SettingsSchemaSource.get_default(), False)
+            schema = source.lookup(FUSION_SCHEMA, False)
+        except GLib.Error:
+            continue
+        if schema is not None:
+            return Gio.Settings.new_full(schema, None, None)
+    return None
+
+
+def global_glass(fusion=None):
+    """The desktop's glass: Fusion Desk's settings, or Harbor's copy of them."""
+    fusion = fusion or fusion_settings()
+    if fusion is not None:
+        spec = dict(GLASS_DEFAULT)
+        keys = fusion.props.settings_schema.list_keys()
+        for key in GLASS_KEYS:
+            if "glass-" + key in keys:
+                glass_set(spec, key, fusion.get_value("glass-" + key).print_(False))
+        return spec
+    text = _read_config("glass-global")
+    return parse_glass(text) if text else dict(GLASS_DEFAULT)
+
+
+def scope_glass(scope):
+    """A scope's own values ("harbor" or an app name), or None to follow."""
+    text = _read_config("glass" if scope == "harbor" else "glass-" + scope)
+    if text is None:
+        return dict(GLASS_OFF) if scope == "harbor" else None
+    if text in ("", "global", "harbor"):
+        return None
+    return parse_glass(text)
+
+
+def resolve_glass(app, fusion=None):
+    """The glass `app` paints with, following its scope chain."""
+    spec = scope_glass(app)
+    if spec is None:
+        spec = scope_glass("harbor")
+    if spec is None:
+        spec = global_glass(fusion)
+    return spec
+
+
+def app_glass_choice(app):
+    """The quick choice that matches the app's own glass file."""
+    spec = scope_glass(app)
+    if spec is None:
+        return "harbor"
+    base = resolve_glass("harbor") if scope_glass("harbor") is not None else global_glass()
+    if spec["effect"] == "OFF":
+        return "off"
+    if dict(spec, effect=base["effect"]) == base:
+        return spec["effect"].lower()
+    return "custom"
+
+
+def set_app_glass_choice(app, choice):
+    """Write an app's quick choice; "custom" leaves its file alone."""
+    if choice == "harbor":
+        _write_config("glass-" + app, "harbor")
+    elif choice in ("off", "soft", "strong"):
+        base = resolve_glass("harbor") if scope_glass("harbor") is not None else global_glass()
+        _write_config("glass-" + app, glass_text(dict(base, effect=choice.upper())))
+
+
+def _rgb(value):
+    if isinstance(value, str) and value.startswith("#") and len(value) == 7:
+        return tuple(int(value[i:i + 2], 16) for i in (1, 3, 5))
+    return None
+
+
+def _alpha(value, alpha):
+    rgb = _rgb(value)
+    if rgb:
+        return "rgba(%d,%d,%d,%.3f)" % (*rgb, alpha)
+    if value.startswith("var(") or value.startswith("alpha("):
+        return f"alpha({value},{alpha:.3f})"
+    return value
+
+
+def _mix(value, other, t):
+    rgb = _rgb(value)
+    if not rgb:
+        return value
+    return "#%02x%02x%02x" % tuple(round(a + (b - a) * t) for a, b in zip(rgb, other))
+
+
+def white(a):
+    return "rgba(255,255,255,%.3f)" % max(0.0, min(1.0, a))
+
+
+def black(a):
+    return "rgba(0,0,0,%.3f)" % max(0.0, min(1.0, a))
+
+
+def accent(a):
+    return "alpha(var(--accent-bg-color),%.3f)" % max(0.0, min(1.0, a))
+
+
+def glass_palette(pal, spec, dark):
+    """Palette colours for a glass spec: the style's tint and the opacity."""
+    if spec["effect"] == "OFF":
+        return pal
+    pal = dict(pal)
+    style = spec["style"]
+    a = spec["opacity"] / 100
+    if style == "CLEAR":
+        a *= 0.7
+    if spec["effect"] == "SOFT":
+        a = 0.5 + a * 0.5
+    if style == "GLOW":
+        a = min(a, 0.6)   # the coloured light behind must show through
+    a = max(0.2, a)
+
+    def tint(c):
+        if style == "FROSTED":
+            return _mix(c, (255, 255, 255), 0.06 if dark else 0.30)
+        if style == "SMOKE":
+            return _mix(c, (0, 0, 0), 0.30 if dark else 0.10)
+        if style == "GLOW" and dark:
+            return _mix(c, (44, 46, 50), 0.6)
+        return c
+    for key, extra in (("card", 0), ("card_hover", 0.12), ("card_active", 0.08),
+                       ("entry", 0.10), ("surface", 0)):
+        pal[key] = _alpha(tint(pal[key]), min(1.0, a + extra))
+    if spec["rim"]:
+        pal["border"] = white((0.13 if dark else 0.75) * (1 if spec["effect"] == "STRONG" else 0.7))
+    if spec["opacity"] < 100:
+        page = max(0.35, spec["opacity"] / 100)
+        pal["window"] = _alpha(pal["window"], page)
+        pal["sidebar"] = _alpha(pal["sidebar"], page * 0.8)
+    return pal
+
+
+def glass_css(spec, dark):
+    """CSS layers for a glass spec, drawn like Fusion Desk's glass: style
+    shading, gloss band, corner glare, rim and shadow on every card, tile,
+    button, selected nav row and search box."""
+    if spec["effect"] == "OFF":
+        return ""
+    k_full = 1.0 if spec["effect"] == "STRONG" else 0.6
+    gloss = spec["material"] == "GLOSS"
+    ss, sh, rs, gs, ds, ls = (spec[n] / 100 for n in GLASS_STRENGTHS)
+    k = k_full * ss
+
+    def layers(wk_full):
+        wk = wk_full * ss
+        style = spec["style"]
+        out = []
+        if gloss:
+            out.append(f"linear-gradient(to bottom, {white((0.40 if dark else 0.70) * wk_full * sh)}, "
+                       f"{white((0.12 if dark else 0.28) * wk_full * sh)} 18%, {white(0)} 36%)")
+        if spec["glare"]:
+            g = (0.4 if dark else 0.5) * wk_full * gs * (0.6 if gloss else 1)
+            out.append(f"radial-gradient(circle at 6% 0%, {white(g)}, {white(g * 0.35)} 18%, "
+                       f"{white(0)} 42%)")
+            out.append(f"radial-gradient(circle at 100% 100%, {white(g * 0.7)}, {white(0)} 22%)")
+        if style == "FROSTED":
+            out.append(f"linear-gradient(to bottom, {white(0.30 * wk)}, {white(0.16 * wk)})")
+        elif style == "GEL":
+            end = black(0.14 * k) if dark else white(0)
+            out.append(f"linear-gradient(to bottom, {white(0.40 * wk)}, {white(0.06 * wk)} 60%, {end})")
+        elif style == "TINTED":
+            out.append(f"linear-gradient(to bottom, {accent(0.34 * k)}, {accent(0.12 * k)})")
+        elif style == "SMOKE":
+            out.append(f"linear-gradient(to bottom, {black(0.06 * k)}, {black(0.24 * k)})")
+        elif style == "HALO":
+            out.append(f"radial-gradient(ellipse at 50% 45%, {white(0.26 * wk)}, {white(0)} 65%)")
+        else:  # CLEAR, GLOW
+            out.append(f"linear-gradient(to bottom, {white(0.18 * wk)}, {white(0.03 * wk)} 70%, "
+                       f"{white(0)})")
+        if gloss and dark:
+            out.append(f"linear-gradient(to bottom, {black(0)} 60%, {black(0.2 * k_full * sh)})")
+        return ", ".join(out)
+
+    def shadows(extra=""):
+        parts = []
+        if spec["rim"] and rs > 0:
+            rk = k_full * rs
+            top = (0.6 if dark else 0.95) * rk if gloss else (0.32 if dark else 0.95) * rk
+            parts.append(f"inset 0 1px {white(top)}")
+            if gloss:
+                parts.append(f"inset 0 -1px {black((0.38 if dark else 0.16) * rk)}")
+        if spec["shadow"] and ds > 0:
+            parts.append(f"0 {round(4 * ds)}px {round(14 * ds)}px {black((0.45 if dark else 0.18) * ds)}")
+        if extra:
+            parts.append(extra)
+        return ", ".join(parts) or "none"
+
+    wk = (0.4 if dark else 1.0) * k_full
+    neutral = (".hb-card, .hb-tile, button.hb-plain, .hb-surface, list.hb-nav > row:selected, "
+               "entry.hb-search, searchentry.hb-search")
+    css = (f"{neutral} {{ background-image: {layers(wk)}; box-shadow: {shadows()}; }}\n"
+           f"button.hb-accent, .hb-badge {{ background-image: {layers(wk * 0.7)}; "
+           f"box-shadow: {shadows()}; }}\n")
+    if spec["light-follows"]:
+        spot = f"radial-gradient(circle at 50% 50%, {white((0.12 if dark else 0.35) * ls)}, {white(0)} 70%)"
+        css += ("button.hb-card:hover, button.hb-tile:hover, button.hb-plain:hover, "
+                f"list.hb-nav > row:hover {{ background-image: {spot}, {layers(wk)}; }}\n")
+    see_through = spec["opacity"] < 100
+    if spec["style"] == "GLOW":
+        a = (0.42 if dark else 0.26) * ss
+        blobs = ", ".join(
+            f"radial-gradient(circle at {x}% {y}%, {c(a)}, {c(0)} {r}%)"
+            for c, x, y, r in ((lambda v: "rgba(150,200,40,%.2f)" % v, 12, 2, 50),
+                               (lambda v: "rgba(20,170,170,%.2f)" % v, 42, 80, 45),
+                               (lambda v: "rgba(230,110,90,%.2f)" % v, 100, 95, 50),
+                               (accent, 85, 10, 38)))
+        css += f"window.hb-window {{ background-image: {blobs}; }}\n"
+    if see_through or spec["style"] == "GLOW":
+        css += (".hb-window toolbarview, .hb-window scrolledwindow, .hb-window viewport, "
+                ".hb-window columnview, .hb-window listview, .hb-window gridview, "
+                ".hb-window .view, .hb-window textview text, .hb-window headerbar, "
+                ".hb-window > contents, .hb-content, .hb-sidebar, .hb-window .sidebar-pane, "
+                ".hb-window .content-pane, .hb-window navigation-view, "
+                ".hb-window overlay-split-view, .hb-window list.navigation-sidebar, "
+                ".hb-window .hb-tm-navcol "
+                "{ background-color: transparent; }\n")
+    return css
+
+
 class _Theme:
     def __init__(self):
         self.provider = Gtk.CssProvider()
         self.extra = []
         self.style = "harbor"      # "harbor" (own colours) or "system"
+        self.app = None            # "files" / "taskmgr": reads ~/.config/harbor/glass-<app>
+        self._monitors = []
+        self._fusion = None
         self.manager = Adw.StyleManager.get_default()
         self.manager.connect("notify::dark", lambda *_: self.reload())
 
@@ -152,6 +477,50 @@ class _Theme:
             return PALETTES["system"]
         return PALETTES["dark" if self.dark else "light"]
 
+    @property
+    def glass(self):
+        """The glass dict this app paints with. HARBOR_GLASS (off, glossy,
+        liquid or key=value,...) overrides it for screenshot runs."""
+        if os.environ.get("HARBOR_GLASS"):
+            return parse_glass(os.environ["HARBOR_GLASS"])
+        if self.app is None:
+            return dict(GLASS_OFF)
+        return resolve_glass(self.app, self._fusion)
+
+    def set_app(self, app):
+        """Name this app ("files", "taskmgr") so it reads its glass file."""
+        if app != self.app:
+            self.app = app
+            self.watch_glass()
+            self.reload()
+
+    def set_glass(self, choice):
+        """Save this app's quick glass choice (see GLASS_APP_CHOICES)."""
+        if self.app and choice in GLASS_APP_CHOICES:
+            set_app_glass_choice(self.app, choice)
+            self.reload()
+
+    def glass_choice(self):
+        return app_glass_choice(self.app) if self.app else "harbor"
+
+    def watch_glass(self):
+        """Reload when Harbor Settings or Fusion Desk change the glass."""
+        if self._monitors or self.app is None:
+            return
+        for name in ("glass", "glass-global", "glass-" + self.app):
+            path = harbor_config_path(name)
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                mon = Gio.File.new_for_path(path).monitor_file(Gio.FileMonitorFlags.NONE, None)
+                mon.connect("changed", lambda *_: self.reload())
+                self._monitors.append(mon)
+            except GLib.Error:
+                pass
+        self._fusion = fusion_settings()
+        if self._fusion is not None:
+            self._fusion.connect(
+                "changed", lambda _s, key: key.startswith("glass-") and self.reload())
+
     def set_style(self, style):
         style = "system" if style == "system" else "harbor"
         if style != self.style:
@@ -159,10 +528,12 @@ class _Theme:
             self.reload()
 
     def reload(self):
-        pal = self.palette()
+        spec = self.glass
+        pal = glass_palette(self.palette(), spec, self.dark)
         css = CSS.substitute(pal)
         for tmpl in self.extra:
             css += tmpl.substitute(pal)
+        css += glass_css(spec, self.dark)
         self.provider.load_from_string(css)
 
 

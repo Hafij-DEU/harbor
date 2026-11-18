@@ -647,6 +647,17 @@ pub struct App {
     pub design: crate::theme::Design,
     /// Windows 10 home: list each category's pages on its card.
     pub home_links: bool,
+    /// Glass values per scope (`system::GlassScope::ALL` order); `None`
+    /// follows the scope above.
+    pub glass_scopes: [Option<crate::theme::Glass>; 5],
+    /// The scope Personalisation › Glass effects is editing.
+    pub glass_edit: system::GlassScope,
+    /// The window was created see-through (glass opacity below 100).
+    pub glass_window: bool,
+    /// Pointer position, for "Light follows pointer".
+    pub pointer: Option<Pos2>,
+    /// A scope changed while a slider was dragged; saved on release.
+    pub glass_dirty: Option<system::GlassScope>,
     last_mode: Mode,
     last_accent: Color32,
     last_design: crate::theme::Design,
@@ -664,6 +675,10 @@ pub struct App {
     rename_target: String,
     pub wifi_connect: Option<WifiDialog>,
     wallpaper_rx: Option<Receiver<Result<String, String>>>,
+    /// The account picture, drawn in every avatar.
+    photo: Option<egui::TextureHandle>,
+    /// Loading or changing the account picture: Ok(None) means no picture.
+    photo_rx: Option<Receiver<Result<Option<(usize, Vec<u8>)>, String>>>,
     auto_updates_rx: Option<Receiver<Result<bool, String>>>,
     /// Background `pkexec timedatectl set-timezone` in flight.
     timezone_rx: Option<Receiver<Result<String, String>>>,
@@ -841,6 +856,11 @@ impl App {
             follow_system,
             design,
             home_links: system::saved_home_links(),
+            glass_scopes: system::GlassScope::ALL.map(system::scope_glass),
+            glass_edit: system::GlassScope::Harbor,
+            glass_window: system::effective_glass().see_through(),
+            pointer: None,
+            glass_dirty: None,
             last_mode: mode,
             last_accent: accent,
             last_design: design,
@@ -857,6 +877,8 @@ impl App {
             rename_target: String::new(),
             wifi_connect: None,
             wallpaper_rx: None,
+            photo: None,
+            photo_rx: None,
             auto_updates_rx: None,
             timezone_rx: None,
             bt_scan_rx: None,
@@ -902,6 +924,7 @@ impl App {
             app.welcome = Some(crate::welcome::Welcome::new(&app));
         }
         app.start_home_usage();
+        app.load_photo(None);
         if std::env::var("WIN11_SETTINGS_SCREENSHOT").is_err() {
             app.hub_refresh();
             app.check_updates();
@@ -998,7 +1021,12 @@ impl App {
     }
 
     pub fn pal(&self) -> Palette {
-        Palette::new(self.mode, self.accent, self.design)
+        let glass = self.glass();
+        // A window created opaque cannot turn see-through until reopened.
+        let see = self.glass_window && glass.see_through();
+        let mut pal = Palette::new(self.mode, self.accent, self.design).with_glass(glass, see);
+        pal.pointer = self.pointer;
+        pal
     }
 
     /// Refresh the system probe in the background (polled in `poll_background`).
@@ -1691,6 +1719,60 @@ Your personal files are kept."
         });
     }
 
+    pub fn has_photo(&self) -> bool {
+        self.photo.is_some()
+    }
+
+    /// Read the account picture in the background. With `change`, first
+    /// set it: `Some("")` removes it, `Some("pick")` opens a file chooser.
+    pub fn load_photo(&mut self, change: Option<&str>) {
+        if self.photo_rx.is_some() {
+            return;
+        }
+        let change = change.map(str::to_owned);
+        if change.as_deref() == Some("pick") && !system::command_exists("zenity") {
+            self.notify_error("zenity is not installed");
+            return;
+        }
+        let (tx, rx) = mpsc::channel();
+        self.photo_rx = Some(rx);
+        std::thread::spawn(move || {
+            if let Some(change) = change {
+                let path = if change == "pick" {
+                    let out = Command::new("zenity")
+                        .args([
+                            "--file-selection",
+                            "--title=Choose your account picture",
+                            "--file-filter=Images | *.png *.jpg *.jpeg",
+                        ])
+                        .output();
+                    match out {
+                        Ok(o) if o.status.success() => {
+                            String::from_utf8_lossy(&o.stdout).trim().to_owned()
+                        }
+                        _ => {
+                            let _ = tx.send(Err("cancelled".to_owned()));
+                            return;
+                        }
+                    }
+                } else {
+                    change
+                };
+                if !path.is_empty() && system::load_photo(std::path::Path::new(&path), 8).is_none()
+                {
+                    let _ = tx.send(Err("That file is not a PNG or JPEG picture".to_owned()));
+                    return;
+                }
+                if let Err(err) = system::set_user_photo(&path) {
+                    let _ = tx.send(Err(err));
+                    return;
+                }
+            }
+            let photo = system::user_photo().and_then(|p| system::load_photo(&p, 256));
+            let _ = tx.send(Ok(photo));
+        });
+    }
+
     /// Pick a wallpaper with a native file chooser (zenity) and apply it to
     /// the light, dark and lock screen backgrounds.
     pub fn open_wallpaper_picker(&mut self) {
@@ -1859,6 +1941,67 @@ The network will not reconnect automatically."
             }
             View::Page(_) | View::Home => {}
         }
+    }
+
+    /// The glass style this window paints with.
+    pub fn glass(&self) -> crate::theme::Glass {
+        if let Ok(v) = std::env::var("WIN11_SETTINGS_GLASS") {
+            return crate::theme::Glass::from_text(&v);
+        }
+        self.resolved_glass(system::GlassScope::Settings)
+    }
+
+    fn scope_index(scope: system::GlassScope) -> usize {
+        system::GlassScope::ALL
+            .iter()
+            .position(|s| *s == scope)
+            .unwrap_or(0)
+    }
+
+    /// A scope's own values, or `None` when it follows the scope above.
+    pub fn scope_glass(&self, scope: system::GlassScope) -> Option<crate::theme::Glass> {
+        self.glass_scopes[Self::scope_index(scope)]
+    }
+
+    /// The values a scope paints with, after following its parents.
+    pub fn resolved_glass(&self, scope: system::GlassScope) -> crate::theme::Glass {
+        let mut at = scope;
+        loop {
+            if let Some(g) = self.scope_glass(at) {
+                return g;
+            }
+            match at.parent() {
+                Some(p) => at = p,
+                None => return crate::theme::Glass::OFF,
+            }
+        }
+    }
+
+    /// Change a scope's glass (`None` = follow the scope above). The global
+    /// scope is written to Fusion Desk at once.
+    pub fn set_scope_glass(
+        &mut self,
+        scope: system::GlassScope,
+        glass: Option<crate::theme::Glass>,
+        persist: bool,
+    ) {
+        self.glass_scopes[Self::scope_index(scope)] = glass;
+        if !persist {
+            self.glass_dirty = Some(scope);
+            return;
+        }
+        self.glass_dirty = None;
+        if !system::save_scope_glass(scope, glass) {
+            self.notify_error("Fusion Desk did not take the glass settings; update Fusion Desk");
+        }
+        if self.glass().see_through() && !self.glass_window {
+            self.notify("Reopen Settings to see the desktop through the window");
+        }
+    }
+
+    /// Read the global glass again (Fusion Desk may have changed it).
+    pub fn reload_global_glass(&mut self) {
+        self.glass_scopes[0] = Some(system::global_glass());
     }
 
     pub fn set_home_links(&mut self, on: bool) {
@@ -2311,6 +2454,42 @@ The network will not reconnect automatically."
             }
         }
 
+        if self.photo_rx.is_some() {
+            let received = self.photo_rx.as_ref().map(|rx| rx.try_recv());
+            match received {
+                Some(Ok(result)) => {
+                    self.photo_rx = None;
+                    match result {
+                        Ok(Some((side, pixels))) => {
+                            let image =
+                                egui::ColorImage::from_rgba_unmultiplied([side, side], &pixels);
+                            self.photo = Some(ctx.load_texture(
+                                "user-photo",
+                                image,
+                                egui::TextureOptions::LINEAR,
+                            ));
+                        }
+                        Ok(None) => self.photo = None,
+                        Err(err) if err == "cancelled" => {}
+                        Err(err) => self.notify_error(&err),
+                    }
+                }
+                Some(Err(mpsc::TryRecvError::Empty)) => {
+                    ctx.request_repaint_after(Duration::from_millis(150));
+                }
+                Some(Err(mpsc::TryRecvError::Disconnected)) => self.photo_rx = None,
+                None => {}
+            }
+        }
+        // Every avatar reads the picture from here.
+        match &self.photo {
+            Some(tex) => {
+                let id = tex.id();
+                ctx.data_mut(|d| d.insert_temp(Id::new("user-photo"), id));
+            }
+            None => ctx.data_mut(|d| d.remove::<egui::TextureId>(Id::new("user-photo"))),
+        }
+
         if self.wallpaper_rx.is_some() {
             let received = self.wallpaper_rx.as_ref().map(|rx| rx.try_recv());
             match received {
@@ -2418,6 +2597,13 @@ The network will not reconnect automatically."
         if pal.design == crate::theme::Design::Win10 {
             // Windows 10: a small app tile, the window title and the search
             // box in the title bar, on a white (or black) strip.
+            // On the home page it takes the header band's colour so the two
+            // read as one block.
+            let home = matches!(self.view, View::Home);
+            if home {
+                let (top, _) = crate::widgets::home10_header(pal);
+                ui.painter().rect_filled(rect, 0, top);
+            }
             let tile = Rect::from_center_size(
                 Pos2::new(rect.left() + 20.0, rect.center().y),
                 Vec2::splat(16.0),
@@ -2436,11 +2622,13 @@ The network will not reconnect automatically."
                 regular(12.0),
                 pal.text,
             );
-            ui.painter().rect_filled(
-                Rect::from_min_max(Pos2::new(rect.left(), rect.bottom() - 1.0), rect.max),
-                0,
-                pal.divider,
-            );
+            if !home {
+                ui.painter().rect_filled(
+                    Rect::from_min_max(Pos2::new(rect.left(), rect.bottom() - 1.0), rect.max),
+                    0,
+                    pal.divider,
+                );
+            }
         } else {
             let dot = Pos2::new(rect.left() + 18.0, rect.center().y);
             ui.painter().circle_filled(dot, 2.6, pal.accent);
@@ -3779,6 +3967,7 @@ The network will not reconnect automatically."
         };
         let waiting_hub = matches!(self.view, View::Page(Page::Apps)) && self.hub.loading;
         let waiting_updates = self.updates_rx.is_some();
+        let waiting_updates = waiting_updates || self.photo_rx.is_some();
         // Testing hook: capture the very first frame, before the live probe
         // returns, to prove cached values are already visible.
         let early = std::env::var("WIN11_SETTINGS_SHOT_EARLY").is_ok();
@@ -3865,11 +4054,17 @@ impl eframe::App for App {
             self.last_design = self.design;
         }
 
+        self.pointer = if self.glass().light_follows {
+            ctx.input(|i| i.pointer.hover_pos())
+        } else {
+            None
+        };
         let pal = self.pal();
         self.handle_resize(&ctx);
 
         let full = root.max_rect();
         root.painter().rect_filled(full, 0, pal.bg);
+        widgets::glow_backdrop(root.painter(), full, &pal);
 
         let title_h = title_height(self.design);
         let title_rect = Rect::from_min_size(full.min, Vec2::new(full.width(), title_h));
@@ -3908,7 +4103,13 @@ impl eframe::App for App {
             pal.bg.r() as f32 / 255.0,
             pal.bg.g() as f32 / 255.0,
             pal.bg.b() as f32 / 255.0,
-            1.0,
+            // Liquid glass: the window itself is clear; the page fill sets
+            // how much of the desktop shows through.
+            if self.glass_window && self.glass().see_through() {
+                0.0
+            } else {
+                1.0
+            },
         ]
     }
 }

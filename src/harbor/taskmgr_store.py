@@ -43,6 +43,8 @@ DEFAULTS = {
     # high-memory warning (as in Memory Sweep: on, at 90 %, at most every 10 min)
     "notify_memory": True,
     "notify_at": 90,
+    # glass quick choice, kept in step with ~/.config/harbor/glass-taskmgr
+    "glass": "harbor",
 }
 
 

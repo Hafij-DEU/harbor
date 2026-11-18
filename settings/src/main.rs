@@ -563,7 +563,8 @@ fn main() -> eframe::Result<()> {
             .with_min_inner_size([1024.0, 680.0])
             .with_decorations(false)
             .with_resizable(true)
-            .with_app_id("win11-settings"),
+            .with_app_id("win11-settings")
+            .with_transparent(system::effective_glass().see_through()),
         renderer: eframe::Renderer::Glow,
         ..Default::default()
     };

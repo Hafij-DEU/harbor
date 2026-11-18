@@ -32,8 +32,6 @@ mkdir -p \
 install -m 0755 target/release/win11-settings "$STAGE/usr/local/bin/win11-settings"
 install -m 0644 win11-settings.desktop \
     "$STAGE/usr/share/applications/win11-settings.desktop"
-install -m 0644 win11-settings-win10.desktop \
-    "$STAGE/usr/share/applications/win11-settings-win10.desktop"
 install -m 0644 assets/win11-settings.svg \
     "$STAGE/usr/share/icons/hicolor/scalable/apps/win11-settings.svg"
 

@@ -939,7 +939,9 @@ class App(Adw.Application):
 
     def do_startup(self):
         Adw.Application.do_startup(self)
-        apply_theme(CSS)
+        theme = apply_theme(CSS)
+        theme.set_app("taskmgr")
+        self.settings["glass"] = theme.glass_choice()
         here = os.path.dirname(os.path.realpath(__file__))
         for d in (os.path.join(here, "..", "..", "data", "icons"),
                   "/usr/share/harbor/icons"):

@@ -1651,7 +1651,9 @@ class FilesWindow(HarborWindow):
         for w in wins:
             if w is not self and w._options is not None:
                 w._options.sync(key, value)
-        if key in ("style", "icons", "theme", "folder_color") or (
+        if key == "glass" and common.THEME is not None:
+            common.THEME.set_glass(value)
+        if key in ("style", "icons", "theme", "folder_color", "glass") or (
                 key == "folder_color_custom" and self.settings.get("folder_color") == "custom"):
             self.app.apply_look()
         elif key == "show_status_bar":
@@ -2530,6 +2532,9 @@ class App(Adw.Application):
             files_view.OPTIONS[k] = bool(s.get(k))
         theme = common.THEME if common.THEME is not None else apply_theme()
         theme.set_style("system" if s.get("style") == "system" else "harbor")
+        theme.set_app("files")
+        if initial and s.get("glass") != theme.glass_choice():
+            s.set("glass", theme.glass_choice())
         sm = Adw.StyleManager.get_default()
         sm.set_color_scheme({"light": Adw.ColorScheme.FORCE_LIGHT,
                              "dark": Adw.ColorScheme.FORCE_DARK}.get(

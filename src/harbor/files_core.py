@@ -327,13 +327,16 @@ class Settings:
                 "folder_sizes": True,
                 # 0.5.18
                 "ui_design": "win11", "show_storage": True, "onboarded": False, "accent": "",
-                "density": "comfortable"}
+                "density": "comfortable",
+                # glass quick choice, kept in step with ~/.config/harbor/glass-files
+                "glass": "harbor"}
     LISTS = ("pins", "hidden_defaults", "last_tabs")
     # settings with a fixed set of values (first one is the default)
     CHOICES = {"open_to": ("thispc", "home", "last"), "style": ("win11", "system"),
                "icons": ("modern", "system"), "menu_style": ("win11", "classic", "merged"),
                "command_bar": ("win11", "ribbon"), "ui_design": ("win11", "win10", "custom"),
                "density": ("comfortable", "compact"),
+               "glass": ("harbor", "off", "soft", "strong", "custom"),
                "theme": ("follow", "light", "dark"),
                "folder_color": ("classic", "accent") + tuple(FOLDER_PALETTE) + ("custom",),
                "click_to_open": ("double", "single"), "group_by": ("none", "type", "date")}

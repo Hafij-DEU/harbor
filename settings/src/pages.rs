@@ -2922,7 +2922,24 @@ pub fn personalisation(app: &mut App, ui: &mut Ui) {
         ui.spacing_mut().item_spacing.x = 12.0;
         for design in [crate::theme::Design::Win11, crate::theme::Design::Win10] {
             let selected = app.design == design;
-            let (rect, resp) = ui.allocate_exact_size(Vec2::new(220.0, 78.0), Sense::click());
+            let desc = if design == crate::theme::Design::Win10 {
+                "Category home, sub-page pane, soft corners"
+            } else {
+                "Rounded cards, accent tiles, sidebar"
+            };
+            // Wide enough for the description, so it never spills out.
+            let desc_w = ui
+                .painter()
+                .layout_no_wrap(
+                    // The longer text sets both cards' width.
+                    "Category home, sub-page pane, soft corners".to_owned(),
+                    regular(11.5),
+                    pal.text_faint,
+                )
+                .size()
+                .x;
+            let (rect, resp) =
+                ui.allocate_exact_size(Vec2::new((desc_w + 36.0).max(240.0), 78.0), Sense::click());
             let fill = if resp.hovered() { pal.hover } else { pal.card };
             ui.painter().rect_filled(rect, pal.corner(8), fill);
             ui.painter().rect_stroke(
@@ -2955,11 +2972,7 @@ pub fn personalisation(app: &mut App, ui: &mut Ui) {
             ui.painter().text(
                 Pos2::new(rect.left() + 16.0, rect.bottom() - 18.0),
                 Align2::LEFT_CENTER,
-                if design == crate::theme::Design::Win10 {
-                    "Category home, sub-page pane, soft corners"
-                } else {
-                    "Rounded cards, accent tiles, sidebar"
-                },
+                desc,
                 regular(11.5),
                 pal.text_faint,
             );
@@ -2973,6 +2986,7 @@ pub fn personalisation(app: &mut App, ui: &mut Ui) {
         app.set_design(chosen);
         return;
     }
+    glass_section(app, ui, &pal);
     if app.design == crate::theme::Design::Win10 {
         widgets::card(ui, &pal, |ui| {
             let mut on = app.home_links;
@@ -3283,6 +3297,20 @@ pub fn accounts(app: &mut App, ui: &mut Ui) {
                     .font(regular(12.0))
                     .color(pal.text_faint),
                 );
+            });
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.add_space(ROW_PAD);
+                ui.spacing_mut().item_spacing.x = 8.0;
+                if app.has_photo()
+                    && widgets::ghost_button(ui, &pal, "Remove picture", None).clicked()
+                {
+                    app.load_photo(Some(""));
+                }
+                if widgets::button(ui, &pal, pal.accent, "Choose a picture", Some(Icon::Image))
+                    .clicked()
+                {
+                    app.load_photo(Some("pick"));
+                }
             });
         });
         ui.add_space(18.0);
@@ -6003,8 +6031,9 @@ pub fn quick_settings(
             };
             (fill, pal.text, pal.text_faint)
         };
-        ui.painter().rect_filled(tile, pal.corner(6), fill);
-        if !on {
+        ui.painter()
+            .add(widgets::glass_fill(pal, tile, pal.corner(6), fill));
+        if !on && !widgets::glassy(pal) {
             ui.painter().rect_stroke(
                 tile,
                 pal.corner(6),
@@ -6051,7 +6080,8 @@ pub fn quick_settings(
             Pos2::new(x0 + i as f32 * (sw + gap), area.top()),
             Vec2::new(sw, sh),
         );
-        ui.painter().rect_filled(card, pal.corner(6), pal.card);
+        ui.painter()
+            .add(widgets::glass_fill(pal, card, pal.corner(6), pal.card));
         ui.painter().rect_stroke(
             card,
             pal.corner(6),
@@ -6140,28 +6170,22 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
             ui.set_width(width);
             ui.spacing_mut().item_spacing = Vec2::ZERO;
 
-            // Everything scales a little with the window and sits in one
-            // centred column, so a maximised window is neither tiny nor empty.
-            let s = (width / 1100.0).clamp(1.0, 1.22);
-            let content_w = (width - 64.0).min(1360.0).max(320.0);
-            let x0 = ui.cursor().left() + (width - content_w) / 2.0;
-            let x1 = x0 + content_w;
-            let corner = pal.corner(8);
-            let tint = with_alpha(pal.accent, if pal.bg.r() < 128 { 46 } else { 26 });
+            // Laid out like the Windows 10 Settings start page: a grey band
+            // across the whole window with the account and status items,
+            // a centred search box, then every category as a large icon with
+            // its title and description, three to a row, on the plain page.
+            let s = (width / 1000.0).clamp(1.0, 1.25);
+            let col_w = (width - 64.0 * s).min(1120.0 * s).max(300.0);
+            let left = ui.cursor().left();
+            let x0 = left + (width - col_w) / 2.0;
+            let x1 = x0 + col_w;
             let mut go: Option<View> = None;
 
-            // --- hero card: account and three shortcuts ----------------------
-            ui.add_space(22.0);
-            let hero_h = 104.0 * s;
-            let (band, _) = ui.allocate_exact_size(Vec2::new(width, hero_h), Sense::hover());
-            let hero = Rect::from_min_max(Pos2::new(x0, band.top()), Pos2::new(x1, band.bottom()));
-            ui.painter().rect_filled(hero, corner, pal.card);
-            ui.painter().rect_stroke(
-                hero,
-                corner,
-                Stroke::new(1.0, pal.card_border),
-                StrokeKind::Inside,
-            );
+            // --- header band ----------------------------------------------
+            let band_h = 168.0 * s;
+            let (band, _) = ui.allocate_exact_size(Vec2::new(width, band_h), Sense::hover());
+            let (top_c, bottom_c) = widgets::home10_header(pal);
+            widgets::vgradient(ui.painter(), band, top_c, bottom_c);
 
             let account = app.info.full_name.clone();
             let role = if app.info.is_admin {
@@ -6169,46 +6193,104 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
             } else {
                 "Local account · Standard user"
             };
-            let r = 28.0 * s;
-            let avatar_c = Pos2::new(hero.left() + 24.0 * s + r, hero.center().y);
-            ui.painter().circle_filled(avatar_c, r, pal.accent);
-            let initial = account
-                .chars()
-                .next()
-                .map(|c| c.to_uppercase().to_string())
-                .unwrap_or_default();
-            ui.painter().text(
+            let r = 46.0 * s;
+            let avatar_c = Pos2::new(x0 + r, band.center().y);
+            ui.painter().circle_stroke(
                 avatar_c,
-                Align2::CENTER_CENTER,
-                initial,
-                semibold(22.0 * s),
-                pal.on_accent,
+                r + 3.0 * s,
+                Stroke::new(2.0 * s, with_alpha(pal.accent, 70)),
             );
-            let name_x = avatar_c.x + r + 16.0 * s;
-            ui.painter().text(
-                Pos2::new(name_x, hero.center().y - 11.0 * s),
-                Align2::LEFT_CENTER,
-                &account,
-                semibold(20.0 * s),
+            if let Some(tex) = widgets::user_photo(ui.ctx()) {
+                widgets::paint_photo(ui.painter(), tex, avatar_c, r);
+            } else {
+                ui.painter().circle_filled(avatar_c, r, pal.accent);
+                let initial = account
+                    .chars()
+                    .next()
+                    .map(|c| c.to_uppercase().to_string())
+                    .unwrap_or_default();
+                ui.painter().text(
+                    avatar_c,
+                    Align2::CENTER_CENTER,
+                    initial,
+                    semibold(36.0 * s),
+                    pal.on_accent,
+                );
+            }
+            // Click the picture to change it.
+            let photo_resp = ui
+                .interact(
+                    Rect::from_center_size(avatar_c, Vec2::splat(r * 2.0)),
+                    Id::new("home-photo"),
+                    Sense::click(),
+                )
+                .on_hover_cursor(CursorIcon::PointingHand)
+                .on_hover_text("Change your picture");
+            if photo_resp.hovered() {
+                ui.painter()
+                    .circle_filled(avatar_c, r, Color32::from_black_alpha(110));
+                let cam = Rect::from_center_size(
+                    Pos2::new(avatar_c.x, avatar_c.y - 8.0 * s),
+                    Vec2::splat(24.0 * s),
+                );
+                crate::icons::paint(ui.painter(), Icon::Image, cam, Color32::WHITE);
+                ui.painter().text(
+                    Pos2::new(avatar_c.x, avatar_c.y + 18.0 * s),
+                    Align2::CENTER_CENTER,
+                    "Change",
+                    regular(12.0 * s),
+                    Color32::WHITE,
+                );
+            }
+            if photo_resp.clicked() {
+                app.load_photo(Some("pick"));
+            }
+            let name_x = avatar_c.x + r + 22.0 * s;
+            let name_galley =
+                ui.painter()
+                    .layout_no_wrap(account.clone(), semibold(27.0 * s), pal.text);
+            let name_w = name_galley.size().x;
+            ui.painter().galley(
+                Pos2::new(name_x, band.center().y - 30.0 * s),
+                name_galley,
                 pal.text,
             );
             ui.painter().text(
-                Pos2::new(name_x, hero.center().y + 14.0 * s),
+                Pos2::new(name_x, band.center().y + 10.0 * s),
                 Align2::LEFT_CENTER,
                 role,
-                regular(12.5 * s),
+                regular(13.0 * s),
                 pal.text_muted,
             );
-            let account_rect =
-                Rect::from_min_max(hero.min, Pos2::new(name_x + 230.0 * s, hero.bottom()));
-            if ui
-                .interact(account_rect, Id::new("home-account"), Sense::click())
-                .on_hover_cursor(CursorIcon::PointingHand)
-                .clicked()
-            {
+            let link = ui.painter().layout_no_wrap(
+                "Manage your account".to_owned(),
+                regular(13.0 * s),
+                pal.accent,
+            );
+            let link_rect =
+                Rect::from_min_size(Pos2::new(name_x, band.center().y + 22.0 * s), link.size());
+            let link_resp = ui
+                .interact(
+                    link_rect.expand(3.0),
+                    Id::new("home-account"),
+                    Sense::click(),
+                )
+                .on_hover_cursor(CursorIcon::PointingHand);
+            if link_resp.hovered() {
+                ui.painter().line_segment(
+                    [
+                        Pos2::new(link_rect.left(), link_rect.bottom() + 1.0),
+                        Pos2::new(link_rect.right(), link_rect.bottom() + 1.0),
+                    ],
+                    Stroke::new(1.0, pal.accent),
+                );
+            }
+            ui.painter().galley(link_rect.min, link, pal.accent);
+            if link_resp.clicked() {
                 go = Some(View::Page(Page::Accounts));
             }
 
+            // Status items on the right, two columns of two like Windows 10.
             let update_line = if app.updates_loading {
                 "Checking…".to_owned()
             } else if let Some(list) = &app.info.updates {
@@ -6220,11 +6302,14 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
             } else {
                 "Check for updates".to_owned()
             };
-            let storage_line = format!(
-                "{:.0} GB free of {:.0} GB",
-                app.info.disk_free_gb, app.info.disk_total_gb
-            );
-            let shortcuts = [
+            let net_line = app
+                .info
+                .wifi_networks
+                .iter()
+                .find(|n| n.active)
+                .map(|n| format!("Connected to {}", n.ssid))
+                .unwrap_or_else(|| "Wi-Fi, wired, proxy".to_owned());
+            let status = [
                 (
                     "Windows Update",
                     update_line,
@@ -6237,73 +6322,87 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
                     Icon::Hub,
                     View::Page(Page::Apps),
                 ),
+                ("Network", net_line, Icon::Wifi, View::Page(Page::Network)),
                 (
                     "Storage",
-                    storage_line,
+                    format!(
+                        "{:.0} GB free of {:.0} GB",
+                        app.info.disk_free_gb, app.info.disk_total_gb
+                    ),
                     Icon::Storage,
                     View::Detail(Page::System, Detail::Storage),
                 ),
             ];
-            let gap = 10.0 * s;
-            let free = hero.right() - 14.0 * s - (name_x + 240.0 * s);
-            let tile_w = ((free - gap * 2.0) / 3.0).min(220.0 * s);
-            if tile_w >= 130.0 {
-                let tile_h = hero_h - 28.0 * s;
-                for (i, (title, line, icon, view)) in shortcuts.into_iter().enumerate() {
-                    let tile = Rect::from_min_size(
-                        Pos2::new(
-                            hero.right()
-                                - 14.0 * s
-                                - (3 - i) as f32 * tile_w
-                                - (2 - i) as f32 * gap,
-                            hero.top() + 14.0 * s,
-                        ),
-                        Vec2::new(tile_w, tile_h),
-                    );
-                    let resp = ui
-                        .interact(tile, Id::new(("home-quick", i)), Sense::click())
-                        .on_hover_cursor(CursorIcon::PointingHand);
-                    let fill = if resp.hovered() {
-                        pal.card_hover
-                    } else {
-                        pal.nav_bg
-                    };
-                    ui.painter().rect_filled(tile, pal.corner(6), fill);
-                    let badge = Rect::from_center_size(
-                        Pos2::new(tile.left() + 26.0 * s, tile.center().y),
-                        Vec2::splat(32.0 * s),
-                    );
-                    ui.painter().rect_filled(badge, pal.corner(6), tint);
-                    crate::icons::paint(ui.painter(), icon, badge.shrink(8.0 * s), pal.accent);
-                    let painter = ui.painter().with_clip_rect(tile.shrink(4.0));
-                    let tx = badge.right() + 12.0 * s;
-                    painter.text(
-                        Pos2::new(tx, tile.center().y - 9.0 * s),
-                        Align2::LEFT_CENTER,
-                        title,
-                        semibold(13.0 * s),
-                        pal.text,
-                    );
-                    painter.text(
-                        Pos2::new(tx, tile.center().y + 10.0 * s),
-                        Align2::LEFT_CENTER,
-                        &line,
-                        regular(11.5 * s),
-                        pal.text_faint,
-                    );
-                    if resp.clicked() {
-                        go = Some(view);
-                    }
+            let item_w = 230.0 * s;
+            let room = x1 - (name_x + name_w.max(230.0 * s) + 30.0 * s);
+            let cols = if room >= item_w * 2.0 {
+                2
+            } else if room >= item_w {
+                1
+            } else {
+                0
+            };
+            let item_h = 54.0 * s;
+            let shown = (cols * 2).min(status.len());
+            let rows_shown = if cols == 0 { 0 } else { shown.div_ceil(cols) };
+            let block_h =
+                rows_shown as f32 * item_h + (rows_shown as f32 - 1.0).max(0.0) * 10.0 * s;
+            let top = band.center().y - block_h / 2.0;
+            for (i, (title, line, icon, view)) in status.into_iter().take(shown).enumerate() {
+                let (row, col) = (i / cols.max(1), i % cols.max(1));
+                let cell = Rect::from_min_size(
+                    Pos2::new(
+                        x1 - (cols - col) as f32 * item_w,
+                        top + row as f32 * (item_h + 10.0 * s),
+                    ),
+                    Vec2::new(item_w - 8.0 * s, item_h),
+                );
+                let resp = ui
+                    .interact(cell, Id::new(("home-status", i)), Sense::click())
+                    .on_hover_cursor(CursorIcon::PointingHand);
+                if widgets::glassy(pal) {
+                    ui.painter().add(widgets::glass_slab(
+                        pal,
+                        cell,
+                        pal.corner(8).max(8),
+                        resp.hovered(),
+                    ));
+                } else if resp.hovered() {
+                    ui.painter().rect_filled(cell, pal.corner(4), pal.hover);
+                }
+                let glyph = Rect::from_center_size(
+                    Pos2::new(cell.left() + 22.0 * s, cell.center().y),
+                    Vec2::splat(28.0 * s),
+                );
+                crate::icons::paint(ui.painter(), icon, glyph, pal.text);
+                let painter = ui.painter().with_clip_rect(cell);
+                let tx = cell.left() + 50.0 * s;
+                painter.text(
+                    Pos2::new(tx, cell.center().y - 9.0 * s),
+                    Align2::LEFT_CENTER,
+                    title,
+                    regular(14.5 * s),
+                    pal.text,
+                );
+                painter.text(
+                    Pos2::new(tx, cell.center().y + 10.0 * s),
+                    Align2::LEFT_CENTER,
+                    &line,
+                    regular(12.0 * s),
+                    pal.text_faint,
+                );
+                if resp.clicked() {
+                    go = Some(view);
                 }
             }
 
             // --- search ---------------------------------------------------
-            ui.add_space(18.0 * s);
-            let search_w = content_w.min(640.0 * s);
-            let (row, _) = ui.allocate_exact_size(Vec2::new(width, 36.0 * s), Sense::hover());
+            ui.add_space(30.0 * s);
+            let search_w = col_w.min(360.0 * s);
+            let (row, _) = ui.allocate_exact_size(Vec2::new(width, 34.0 * s), Sense::hover());
             let search_rect = Rect::from_center_size(
                 Pos2::new((x0 + x1) / 2.0, row.center().y),
-                Vec2::new(search_w, 36.0 * s),
+                Vec2::new(search_w, 34.0 * s),
             );
             ui.scope_builder(
                 UiBuilder::new()
@@ -6316,40 +6415,20 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
                 },
             );
 
-            let heading = |ui: &mut Ui, text: &str| {
-                ui.add_space(26.0 * s);
-                let (row, _) = ui.allocate_exact_size(Vec2::new(width, 22.0 * s), Sense::hover());
-                ui.painter().text(
-                    Pos2::new(x0 + 2.0, row.center().y),
-                    Align2::LEFT_CENTER,
-                    text,
-                    semibold(16.0 * s),
-                    pal.text,
-                );
-                ui.add_space(10.0 * s);
-            };
-
-            // --- quick settings: toggles and two sliders ------------------
-            heading(ui, "Quick settings");
-            quick_settings(app, ui, pal, width, x0, content_w, s);
-
-            // --- every category, with its pages as links ------------------
-            heading(ui, "All settings");
+            // --- page-links switch, right-aligned above the grid ----------
+            ui.add_space(22.0 * s);
             {
-                // Show or hide each card's list of pages.
                 let label = if app.home_links {
                     "Hide page links"
                 } else {
                     "Show page links"
                 };
+                let (row, _) = ui.allocate_exact_size(Vec2::new(width, 20.0 * s), Sense::hover());
                 let galley =
                     ui.painter()
                         .layout_no_wrap(label.to_owned(), regular(12.5 * s), pal.accent);
-                let pos = Pos2::new(
-                    x1 - galley.size().x - 2.0,
-                    ui.cursor().top() - 10.0 * s - 11.0 * s - galley.size().y / 2.0,
-                );
-                let hit = Rect::from_min_size(pos, galley.size()).expand(6.0);
+                let pos = Pos2::new(x1 - galley.size().x, row.center().y - galley.size().y / 2.0);
+                let hit = Rect::from_min_size(pos, galley.size()).expand(5.0);
                 let resp = ui
                     .interact(hit, Id::new("home-links-toggle"), Sense::click())
                     .on_hover_cursor(CursorIcon::PointingHand);
@@ -6362,149 +6441,141 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
                     app.set_home_links(on);
                 }
             }
+            ui.add_space(8.0 * s);
+
+            // --- every category: big icon, title, description -------------
             let show_links = app.home_links;
-            let gap = 12.0 * s;
-            let min_w = 290.0 * s;
-            let cols = (((content_w + gap) / (min_w + gap)).floor() as usize).clamp(1, 4);
-            let cw = (content_w - gap * (cols as f32 - 1.0)) / cols as f32;
-            let link_h = 28.0 * s;
-            let head_h = 66.0 * s;
+            let gap_x = 24.0 * s;
+            let gap_y = if show_links { 26.0 * s } else { 30.0 * s };
+            let min_w = 250.0 * s;
+            let cols = (((col_w + gap_x) / (min_w + gap_x)).floor() as usize).clamp(1, 3);
+            let cw = (col_w - gap_x * (cols as f32 - 1.0)) / cols as f32;
+            let icon_sz = 34.0 * s;
+            let text_x = 16.0 * s + icon_sz + 16.0 * s;
+            let text_w = cw - text_x - 12.0 * s;
+            let link_h = 23.0 * s;
             let max_links = 4usize;
+            let head_h = 74.0 * s;
             let ch = if show_links {
-                head_h + link_h * max_links as f32 + 12.0 * s
+                head_h + link_h * max_links as f32 + 6.0 * s
             } else {
-                head_h + 6.0 * s
+                head_h
             };
             let cats = crate::app::Cat10::ALL;
             let rows = cats.len().div_ceil(cols);
             let (area, _) = ui.allocate_exact_size(
-                Vec2::new(width, rows as f32 * ch + (rows as f32 - 1.0) * gap),
+                Vec2::new(width, rows as f32 * ch + (rows as f32 - 1.0) * gap_y),
                 Sense::hover(),
             );
             for (index, cat) in cats.iter().copied().enumerate() {
-                let card = Rect::from_min_size(
+                let cell = Rect::from_min_size(
                     Pos2::new(
-                        x0 + (index % cols) as f32 * (cw + gap),
-                        area.top() + (index / cols) as f32 * (ch + gap),
+                        x0 + (index % cols) as f32 * (cw + gap_x),
+                        area.top() + (index / cols) as f32 * (ch + gap_y),
                     ),
                     Vec2::new(cw, ch),
                 );
-                let hovered = ui.rect_contains_pointer(card);
-                ui.painter().rect_filled(card, corner, pal.card);
-                ui.painter().rect_stroke(
-                    card,
-                    corner,
-                    Stroke::new(
-                        1.0,
-                        if hovered {
-                            with_alpha(pal.accent, 140)
-                        } else {
-                            pal.card_border
-                        },
-                    ),
-                    StrokeKind::Inside,
-                );
-                let head = Rect::from_min_size(card.min, Vec2::new(cw, head_h));
-                let badge = Rect::from_min_size(
-                    Pos2::new(card.left() + 16.0 * s, head.center().y - 20.0 * s),
-                    Vec2::splat(40.0 * s),
-                );
-                ui.painter().rect_filled(badge, pal.corner(8), tint);
-                crate::icons::paint(ui.painter(), cat.icon(), badge.shrink(9.0 * s), pal.accent);
-                let painter = ui.painter().with_clip_rect(card.shrink(6.0));
-                let tx = badge.right() + 14.0 * s;
-                painter.text(
-                    Pos2::new(tx, head.center().y - 9.0 * s),
-                    Align2::LEFT_CENTER,
-                    cat.title(),
-                    semibold(15.0 * s),
-                    pal.text,
-                );
-                painter.text(
-                    Pos2::new(tx, head.center().y + 11.0 * s),
-                    Align2::LEFT_CENTER,
-                    cat.subtitle(),
-                    regular(11.5 * s),
-                    pal.text_faint,
-                );
-                if ui
+                let head = Rect::from_min_size(cell.min, Vec2::new(cw, head_h));
+                let resp = ui
                     .interact(
                         head,
                         Id::new(("home-category", cat.title())),
                         Sense::click(),
                     )
-                    .on_hover_cursor(CursorIcon::PointingHand)
-                    .clicked()
-                {
+                    .on_hover_cursor(CursorIcon::PointingHand);
+                if widgets::glassy(pal) {
+                    ui.painter().add(widgets::glass_slab(
+                        pal,
+                        cell.expand2(Vec2::new(0.0, 4.0 * s)),
+                        pal.corner(8).max(8),
+                        resp.hovered(),
+                    ));
+                } else if resp.hovered() {
+                    ui.painter().rect_filled(head, pal.corner(4), pal.hover);
+                }
+                let glyph = Rect::from_min_size(
+                    Pos2::new(cell.left() + 16.0 * s, head.top() + 12.0 * s),
+                    Vec2::splat(icon_sz),
+                );
+                crate::icons::paint(ui.painter(), cat.icon(), glyph, pal.accent);
+                let painter = ui.painter().with_clip_rect(cell);
+                let tx = cell.left() + text_x;
+                painter.text(
+                    Pos2::new(tx, head.top() + 12.0 * s),
+                    Align2::LEFT_TOP,
+                    cat.title(),
+                    regular(15.5 * s),
+                    pal.text,
+                );
+                let desc = painter.layout(
+                    cat.subtitle().to_owned(),
+                    regular(12.5 * s),
+                    pal.text_faint,
+                    text_w,
+                );
+                painter.galley(Pos2::new(tx, head.top() + 36.0 * s), desc, pal.text_faint);
+                if resp.clicked() {
                     go = Some(cat.items()[0].2);
                 }
                 if !show_links {
                     continue;
                 }
-                ui.painter().line_segment(
-                    [
-                        Pos2::new(card.left() + 16.0 * s, head.bottom()),
-                        Pos2::new(card.right() - 16.0 * s, head.bottom()),
-                    ],
-                    Stroke::new(1.0, pal.divider),
-                );
 
                 let mut items: Vec<(&str, Icon, View)> = cat.items().to_vec();
                 items.extend_from_slice(home_extras(cat));
                 let overflow = items.len() > max_links;
                 let shown = if overflow { max_links - 1 } else { items.len() };
-                let mut links: Vec<(String, Icon, View, bool)> = items[..shown]
+                let mut links: Vec<(String, View)> = items[..shown]
                     .iter()
-                    .map(|(label, icon, view)| ((*label).to_owned(), *icon, *view, false))
+                    .map(|(label, _, view)| ((*label).to_owned(), *view))
                     .collect();
                 if overflow {
-                    links.push((
-                        format!("{} more…", items.len() - shown),
-                        Icon::ChevronRight,
-                        items[shown].2,
-                        true,
-                    ));
+                    links.push((format!("{} more…", items.len() - shown), items[shown].2));
                 }
-                for (j, (label, icon, view, more)) in links.into_iter().enumerate() {
-                    let link = Rect::from_min_size(
-                        Pos2::new(
-                            card.left() + 8.0 * s,
-                            head.bottom() + 6.0 * s + j as f32 * link_h,
-                        ),
-                        Vec2::new(cw - 16.0 * s, link_h),
+                for (j, (label, view)) in links.into_iter().enumerate() {
+                    let galley = painter.layout_no_wrap(label, regular(13.0 * s), pal.accent);
+                    let pos = Pos2::new(
+                        tx,
+                        head.bottom() + j as f32 * link_h + (link_h - galley.size().y) / 2.0,
                     );
+                    let hit = Rect::from_min_size(pos, galley.size()).expand2(Vec2::new(4.0, 3.0));
                     let resp = ui
-                        .interact(link, Id::new(("home-link", index, j)), Sense::click())
+                        .interact(hit, Id::new(("home-link", index, j)), Sense::click())
                         .on_hover_cursor(CursorIcon::PointingHand);
+                    let color = if resp.hovered() { pal.text } else { pal.accent };
                     if resp.hovered() {
-                        ui.painter().rect_filled(link, pal.corner(4), pal.hover);
+                        painter.line_segment(
+                            [
+                                Pos2::new(pos.x, pos.y + galley.size().y + 1.0),
+                                Pos2::new(pos.x + galley.size().x, pos.y + galley.size().y + 1.0),
+                            ],
+                            Stroke::new(1.0, color),
+                        );
                     }
-                    let color = if more || resp.hovered() {
-                        pal.accent
-                    } else {
-                        pal.text_muted
-                    };
-                    let glyph = Rect::from_center_size(
-                        Pos2::new(link.left() + 16.0 * s, link.center().y),
-                        Vec2::splat(15.0 * s),
-                    );
-                    crate::icons::paint(ui.painter(), icon, glyph, color);
-                    painter.text(
-                        Pos2::new(link.left() + 34.0 * s, link.center().y),
-                        Align2::LEFT_CENTER,
-                        label,
-                        regular(13.0 * s),
-                        if more { pal.accent } else { pal.text },
-                    );
+                    painter.galley(pos, galley, color);
                     if resp.clicked() {
                         go = Some(view);
                     }
                 }
             }
+
+            // --- quick settings below the categories ----------------------
+            ui.add_space(40.0 * s);
+            let (row, _) = ui.allocate_exact_size(Vec2::new(width, 22.0 * s), Sense::hover());
+            ui.painter().text(
+                Pos2::new(x0 + 2.0, row.center().y),
+                Align2::LEFT_CENTER,
+                "Quick settings",
+                semibold(16.0 * s),
+                pal.text,
+            );
+            ui.add_space(12.0 * s);
+            quick_settings(app, ui, pal, width, x0, col_w, s);
+
             if let Some(view) = go {
                 app.go(view);
             }
-            ui.add_space(32.0);
+            ui.add_space(36.0);
         });
 }
 
@@ -6522,4 +6593,275 @@ fn apt_job_panel(app: &mut App, ui: &mut Ui, pal: &Palette) -> bool {
         return true;
     }
     false
+}
+
+/// Personalisation › Glass effects: Fusion Desk's glass settings for the
+/// whole desktop ("Global"), for every Harbor app, and for each app. A
+/// scope can follow the one above it or have its own values.
+fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
+    use crate::system::GlassScope;
+    use crate::theme::{GlassEffect, GlassMaterial, GlassStyle};
+    let dragging = ui.input(|i| i.pointer.primary_down());
+    if let Some(scope) = app.glass_dirty.filter(|_| !dragging) {
+        let values = app.scope_glass(scope);
+        app.set_scope_glass(scope, values, true);
+    }
+    widgets::section_label(ui, pal, "Glass effects");
+    let scope = app.glass_edit;
+    let own = app.scope_glass(scope);
+    let shown = app.resolved_glass(scope);
+    let mut pick_scope = None;
+    let mut follow_change = None;
+    let mut values = shown;
+    widgets::card(ui, pal, |ui| {
+        glass_row(
+            ui,
+            pal,
+            "Apply to",
+            "Global is the desktop: the same settings as Fusion Desk › Appearance",
+            |ui| {
+                for s in GlassScope::ALL {
+                    if segment(ui, pal, s.label(), s == scope) {
+                        pick_scope = Some(s);
+                    }
+                }
+            },
+        );
+        if let Some(parent) = scope.parent() {
+            widgets::divider(ui, pal);
+            let mut follow = own.is_none();
+            let title = format!("Use the {} glass", parent.label().to_lowercase());
+            let sub = if parent == GlassScope::Global {
+                "Look like the taskbar and menus".to_owned()
+            } else {
+                format!("Turn off to give {} its own glass", scope.label())
+            };
+            if widgets::row(
+                ui,
+                pal,
+                pal.accent,
+                Icon::Personalise,
+                &title,
+                &sub,
+                Right::Switch(&mut follow),
+            )
+            .toggled
+            {
+                follow_change = Some(follow);
+            }
+        }
+        if own.is_none() {
+            return;
+        }
+        widgets::divider(ui, pal);
+        glass_row(
+            ui,
+            pal,
+            "Glass effect",
+            "Blur, lighter top and a bright edge",
+            |ui| {
+                for e in GlassEffect::ALL {
+                    if segment(ui, pal, e.label(), values.effect == *e) {
+                        values.effect = *e;
+                    }
+                }
+            },
+        );
+        if !values.on() {
+            return;
+        }
+        widgets::divider(ui, pal);
+        glass_row(
+            ui,
+            pal,
+            "Material",
+            "Subtle shine, or strong polished shine and bevel",
+            |ui| {
+                for m in GlassMaterial::ALL {
+                    if segment(ui, pal, m.label(), values.material == *m) {
+                        values.material = *m;
+                    }
+                }
+            },
+        );
+        if values.material == GlassMaterial::Gloss {
+            widgets::divider(ui, pal);
+            strength_row(ui, pal, "Shine strength", &mut values.shine_strength);
+        }
+        widgets::divider(ui, pal);
+        glass_row(
+            ui,
+            pal,
+            "Glass style",
+            "Frosted is milky, Gel has a candy top, Glow lets coloured light through",
+            |ui| {
+                for st in GlassStyle::ALL {
+                    if segment(ui, pal, st.label(), values.style == *st) {
+                        values.style = *st;
+                    }
+                }
+            },
+        );
+        widgets::divider(ui, pal);
+        strength_row(ui, pal, "Style strength", &mut values.style_strength);
+        widgets::divider(ui, pal);
+        let mut t = (values.opacity as f32 - 10.0) / 90.0;
+        if slider_row(
+            ui,
+            pal,
+            Icon::Sparkle,
+            "Opacity",
+            format!(
+                "{} % · below 100 the window shows the desktop through it",
+                values.opacity
+            ),
+            &mut t,
+        ) {
+            values.opacity = ((10.0 + t * 90.0) / 5.0).round() as u8 * 5;
+        }
+        for (title, sub, flag, scale_title, scale) in [
+            (
+                "Rim highlight",
+                "Thin light edge; a sharp bevel with gloss",
+                &mut values.rim,
+                "Rim strength",
+                &mut values.rim_strength,
+            ),
+            (
+                "Corner glare",
+                "Light reflections in the corners",
+                &mut values.glare,
+                "Glare strength",
+                &mut values.glare_strength,
+            ),
+            (
+                "Soft shadow",
+                "Diffused shadow for depth",
+                &mut values.shadow,
+                "Shadow strength",
+                &mut values.shadow_strength,
+            ),
+            (
+                "Light follows pointer",
+                "A soft light spot moves with the pointer",
+                &mut values.light_follows,
+                "Light strength",
+                &mut values.light_strength,
+            ),
+        ] {
+            widgets::divider(ui, pal);
+            widgets::row(
+                ui,
+                pal,
+                pal.accent,
+                Icon::Sparkle,
+                title,
+                sub,
+                Right::Switch(flag),
+            );
+            if *flag {
+                widgets::divider(ui, pal);
+                strength_row(ui, pal, scale_title, scale);
+            }
+        }
+    });
+    let fusion = crate::desktop::fusion_installed();
+    note(
+        ui,
+        pal,
+        match (scope, fusion) {
+            (GlassScope::Global, true) => "Global changes Fusion Desk's glass for the taskbar, start menu and popups at once.",
+            (GlassScope::Global, false) => "Fusion Desk is not installed, so Global only sets what Harbor apps follow.",
+            _ => "GNOME cannot blur what is behind an app window: with opacity below 100 the desktop shows through sharp. Fusion Desk blurs it for the taskbar and menus.",
+        },
+    );
+    spacer(ui, 18.0);
+    if let Some(s) = pick_scope {
+        if s == GlassScope::Global {
+            app.reload_global_glass();
+        }
+        app.glass_edit = s;
+    } else if let Some(follow) = follow_change {
+        app.set_scope_glass(scope, if follow { None } else { Some(shown) }, true);
+    } else if own.is_some() && values != shown {
+        app.set_scope_glass(scope, Some(values), !dragging);
+    }
+}
+
+/// A 0-200 % strength slider for one glass option (100 % is normal).
+fn strength_row(ui: &mut Ui, pal: &Palette, title: &str, value: &mut u8) {
+    let mut t = *value as f32 / 200.0;
+    let sub = format!("{} % · 100 % is normal", value);
+    if slider_row(ui, pal, Icon::Sparkle, title, sub, &mut t) {
+        *value = ((t * 200.0 / 5.0).round() * 5.0) as u8;
+    }
+}
+
+fn glass_row(ui: &mut Ui, pal: &Palette, title: &str, sub: &str, choices: impl FnOnce(&mut Ui)) {
+    ui.add_space(12.0);
+    ui.horizontal(|ui| {
+        ui.add_space(ROW_PAD);
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 2.0;
+            ui.label(
+                egui::RichText::new(title)
+                    .font(regular(14.0))
+                    .color(pal.text),
+            );
+            ui.label(
+                egui::RichText::new(sub)
+                    .font(regular(12.0))
+                    .color(pal.text_faint),
+            );
+        });
+    });
+    ui.add_space(8.0);
+    ui.horizontal(|ui| {
+        ui.add_space(ROW_PAD);
+        let width = ui.available_width() - ROW_PAD;
+        ui.allocate_ui_with_layout(
+            Vec2::new(width, 30.0),
+            egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(true),
+            |ui| {
+                ui.set_max_width(width);
+                ui.spacing_mut().item_spacing = Vec2::new(6.0, 6.0);
+                choices(ui);
+            },
+        );
+    });
+    ui.add_space(12.0);
+}
+
+/// One pill of a segmented choice; returns true when clicked.
+fn segment(ui: &mut Ui, pal: &Palette, label: &str, selected: bool) -> bool {
+    let galley = ui
+        .painter()
+        .layout_no_wrap(label.to_owned(), regular(13.0), pal.text);
+    let size = Vec2::new(galley.size().x + 28.0, 30.0);
+    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+    let fill = if selected {
+        pal.accent
+    } else if resp.hovered() {
+        pal.hover
+    } else {
+        pal.input_bg
+    };
+    ui.painter()
+        .add(widgets::glass_fill(pal, rect, pal.corner(15), fill));
+    if !selected {
+        ui.painter().rect_stroke(
+            rect,
+            pal.corner(15),
+            Stroke::new(1.0, pal.card_border),
+            StrokeKind::Inside,
+        );
+    }
+    ui.painter().text(
+        rect.center(),
+        Align2::CENTER_CENTER,
+        label,
+        regular(13.0),
+        if selected { pal.on_accent } else { pal.text },
+    );
+    resp.on_hover_cursor(CursorIcon::PointingHand).clicked()
 }

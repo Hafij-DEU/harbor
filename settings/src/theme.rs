@@ -13,6 +13,271 @@ pub enum Mode {
     Light,
 }
 
+macro_rules! glass_choice {
+    ($name:ident { $($var:ident = $key:literal, $label:literal;)* }) => {
+        #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+        pub enum $name {
+            $($var),*
+        }
+
+        impl $name {
+            pub const ALL: &'static [$name] = &[$($name::$var),*];
+
+            /// The value Fusion Desk stores (`STRONG`, `GLOSS`, `FROSTED`, ...).
+            pub fn key(self) -> &'static str {
+                match self {
+                    $($name::$var => $key),*
+                }
+            }
+
+            pub fn label(self) -> &'static str {
+                match self {
+                    $($name::$var => $label),*
+                }
+            }
+
+            pub fn from_key(key: &str) -> Option<Self> {
+                let key = key.trim().trim_matches('\'');
+                Self::ALL.iter().copied().find(|v| v.key().eq_ignore_ascii_case(key))
+            }
+        }
+    };
+}
+
+glass_choice!(GlassEffect {
+    Off = "OFF", "Off";
+    Soft = "SOFT", "Soft";
+    Strong = "STRONG", "Strong";
+});
+
+glass_choice!(GlassMaterial {
+    Glass = "GLASS", "Clear glass";
+    Gloss = "GLOSS", "Gloss";
+});
+
+glass_choice!(GlassStyle {
+    Clear = "CLEAR", "Clear";
+    Frosted = "FROSTED", "Frosted";
+    Gel = "GEL", "Gel";
+    Tinted = "TINTED", "Tinted";
+    Smoke = "SMOKE", "Smoke";
+    Halo = "HALO", "Halo";
+    Glow = "GLOW", "Glow";
+});
+
+/// Glass styling shared by every Harbor app and Fusion Desk. The fields are
+/// Fusion Desk's `glass-*` settings, so one set of values can drive the
+/// desktop shell and every app.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Glass {
+    pub effect: GlassEffect,
+    pub material: GlassMaterial,
+    pub style: GlassStyle,
+    /// Percent; below 100 the window is see-through.
+    pub opacity: u8,
+    pub rim: bool,
+    pub glare: bool,
+    pub shadow: bool,
+    pub light_follows: bool,
+    /// Strength scales in percent (0-200, 100 = normal): style shading,
+    /// gloss shine, rim, glare, shadow and pointer light.
+    pub style_strength: u8,
+    pub shine_strength: u8,
+    pub rim_strength: u8,
+    pub glare_strength: u8,
+    pub shadow_strength: u8,
+    pub light_strength: u8,
+}
+
+impl Default for Glass {
+    /// Fusion Desk's defaults.
+    fn default() -> Self {
+        Glass {
+            effect: GlassEffect::Strong,
+            material: GlassMaterial::Glass,
+            style: GlassStyle::Frosted,
+            opacity: 75,
+            rim: true,
+            glare: true,
+            shadow: false,
+            light_follows: false,
+            style_strength: 100,
+            shine_strength: 100,
+            rim_strength: 100,
+            glare_strength: 100,
+            shadow_strength: 100,
+            light_strength: 100,
+        }
+    }
+}
+
+impl Glass {
+    pub const OFF: Glass = Glass {
+        effect: GlassEffect::Off,
+        material: GlassMaterial::Glass,
+        style: GlassStyle::Frosted,
+        opacity: 100,
+        rim: true,
+        glare: true,
+        shadow: false,
+        light_follows: false,
+        style_strength: 100,
+        shine_strength: 100,
+        rim_strength: 100,
+        glare_strength: 100,
+        shadow_strength: 100,
+        light_strength: 100,
+    };
+
+    /// Fusion Desk key names, in the order they are written.
+    pub const KEYS: [&'static str; 14] = [
+        "glass-effect",
+        "glass-material",
+        "glass-style",
+        "glass-opacity",
+        "glass-rim",
+        "glass-glare",
+        "glass-shadow",
+        "glass-light-follows",
+        "glass-style-strength",
+        "glass-shine-strength",
+        "glass-rim-strength",
+        "glass-glare-strength",
+        "glass-shadow-strength",
+        "glass-light-strength",
+    ];
+
+    /// A strength as a scale (1.0 = normal).
+    pub fn scale(percent: u8) -> f32 {
+        percent as f32 / 100.0
+    }
+
+    pub fn on(&self) -> bool {
+        self.effect != GlassEffect::Off
+    }
+
+    /// The window shows the desktop through it.
+    pub fn see_through(&self) -> bool {
+        self.on() && self.opacity < 100
+    }
+
+    /// One setting as Fusion Desk stores it (GVariant text: `'STRONG'`, `75`, `true`).
+    pub fn get(&self, key: &str) -> String {
+        let quote = |v: &str| format!("'{v}'");
+        match key {
+            "glass-effect" => quote(self.effect.key()),
+            "glass-material" => quote(self.material.key()),
+            "glass-style" => quote(self.style.key()),
+            "glass-opacity" => self.opacity.to_string(),
+            "glass-rim" => self.rim.to_string(),
+            "glass-glare" => self.glare.to_string(),
+            "glass-shadow" => self.shadow.to_string(),
+            "glass-light-follows" => self.light_follows.to_string(),
+            "glass-style-strength" => self.style_strength.to_string(),
+            "glass-shine-strength" => self.shine_strength.to_string(),
+            "glass-rim-strength" => self.rim_strength.to_string(),
+            "glass-glare-strength" => self.glare_strength.to_string(),
+            "glass-shadow-strength" => self.shadow_strength.to_string(),
+            "glass-light-strength" => self.light_strength.to_string(),
+            _ => String::new(),
+        }
+    }
+
+    /// Set one setting from Fusion Desk text; unknown keys and values are ignored.
+    pub fn set(&mut self, key: &str, value: &str) {
+        let value = value.trim();
+        let flag = |v: &str| v.trim_matches('\'') == "true";
+        match key.trim().trim_start_matches("glass-") {
+            "effect" => {
+                if let Some(v) = GlassEffect::from_key(value) {
+                    self.effect = v;
+                }
+            }
+            "material" => {
+                if let Some(v) = GlassMaterial::from_key(value) {
+                    self.material = v;
+                }
+            }
+            "style" => {
+                if let Some(v) = GlassStyle::from_key(value) {
+                    self.style = v;
+                }
+            }
+            "opacity" => {
+                if let Ok(v) = value.trim_matches('\'').parse::<u8>() {
+                    self.opacity = v.clamp(10, 100);
+                }
+            }
+            "rim" => self.rim = flag(value),
+            "glare" => self.glare = flag(value),
+            "shadow" => self.shadow = flag(value),
+            "light-follows" => self.light_follows = flag(value),
+            name if name.ends_with("-strength") => {
+                let Ok(v) = value.trim_matches('\'').parse::<u16>() else {
+                    return;
+                };
+                let v = v.min(200) as u8;
+                match name {
+                    "style-strength" => self.style_strength = v,
+                    "shine-strength" => self.shine_strength = v,
+                    "rim-strength" => self.rim_strength = v,
+                    "glare-strength" => self.glare_strength = v,
+                    "shadow-strength" => self.shadow_strength = v,
+                    "light-strength" => self.light_strength = v,
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// `effect=STRONG` lines, the format of Harbor's glass files.
+    pub fn to_text(&self) -> String {
+        Self::KEYS
+            .iter()
+            .map(|k| {
+                format!(
+                    "{}={}\n",
+                    k.trim_start_matches("glass-"),
+                    self.get(k).trim_matches('\'')
+                )
+            })
+            .collect()
+    }
+
+    /// Parse `key=value` pairs (lines or commas). The old one-word styles
+    /// (`off`, `glossy`, `liquid`) still work.
+    pub fn from_text(text: &str) -> Glass {
+        match text.trim() {
+            "off" => return Glass::OFF,
+            "glossy" => {
+                return Glass {
+                    effect: GlassEffect::Soft,
+                    material: GlassMaterial::Gloss,
+                    style: GlassStyle::Gel,
+                    opacity: 100,
+                    ..Glass::default()
+                }
+            }
+            "liquid" => {
+                return Glass {
+                    style: GlassStyle::Clear,
+                    opacity: 80,
+                    ..Glass::default()
+                }
+            }
+            _ => {}
+        }
+        let mut glass = Glass::default();
+        for pair in text.split([',', '\n']) {
+            if let Some((k, v)) = pair.split_once('=') {
+                glass.set(k, v);
+            }
+        }
+        glass
+    }
+}
+
 /// Which Windows design the app paints. The settings, pages and behaviour are
 /// identical; only the chrome, palette and home screen change.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -82,6 +347,10 @@ pub struct Palette {
     /// Which design this palette belongs to; widgets use it for corners,
     /// icon tiles and navigation styling.
     pub design: Design,
+    /// Glass styling (Personalisation › Glass effects).
+    pub glass: Glass,
+    /// The pointer, for "Light follows pointer".
+    pub pointer: Option<egui::Pos2>,
 }
 
 impl Palette {
@@ -90,6 +359,61 @@ impl Palette {
             return Self::win10(mode, accent);
         }
         Self::win11(mode, accent)
+    }
+
+    /// Apply a glass style: cards, inputs and panes take the style's tint and
+    /// the opacity, so the glow backdrop (and, in a see-through window, the
+    /// desktop) shows through them.
+    pub fn with_glass(mut self, glass: Glass, see_through: bool) -> Self {
+        self.glass = glass;
+        if !glass.on() {
+            return self;
+        }
+        let dark = self.bg.r() < 128;
+        let accent = self.accent;
+        let mix = |a: Color32, b: Color32, t: f32| {
+            let m = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+            Color32::from_rgb(m(a.r(), b.r()), m(a.g(), b.g()), m(a.b(), b.b()))
+        };
+        let tint = |c: Color32| match glass.style {
+            GlassStyle::Frosted => mix(c, Color32::WHITE, if dark { 0.06 } else { 0.30 }),
+            GlassStyle::Tinted => mix(c, accent, if dark { 0.16 } else { 0.12 }),
+            GlassStyle::Smoke => mix(c, Color32::BLACK, if dark { 0.30 } else { 0.10 }),
+            GlassStyle::Glow if dark => mix(c, Color32::from_rgb(44, 46, 50), 0.6),
+            _ => c,
+        };
+        let strong = glass.effect == GlassEffect::Strong;
+        // Card opacity follows the setting; Clear is lighter, Soft less so.
+        let mut alpha = glass.opacity as f32 / 100.0;
+        if glass.style == GlassStyle::Clear {
+            alpha *= 0.7;
+        }
+        if !strong {
+            alpha = 0.5 + alpha * 0.5;
+        }
+        if glass.style == GlassStyle::Glow {
+            // The coloured light behind must show through.
+            alpha = alpha.min(0.6);
+        }
+        let see = |c: Color32, a: f32| {
+            Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), (a.clamp(0.2, 1.0) * 255.0) as u8)
+        };
+        self.card = see(tint(self.card), alpha);
+        self.card_hover = see(tint(self.card_hover), alpha + 0.12);
+        self.input_bg = see(tint(self.input_bg), alpha + 0.1);
+        if glass.rim {
+            self.card_border = if dark {
+                Color32::from_white_alpha(if strong { 34 } else { 24 })
+            } else {
+                Color32::from_white_alpha(if strong { 170 } else { 120 })
+            };
+        }
+        if see_through {
+            let page = (glass.opacity as f32 / 100.0).max(0.35);
+            self.bg = see(self.bg, page);
+            self.nav_bg = see(self.nav_bg, page * 0.8);
+        }
+        self
     }
 
     /// Corner radius for this design: Windows 11 rounds, Windows 10 is square.
@@ -134,6 +458,8 @@ impl Palette {
                 nav_bg: Color32::from_rgb(0x20, 0x20, 0x20),
                 tooltip: Color32::from_rgb(0x2B, 0x2B, 0x2B),
                 design,
+                glass: Glass::OFF,
+                pointer: None,
             },
             Mode::Light => Self {
                 bg: Color32::from_rgb(0xFF, 0xFF, 0xFF),
@@ -156,6 +482,8 @@ impl Palette {
                 nav_bg: Color32::from_rgb(0xF3, 0xF3, 0xF3),
                 tooltip: Color32::from_rgb(0xF2, 0xF2, 0xF2),
                 design,
+                glass: Glass::OFF,
+                pointer: None,
             },
         }
     }
@@ -184,6 +512,8 @@ impl Palette {
                 nav_bg: Color32::from_rgb(0x20, 0x20, 0x20),
                 tooltip: Color32::from_rgb(0x2D, 0x2D, 0x2D),
                 design,
+                glass: Glass::OFF,
+                pointer: None,
             },
             Mode::Light => Self {
                 bg: Color32::from_rgb(0xF3, 0xF3, 0xF3),
@@ -206,6 +536,8 @@ impl Palette {
                 nav_bg: Color32::from_rgb(0xF3, 0xF3, 0xF3),
                 tooltip: Color32::from_rgb(0xF0, 0xF0, 0xF0),
                 design,
+                glass: Glass::OFF,
+                pointer: None,
             },
         }
     }
@@ -368,4 +700,31 @@ pub fn apply_style(ctx: &Context, pal: &Palette, mode: Mode) {
     .into();
 
     ctx.set_style_of(theme, style);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn glass_text_round_trip() {
+        let g = Glass::from_text("effect=SOFT,material=GLOSS,style=GLOW,opacity=60,rim=false");
+        assert_eq!(g.effect, GlassEffect::Soft);
+        assert_eq!(g.style, GlassStyle::Glow);
+        assert_eq!(g.opacity, 60);
+        assert!(!g.rim && g.glare);
+        assert_eq!(Glass::from_text(&g.to_text()), g);
+        assert_eq!(g.get("glass-style"), "'GLOW'");
+    }
+
+    #[test]
+    fn glass_old_words_and_bad_values() {
+        assert!(!Glass::from_text("off").on());
+        assert_eq!(Glass::from_text("glossy").material, GlassMaterial::Gloss);
+        assert!(Glass::from_text("liquid").see_through());
+        let g = Glass::from_text("style=NEON,opacity=5,effect=huge");
+        assert_eq!(g.style, GlassStyle::Frosted);
+        assert_eq!(g.opacity, 10);
+        assert_eq!(g.effect, GlassEffect::Strong);
+    }
 }

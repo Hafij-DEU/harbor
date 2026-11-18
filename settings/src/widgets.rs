@@ -77,18 +77,334 @@ pub fn section_label(ui: &mut Ui, pal: &Palette, text: &str) {
 
 pub fn card<R>(ui: &mut Ui, pal: &Palette, add: impl FnOnce(&mut Ui) -> R) -> R {
     let width = ui.available_width();
+    // The fill is painted afterwards under the content, so glass styles can
+    // add their sheen at the card's final size.
+    let fill_at = ui.painter().add(egui::Shape::Noop);
     let frame = egui::Frame::new()
-        .fill(pal.card)
         .stroke(Stroke::new(1.0, pal.card_border))
         .corner_radius(pal.corner(8))
         .inner_margin(Margin::ZERO);
-    frame
-        .show(ui, |ui| {
-            ui.set_width(width);
-            ui.spacing_mut().item_spacing.y = 0.0;
-            add(ui)
-        })
-        .inner
+    let shown = frame.show(ui, |ui| {
+        ui.set_width(width);
+        ui.spacing_mut().item_spacing.y = 0.0;
+        add(ui)
+    });
+    let rect = shown.response.rect;
+    ui.painter()
+        .set(fill_at, glass_fill(pal, rect, pal.corner(8), pal.card));
+    shown.inner
+}
+
+/// A rounded fill in `color` with the glass look of `pal.glass`, layered the
+/// way Fusion Desk draws its glass: optional shadow, the fill, the style's
+/// shading, the gloss band, corner glare, the pointer light and the rim.
+pub fn glass_fill(pal: &Palette, rect: Rect, corner: u8, color: Color32) -> egui::Shape {
+    use crate::theme::{GlassEffect, GlassMaterial, GlassStyle};
+    let g = pal.glass;
+    if !g.on() || rect.height() < 4.0 || rect.width() < 4.0 {
+        return egui::Shape::rect_filled(rect, corner, color);
+    }
+    let dark = pal.bg.r() < 128;
+    let r = (corner as f32).min(rect.height() / 2.0);
+    let k = if g.effect == GlassEffect::Strong {
+        1.0
+    } else {
+        0.6
+    };
+    // White layers are much weaker on dark surfaces, and on strong colours
+    // (accent buttons) so the colour stays.
+    let colourful = color.r().abs_diff(color.b()) > 60 || color.g().abs_diff(color.b()) > 60;
+    let mut wk = if dark { k * 0.4 } else { k };
+    if colourful {
+        wk *= 0.7;
+    }
+    let gloss = g.material == GlassMaterial::Gloss;
+    let scale = crate::theme::Glass::scale;
+    let (ss, sh, rs, gs, ds, ls) = (
+        scale(g.style_strength),
+        scale(g.shine_strength),
+        scale(g.rim_strength),
+        scale(g.glare_strength),
+        scale(g.shadow_strength),
+        scale(g.light_strength),
+    );
+    let (top, bottom) = (rect.top(), rect.bottom());
+    let mut shapes = Vec::new();
+    if g.shadow && ds > 0.0 {
+        for (grow, a) in [(7.0_f32, 0.05), (4.0, 0.08), (1.5, 0.12)] {
+            let grow = grow * ds.max(0.3);
+            shapes.push(egui::Shape::rect_filled(
+                rect.translate(Vec2::new(0.0, grow * 0.5)).expand(grow),
+                corner.saturating_add(grow as u8),
+                black(a * ds * if dark { 2.2 } else { 1.0 }),
+            ));
+        }
+    }
+    shapes.push(egui::Shape::rect_filled(rect, corner, color));
+    let full = |stops: &[(f32, Color32)]| rounded_rows(rect, r, top, bottom, stops);
+    // The style's shading follows the style strength.
+    let (wk_shine, k_full) = (wk, k);
+    let (wk, k) = (wk * ss, k * ss);
+    shapes.push(match g.style {
+        GlassStyle::Frosted => full(&[(0.0, white(0.30 * wk)), (1.0, white(0.16 * wk))]),
+        GlassStyle::Gel => full(&[
+            (0.0, white(0.40 * wk)),
+            (0.6, white(0.06 * wk)),
+            (1.0, if dark { black(0.14 * k) } else { white(0.0) }),
+        ]),
+        GlassStyle::Tinted => full(&[
+            (0.0, tinted(pal.accent, 0.34 * k)),
+            (1.0, tinted(pal.accent, 0.12 * k)),
+        ]),
+        GlassStyle::Smoke => full(&[(0.0, black(0.06 * k)), (1.0, black(0.24 * k))]),
+        GlassStyle::Halo => radial(
+            rect.center() - Vec2::new(0.0, rect.height() * 0.05),
+            rect.size() * 0.65,
+            white(0.26 * wk),
+            rect,
+            r,
+        ),
+        GlassStyle::Clear | GlassStyle::Glow => full(&[
+            (0.0, white(0.18 * wk)),
+            (0.7, white(0.03 * wk)),
+            (1.0, white(0.0)),
+        ]),
+    });
+    if gloss {
+        // Polished gloss: a specular band over the top, capped in height so
+        // tall cards keep a calm body, and a deeper bottom on dark surfaces.
+        let band = (rect.height() * 0.5).min((rect.height() * 0.3).clamp(28.0, 160.0));
+        shapes.push(rounded_rows(
+            rect,
+            r,
+            top,
+            top + band,
+            &[
+                (0.0, white(if dark { 0.40 } else { 0.70 } * wk_shine * sh)),
+                (0.55, white(if dark { 0.12 } else { 0.28 } * wk_shine * sh)),
+                (1.0, white(0.0)),
+            ],
+        ));
+        if dark {
+            shapes.push(full(&[
+                (0.0, black(0.0)),
+                (0.6, black(0.0)),
+                (1.0, black(0.2 * k_full * sh)),
+            ]));
+        }
+    }
+    if g.glare && rect.height() >= 16.0 {
+        // Light catching the glass: a glow near the top-left corner and a
+        // sheen in the bottom-right corner.
+        let (w, h) = (rect.width(), rect.height());
+        let big = (w.max(h) * 0.45).min((w.min(h) * 1.6).max(60.0));
+        let a = if dark { 0.4 } else { 0.5 } * wk_shine * gs * if gloss { 0.6 } else { 1.0 };
+        shapes.push(radial(
+            rect.min + Vec2::new(big * 0.3, big * 0.2),
+            Vec2::splat(big),
+            white(a),
+            rect,
+            r,
+        ));
+        let small = (big * 0.55).min(w).min(h);
+        shapes.push(radial(
+            rect.max,
+            Vec2::splat(small),
+            white(a * 0.7),
+            rect,
+            r,
+        ));
+    }
+    if g.light_follows {
+        if let Some(p) = pal.pointer.filter(|p| rect.contains(*p)) {
+            let size = (rect.width().max(rect.height()) * 0.5).clamp(30.0, 140.0);
+            shapes.push(radial(
+                p,
+                Vec2::splat(size),
+                white(if dark { 0.12 } else { 0.35 } * ls),
+                rect,
+                r,
+            ));
+        }
+    }
+    if g.rim {
+        let k = k_full * rs;
+        let c = r.max(1.0);
+        let edge = |y: f32, col: Color32| {
+            egui::Shape::line_segment(
+                [
+                    Pos2::new(rect.left() + c, y),
+                    Pos2::new(rect.right() - c, y),
+                ],
+                Stroke::new(1.0, col),
+            )
+        };
+        shapes.push(egui::Shape::rect_stroke(
+            rect,
+            corner,
+            Stroke::new(1.0, white(if dark { 0.16 } else { 0.45 } * k)),
+            StrokeKind::Inside,
+        ));
+        if gloss {
+            shapes.push(edge(top + 0.6, white(if dark { 0.6 } else { 0.95 } * k)));
+            shapes.push(edge(
+                bottom - 0.6,
+                black(if dark { 0.38 } else { 0.16 } * k),
+            ));
+        } else {
+            shapes.push(edge(top + 0.6, white(if dark { 0.32 } else { 0.95 } * k)));
+        }
+    }
+    egui::Shape::Vec(shapes)
+}
+
+fn white(a: f32) -> Color32 {
+    Color32::from_white_alpha((a.clamp(0.0, 1.0) * 255.0) as u8)
+}
+
+fn black(a: f32) -> Color32 {
+    Color32::from_black_alpha((a.clamp(0.0, 1.0) * 255.0) as u8)
+}
+
+fn tinted(c: Color32, a: f32) -> Color32 {
+    Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), (a.clamp(0.0, 1.0) * 255.0) as u8)
+}
+
+/// Keep `p` inside the rounded rect (`rect` with corner radius `r`).
+fn clamp_rounded(p: Pos2, rect: Rect, r: f32) -> Pos2 {
+    let mut p = rect.clamp(p);
+    let cx = p.x.clamp(rect.left() + r, rect.right() - r);
+    let cy = p.y.clamp(rect.top() + r, rect.bottom() - r);
+    let d = p - Pos2::new(cx, cy);
+    if d.length() > r && d.x != 0.0 && d.y != 0.0 {
+        p = Pos2::new(cx, cy) + d.normalized() * r;
+    }
+    p
+}
+
+/// A soft radial light (bright centre, fading out at `radius`), kept inside
+/// the rounded rect `bounds`.
+fn radial(center: Pos2, radius: Vec2, color: Color32, bounds: Rect, r: f32) -> egui::Shape {
+    let mut mesh = egui::Mesh::default();
+    let at = |p: Pos2| clamp_rounded(p, bounds, r);
+    mesh.colored_vertex(at(center), color);
+    let mid = color.gamma_multiply(0.35);
+    const N: u32 = 40;
+    for i in 0..N {
+        let a = i as f32 / N as f32 * std::f32::consts::TAU;
+        let dir = Vec2::new(a.cos() * radius.x, a.sin() * radius.y);
+        mesh.colored_vertex(at(center + dir * 0.45), mid);
+        mesh.colored_vertex(at(center + dir), Color32::TRANSPARENT);
+    }
+    for i in 0..N {
+        let j = (i + 1) % N;
+        let (mi, oi, mj, oj) = (1 + i * 2, 2 + i * 2, 1 + j * 2, 2 + j * 2);
+        mesh.add_triangle(0, mi, mj);
+        mesh.add_triangle(mi, oi, oj);
+        mesh.add_triangle(mi, oj, mj);
+    }
+    egui::Shape::mesh(mesh)
+}
+
+/// A vertical gradient (`stops` from `y0` to `y1`) clipped to the rounded
+/// rect, built from rows that follow the rounded corners.
+fn rounded_rows(rect: Rect, r: f32, y0: f32, y1: f32, stops: &[(f32, Color32)]) -> egui::Shape {
+    let r = r.min(rect.height() / 2.0).min(rect.width() / 2.0).max(0.0);
+    let (y0, y1) = (y0.max(rect.top()), y1.min(rect.bottom()));
+    if y1 - y0 < 0.5 || stops.is_empty() {
+        return egui::Shape::Noop;
+    }
+    let mut ys: Vec<f32> = stops.iter().map(|(t, _)| y0 + t * (y1 - y0)).collect();
+    ys.extend([y0, y1]);
+    for i in 0..=8 {
+        let t = i as f32 / 8.0 * std::f32::consts::FRAC_PI_2;
+        let a = r - r * t.cos();
+        ys.extend([rect.top() + a, rect.bottom() - a]);
+    }
+    ys.retain(|y| *y >= y0 && *y <= y1);
+    ys.sort_by(|a, b| a.total_cmp(b));
+    ys.dedup_by(|a, b| (*a - *b).abs() < 0.25);
+    let inset = |y: f32| {
+        let dy = if y < rect.top() + r {
+            rect.top() + r - y
+        } else if y > rect.bottom() - r {
+            y - (rect.bottom() - r)
+        } else {
+            0.0
+        };
+        r - (r * r - dy * dy).max(0.0).sqrt()
+    };
+    let color = |y: f32| {
+        let t = (y - y0) / (y1 - y0);
+        let mut prev = stops[0];
+        for &(st, c) in stops {
+            if t <= st {
+                let span = st - prev.0;
+                let f = if span > 0.0 { (t - prev.0) / span } else { 1.0 };
+                return lerp_color(prev.1, c, f);
+            }
+            prev = (st, c);
+        }
+        prev.1
+    };
+    let mut mesh = egui::Mesh::default();
+    for (n, &y) in ys.iter().enumerate() {
+        let i = inset(y);
+        let c = color(y);
+        mesh.colored_vertex(Pos2::new(rect.left() + i, y), c);
+        mesh.colored_vertex(Pos2::new(rect.right() - i, y), c);
+        if n > 0 {
+            let b = (n as u32) * 2;
+            mesh.add_triangle(b - 2, b - 1, b);
+            mesh.add_triangle(b - 1, b + 1, b);
+        }
+    }
+    egui::Shape::mesh(mesh)
+}
+
+/// The Glow style's backdrop: soft coloured light behind the page, which
+/// the translucent cards let through.
+pub fn glow_backdrop(painter: &egui::Painter, rect: Rect, pal: &Palette) {
+    if !pal.glass.on() || pal.glass.style != crate::theme::GlassStyle::Glow {
+        return;
+    }
+    let dark = pal.bg.r() < 128;
+    let a = if dark { 0.42 } else { 0.26 } * crate::theme::Glass::scale(pal.glass.style_strength);
+    let (w, h) = (rect.width(), rect.height());
+    let size = w.max(h);
+    let blobs = [
+        (Color32::from_rgb(150, 200, 40), 0.12, 0.02, 0.50),
+        (Color32::from_rgb(20, 170, 170), 0.42, 0.80, 0.45),
+        (Color32::from_rgb(230, 110, 90), 1.00, 0.95, 0.50),
+        (pal.accent, 0.85, 0.10, 0.38),
+    ];
+    let wide = rect.expand(size);
+    for (c, x, y, rad) in blobs {
+        painter.add(radial(
+            rect.min + Vec2::new(w * x, h * y),
+            Vec2::new(size * rad, size * rad * 0.8),
+            tinted(c, a),
+            wide,
+            0.0,
+        ));
+    }
+}
+
+/// True when a glass style is on.
+pub fn glassy(pal: &Palette) -> bool {
+    pal.glass.on()
+}
+
+/// A neutral glass slab for an option (nav items, ghost buttons, tiles).
+pub fn glass_slab(pal: &Palette, rect: Rect, corner: u8, hovered: bool) -> egui::Shape {
+    let dark = pal.bg.r() < 128;
+    let base = match (dark, hovered) {
+        (true, false) => Color32::from_white_alpha(10),
+        (true, true) => Color32::from_white_alpha(22),
+        (false, false) => Color32::from_white_alpha(120),
+        (false, true) => Color32::from_white_alpha(190),
+    };
+    glass_fill(pal, rect, corner, base)
 }
 
 pub fn divider(ui: &mut Ui, pal: &Palette) {
@@ -399,6 +715,29 @@ pub fn paint_switch(painter: &egui::Painter, rect: Rect, t: f32, pal: &Palette, 
     painter.circle_filled(Pos2::new(knob_x, rect.center().y), 6.5, knob_color);
 }
 
+/// The Windows 10 home header: the title bar and the account band share
+/// one colour that fades a little toward the accent at the bottom.
+pub fn home10_header(pal: &Palette) -> (Color32, Color32) {
+    let dark = pal.bg.r() < 128;
+    let top = pal.nav_bg;
+    (
+        top,
+        lerp_color(top, pal.accent, if dark { 0.16 } else { 0.10 }),
+    )
+}
+
+/// Fill `rect` with a vertical gradient from `top` to `bottom`.
+pub fn vgradient(painter: &egui::Painter, rect: Rect, top: Color32, bottom: Color32) {
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(rect.left_top(), top);
+    mesh.colored_vertex(rect.right_top(), top);
+    mesh.colored_vertex(rect.left_bottom(), bottom);
+    mesh.colored_vertex(rect.right_bottom(), bottom);
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(1, 3, 2);
+    painter.add(egui::Shape::mesh(mesh));
+}
+
 pub fn lerp_color(a: Color32, b: Color32, t: f32) -> Color32 {
     let t = t.clamp(0.0, 1.0);
     Color32::from_rgba_premultiplied(
@@ -429,7 +768,12 @@ pub fn nav_item(
     if win10 {
         // Windows 10: the selection fills the whole pane, with a 3 px accent
         // bar at the pane edge; hover is a flat fill too.
-        if selected {
+        if selected && glassy(pal) {
+            ui.painter()
+                .add(glass_slab(pal, rect.shrink2(Vec2::new(6.0, 2.0)), 4, true));
+            let bar = Rect::from_min_size(rect.min, Vec2::new(3.0, rect.height()));
+            ui.painter().rect_filled(bar, 0, accent);
+        } else if selected {
             ui.painter().rect_filled(rect, 0, pal.nav_selected);
             let bar = Rect::from_min_size(rect.min, Vec2::new(3.0, rect.height()));
             ui.painter().rect_filled(bar, 0, accent);
@@ -451,7 +795,15 @@ pub fn nav_item(
         return response.on_hover_cursor(CursorIcon::PointingHand);
     }
 
-    if selected {
+    if selected && glassy(pal) {
+        ui.painter()
+            .add(glass_slab(pal, rect.shrink2(Vec2::new(0.0, 1.0)), 6, true));
+        let pill = Rect::from_center_size(
+            Pos2::new(rect.left() + 4.0, rect.center().y),
+            Vec2::new(3.0, 16.0),
+        );
+        ui.painter().rect_filled(pill, 2, accent);
+    } else if selected {
         ui.painter()
             .rect_filled(rect.shrink2(Vec2::new(0.0, 1.0)), 6, pal.nav_selected);
         let pill = Rect::from_center_size(
@@ -494,8 +846,13 @@ pub fn search_box(
     hint: &str,
 ) -> (Response, bool) {
     let width = ui.available_width();
+    let glass_at = ui.painter().add(egui::Shape::Noop);
     let frame = egui::Frame::new()
-        .fill(pal.input_bg)
+        .fill(if glassy(pal) {
+            Color32::TRANSPARENT
+        } else {
+            pal.input_bg
+        })
         .stroke(Stroke::new(1.0, pal.input_border))
         .corner_radius(pal.corner(6))
         .inner_margin(Margin::symmetric(10, 6));
@@ -524,6 +881,13 @@ pub fn search_box(
         })
         .inner
     });
+    if glassy(pal) {
+        let rect = inner.response.rect;
+        ui.painter().set(
+            glass_at,
+            glass_slab(pal, rect, pal.corner(6), inner.inner.has_focus()),
+        );
+    }
     let response = inner.inner;
     let changed = response.changed();
     (response, changed)
@@ -549,7 +913,7 @@ pub fn button(
     } else {
         accent
     };
-    ui.painter().rect_filled(rect, pal.corner(5), fill);
+    ui.painter().add(glass_fill(pal, rect, pal.corner(5), fill));
     let mut x = rect.center().x - galley.size().x / 2.0 + extra / 2.0;
     if let Some(icon) = icon {
         let icon_rect = Rect::from_center_size(
@@ -574,18 +938,23 @@ pub fn ghost_button(ui: &mut Ui, pal: &Palette, label: &str, icon: Option<Icon>)
     let extra = if icon.is_some() { 30.0 } else { 0.0 };
     let size = Vec2::new(galley.size().x + 26.0 + extra, 34.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
-    let fill = if response.hovered() {
-        pal.hover
+    if glassy(pal) {
+        ui.painter()
+            .add(glass_slab(pal, rect, pal.corner(5), response.hovered()));
     } else {
-        Color32::TRANSPARENT
-    };
-    ui.painter().rect_filled(rect, pal.corner(5), fill);
-    ui.painter().rect_stroke(
-        rect,
-        5,
-        Stroke::new(1.0, pal.card_border),
-        StrokeKind::Inside,
-    );
+        let fill = if response.hovered() {
+            pal.hover
+        } else {
+            Color32::TRANSPARENT
+        };
+        ui.painter().rect_filled(rect, pal.corner(5), fill);
+        ui.painter().rect_stroke(
+            rect,
+            5,
+            Stroke::new(1.0, pal.card_border),
+            StrokeKind::Inside,
+        );
+    }
     let mut x = rect.center().x - galley.size().x / 2.0 + extra / 2.0;
     if let Some(icon) = icon {
         let icon_rect = Rect::from_center_size(
@@ -632,8 +1001,41 @@ pub fn slider(ui: &mut Ui, pal: &Palette, accent: Color32, value: &mut f32, id: 
     changed
 }
 
+/// The account picture's texture, published by the app every frame.
+pub fn user_photo(ctx: &egui::Context) -> Option<egui::TextureId> {
+    ctx.data(|d| d.get_temp::<egui::TextureId>(Id::new("user-photo")))
+}
+
+/// Draw a texture as a filled circle (the account picture).
+pub fn paint_photo(painter: &egui::Painter, tex: egui::TextureId, center: Pos2, r: f32) {
+    let n = 72u32;
+    let mut mesh = egui::Mesh::with_texture(tex);
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: center,
+        uv: Pos2::new(0.5, 0.5),
+        color: Color32::WHITE,
+    });
+    for i in 0..=n {
+        let a = i as f32 / n as f32 * std::f32::consts::TAU;
+        let (sin, cos) = a.sin_cos();
+        mesh.vertices.push(egui::epaint::Vertex {
+            pos: center + Vec2::new(cos, sin) * r,
+            uv: Pos2::new(0.5 + cos * 0.5, 0.5 + sin * 0.5),
+            color: Color32::WHITE,
+        });
+    }
+    for i in 1..=n {
+        mesh.add_triangle(0, i, i + 1);
+    }
+    painter.add(egui::Shape::mesh(mesh));
+}
+
 pub fn avatar(ui: &mut Ui, pal: &Palette, name: &str, size: f32) {
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(size), Sense::hover());
+    if let Some(tex) = user_photo(ui.ctx()) {
+        paint_photo(ui.painter(), tex, rect.center(), size / 2.0);
+        return;
+    }
     let dark = pal.bg.r() < 128;
     let fill = if dark {
         Color32::from_rgb(0x54, 0x54, 0x54)
