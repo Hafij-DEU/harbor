@@ -691,6 +691,10 @@ pub struct App {
 
     pub hub: HubState,
     pub apt_job: Option<AptJob>,
+    /// The last update job, shown with its log until the user closes it.
+    pub apt_done: Option<crate::jobview::DoneJob>,
+    /// The last App Hub / uninstall job, shown on the Apps page.
+    pub hub_done: Option<crate::jobview::DoneJob>,
     pub cleaner: CleanerState,
     pub confirm: Option<ConfirmDialog>,
     pub activity: Vec<ActivityEntry>,
@@ -869,6 +873,8 @@ impl App {
             text_scale: scale.clamp(1.0, 1.75),
             hub: HubState::default(),
             apt_job: None,
+            apt_done: None,
+            hub_done: None,
             cleaner: CleanerState::default(),
             confirm: None,
             activity: Vec::new(),
@@ -896,8 +902,66 @@ impl App {
         if std::env::var("WIN11_SETTINGS_SCREENSHOT").is_err() {
             app.hub_refresh();
             app.check_updates();
+        } else if let Ok(kind) = std::env::var("WIN11_SETTINGS_FAKE_JOB") {
+            app.fake_job(&kind);
         }
         app
+    }
+
+    /// Screenshot runs only: show a job panel with a sample log.
+    /// `apt`, `apt-done`, `hub`, `hub-error`.
+    fn fake_job(&mut self, kind: &str) {
+        let log: Vec<String> = [
+            "Reading package lists...",
+            "Building dependency tree...",
+            "The following packages will be upgraded:",
+            "  firefox libgtk-4-1 mesa-vulkan-drivers",
+            "3 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.",
+            "Need to get 84.6 MB of archives.",
+            "dlstatus:1:0.0000:Retrieving file 1 of 3",
+            "Get:1 http://archive.ubuntu.com/ubuntu resolute-updates/main amd64 firefox 1.2 [71.0 MB]",
+            "dlstatus:2:62.4000:Retrieving file 2 of 3 (8,412 kB/s 3s remaining)",
+        ]
+        .iter()
+        .map(|l| (*l).to_owned())
+        .collect();
+        let (tx, rx) = mpsc::channel();
+        std::mem::forget(tx);
+        match kind {
+            "apt" => {
+                self.apt_job = Some(AptJob {
+                    label: "Installing updates".to_owned(),
+                    log,
+                    rx,
+                })
+            }
+            "apt-done" => {
+                self.apt_done = Some(crate::jobview::DoneJob::new(
+                    "Installing updates",
+                    &log.join("\n"),
+                    true,
+                ))
+            }
+            "hub" => {
+                self.hub.job = Some(HubJob {
+                    label: "Uninstalling GIMP".to_owned(),
+                    log: vec![
+                        "$ apt-get remove -y gimp".to_owned(),
+                        "Reading package lists...".to_owned(),
+                        "Removing gimp (3.0.4-1) ...".to_owned(),
+                        "pmstatus:gimp:48.0:Removing gimp (amd64)".to_owned(),
+                    ],
+                    rx,
+                })
+            }
+            _ => {
+                self.hub_done = Some(crate::jobview::DoneJob::new(
+                    "Uninstalling GIMP",
+                    "$ apt-get remove -y gimp\nE: Could not get lock /var/lib/dpkg/lock-frontend",
+                    false,
+                ))
+            }
+        }
     }
 
     /// Load (and cache) the themed or absolute-path icon for an application.
@@ -1531,6 +1595,17 @@ Your personal files are kept."
     /// Shared completion handling for hub and apt jobs: toast, activity log
     /// entry, and a refresh of the data the job changed.
     fn finish_job(&mut self, label: &str, code: i32, log: String, success: bool, hub_job: bool) {
+        let log = log
+            .lines()
+            .filter(|l| !crate::jobview::is_status_line(l))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let done = crate::jobview::DoneJob::new(label, &log, success);
+        if hub_job {
+            self.hub_done = Some(done);
+        } else {
+            self.apt_done = Some(done);
+        }
         if hub_job {
             if success {
                 self.notify(format!("{label} finished"));
@@ -3388,11 +3463,11 @@ The network will not reconnect automatically."
             .hub
             .job
             .as_ref()
-            .map(|job| (job.label.clone(), job.log.clone()))
+            .map(|job| (job.label.clone(), shown_log(&job.log)))
             .or_else(|| {
                 self.apt_job
                     .as_ref()
-                    .map(|job| (job.label.clone(), job.log.clone()))
+                    .map(|job| (job.label.clone(), shown_log(&job.log)))
             });
         egui::Window::new("Activity Log")
             .id(Id::new("activity-log-dialog"))
@@ -3990,4 +4065,12 @@ mod resize_tests {
             None
         );
     }
+}
+
+/// A live job log without apt's machine-readable progress lines.
+fn shown_log(log: &[String]) -> Vec<String> {
+    log.iter()
+        .filter(|l| !crate::jobview::is_status_line(l))
+        .cloned()
+        .collect()
 }

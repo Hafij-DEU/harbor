@@ -386,11 +386,17 @@ rc = 0
 def run(cmd):
     global rc
     print('$ ' + ' '.join(cmd), flush=True)
-    r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    for line in (r.stdout or '').splitlines():
-        print(line, flush=True)
-    if r.returncode != 0 and rc == 0:
-        rc = r.returncode
+    if cmd[0] == 'apt-get':
+        # Machine-readable progress for the Settings progress bar.
+        cmd = cmd[:1] + ['-o', 'APT::Status-Fd=1'] + cmd[1:]
+    # Stream line by line so the window shows live progress.
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                         text=True, bufsize=1)
+    for line in p.stdout:
+        print(line.rstrip('\n'), flush=True)
+    code = p.wait()
+    if code != 0 and rc == 0:
+        rc = code
 
 apt_remove = sel.get('apt_remove') or []
 if apt_remove:

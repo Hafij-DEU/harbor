@@ -243,6 +243,7 @@ falls back to `pkexec systemctl reboot` and then
 | `WIN11_SETTINGS_UI=win11\|win10` | Start with that interface (does not change the saved choice) |
 | `WIN11_SETTINGS_UPDATES=1` | Print every pending apt, snap and Flatpak update and exit |
 | `WIN11_SETTINGS_HOME_LINKS=0\|1` | Hide or show the page links on the Windows 10 home cards for one run |
+| `WIN11_SETTINGS_FAKE_JOB=apt\|apt-done\|hub\|hub-error` | Screenshot runs only: show the job panel with a sample log |
 | `WIN11_SETTINGS_MODE=dark\|light` | Force a mode instead of following Ubuntu |
 | `WIN11_SETTINGS_VIEW=<page>` | Open a page at start (e.g. `apps`, `display`, `privacy`) |
 | `WIN11_SETTINGS_APPS_TAB=myapps\|updates\|library\|allapps` | Open a specific Apps-page tab |

@@ -5,6 +5,7 @@ mod hub;
 mod icons;
 mod inventory;
 mod jobs;
+mod jobview;
 mod pages;
 mod system;
 mod theme;

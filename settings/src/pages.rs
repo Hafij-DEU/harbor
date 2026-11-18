@@ -4093,48 +4093,46 @@ pub fn updates(app: &mut App, ui: &mut Ui) {
             });
         });
         ui.add_space(16.0);
-        ui.horizontal(|ui| {
-            ui.add_space(ROW_PAD);
-            ui.spacing_mut().item_spacing.x = 8.0;
-            if app.updates_loading || app.apt_job.is_some() {
-                ui.spinner();
-                ui.label(
-                    egui::RichText::new(
-                        app.apt_job
-                            .as_ref()
-                            .map(|j| format!("{}…", j.label))
-                            .unwrap_or_else(|| {
-                                "Checking apt, snap and Flatpak for updates…".to_owned()
-                            }),
-                    )
-                    .font(regular(12.5))
-                    .color(pal.text_faint),
-                );
-            } else {
-                let has_updates = app
-                    .info
-                    .updates
-                    .as_ref()
-                    .map(|list| !list.is_empty())
-                    .unwrap_or(false);
-                if has_updates
-                    && widgets::button(ui, &pal, pal.accent, "Install updates", None).clicked()
-                {
-                    app.open_install_updates();
+        if apt_job_panel(app, ui, &pal) {
+            ui.add_space(4.0);
+        } else {
+            ui.horizontal(|ui| {
+                ui.add_space(ROW_PAD);
+                ui.spacing_mut().item_spacing.x = 8.0;
+                if app.updates_loading {
+                    ui.spinner();
+                    ui.label(
+                        egui::RichText::new("Checking apt, snap and Flatpak for updates…")
+                            .font(regular(12.5))
+                            .color(pal.text_faint),
+                    );
+                } else {
+                    let has_updates = app
+                        .info
+                        .updates
+                        .as_ref()
+                        .map(|list| !list.is_empty())
+                        .unwrap_or(false);
+                    if has_updates
+                        && widgets::button(ui, &pal, pal.accent, "Install updates", None).clicked()
+                    {
+                        app.open_install_updates();
+                    }
+                    if widgets::ghost_button(ui, &pal, "Check for updates", Some(Icon::Update))
+                        .clicked()
+                    {
+                        app.check_updates();
+                    }
+                    if widgets::ghost_button(ui, &pal, "Refresh lists", Some(Icon::Globe)).clicked()
+                    {
+                        app.run_refresh_lists();
+                    }
+                    if widgets::ghost_button(ui, &pal, "Activity Log", Some(Icon::Log)).clicked() {
+                        app.activity_log_open = true;
+                    }
                 }
-                if widgets::ghost_button(ui, &pal, "Check for updates", Some(Icon::Update))
-                    .clicked()
-                {
-                    app.check_updates();
-                }
-                if widgets::ghost_button(ui, &pal, "Refresh lists", Some(Icon::Globe)).clicked() {
-                    app.run_refresh_lists();
-                }
-                if widgets::ghost_button(ui, &pal, "Activity Log", Some(Icon::Log)).clicked() {
-                    app.activity_log_open = true;
-                }
-            }
-        });
+            });
+        }
         let phased = app
             .info
             .updates
@@ -4940,51 +4938,51 @@ fn render_updates_tab(
             });
         });
         ui.add_space(12.0);
-        ui.horizontal(|ui| {
-            ui.add_space(ROW_PAD);
-            ui.spacing_mut().item_spacing.x = 8.0;
-            if app.updates_loading || app.apt_job.is_some() {
-                ui.spinner();
-                ui.label(
-                    egui::RichText::new(
-                        app.apt_job
-                            .as_ref()
-                            .map(|j| j.label.as_str())
-                            .unwrap_or("Checking for updates…"),
-                    )
-                    .font(regular(12.5))
-                    .color(pal.text_faint),
-                );
-            } else {
-                let has_updates = app
-                    .info
-                    .updates
-                    .as_ref()
-                    .map(|l| !l.is_empty())
-                    .unwrap_or(false);
-                if has_updates
-                    && widgets::button(ui, &pal, pal.accent, "Install updates", None).clicked()
-                {
-                    app.open_install_updates();
-                }
-                if widgets::ghost_button(ui, &pal, "Check for updates", Some(Icon::Update))
-                    .clicked()
-                {
-                    app.check_updates();
-                }
-                if widgets::ghost_button(ui, &pal, "Refresh lists", Some(Icon::Globe)).clicked() {
-                    app.run_refresh_lists();
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add_space(ROW_PAD);
-                    if widgets::ghost_button(ui, &pal, "Software updates", Some(Icon::Apps))
+        if apt_job_panel(app, ui, &pal) {
+            ui.add_space(4.0);
+        } else {
+            ui.horizontal(|ui| {
+                ui.add_space(ROW_PAD);
+                ui.spacing_mut().item_spacing.x = 8.0;
+                if app.updates_loading {
+                    ui.spinner();
+                    ui.label(
+                        egui::RichText::new("Checking for updates…")
+                            .font(regular(12.5))
+                            .color(pal.text_faint),
+                    );
+                } else {
+                    let has_updates = app
+                        .info
+                        .updates
+                        .as_ref()
+                        .map(|l| !l.is_empty())
+                        .unwrap_or(false);
+                    if has_updates
+                        && widgets::button(ui, &pal, pal.accent, "Install updates", None).clicked()
+                    {
+                        app.open_install_updates();
+                    }
+                    if widgets::ghost_button(ui, &pal, "Check for updates", Some(Icon::Update))
                         .clicked()
                     {
-                        app.go(View::Page(Page::Updates));
+                        app.check_updates();
                     }
-                });
-            }
-        });
+                    if widgets::ghost_button(ui, &pal, "Refresh lists", Some(Icon::Globe)).clicked()
+                    {
+                        app.run_refresh_lists();
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add_space(ROW_PAD);
+                        if widgets::ghost_button(ui, &pal, "Software updates", Some(Icon::Apps))
+                            .clicked()
+                        {
+                            app.go(View::Page(Page::Updates));
+                        }
+                    });
+                }
+            });
+        }
         ui.add_space(16.0);
     });
 
@@ -5527,24 +5525,16 @@ fn app_hub_controls(app: &mut App, ui: &mut Ui) {
     // ------------------------------------------------------------ running job
     if let Some(job) = &app.hub.job {
         widgets::card(ui, &pal, |ui| {
-            ui.add_space(12.0);
-            ui.horizontal(|ui| {
-                ui.add_space(ROW_PAD);
-                ui.spinner();
-                ui.add_space(6.0);
-                ui.label(
-                    egui::RichText::new(format!("{}…", job.label))
-                        .font(regular(13.0))
-                        .color(pal.text_muted),
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if widgets::ghost_button(ui, &pal, "View log", Some(Icon::Log)).clicked() {
-                        app.activity_log_open = true;
-                    }
-                });
-            });
-            ui.add_space(12.0);
+            crate::jobview::panel(ui, &pal, "hub-job", &job.label, &job.log, None);
         });
+        spacer(ui, 4.0);
+    } else if let Some(done) = &app.hub_done {
+        let closed = widgets::card(ui, &pal, |ui| {
+            crate::jobview::panel(ui, &pal, "hub-job", &done.label, &done.log, Some(done.ok))
+        });
+        if closed {
+            app.hub_done = None;
+        }
         spacer(ui, 4.0);
     }
 
@@ -6516,4 +6506,20 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
             }
             ui.add_space(32.0);
         });
+}
+
+/// The running or last finished update job, drawn App Hub-style inside the
+/// updates card. Returns false when there is no job to show.
+fn apt_job_panel(app: &mut App, ui: &mut Ui, pal: &Palette) -> bool {
+    if let Some(job) = &app.apt_job {
+        crate::jobview::panel(ui, pal, "apt-job", &job.label, &job.log, None);
+        return true;
+    }
+    if let Some(done) = &app.apt_done {
+        if crate::jobview::panel(ui, pal, "apt-job", &done.label, &done.log, Some(done.ok)) {
+            app.apt_done = None;
+        }
+        return true;
+    }
+    false
 }

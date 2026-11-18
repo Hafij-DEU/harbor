@@ -3059,7 +3059,14 @@ pub fn refresh_package_lists() -> std::sync::mpsc::Receiver<crate::jobs::JobEven
     let mut cmd = Command::new("pkexec");
     cmd.arg("env")
         .arg("DEBIAN_FRONTEND=noninteractive")
-        .args(["apt-get", "-o", "Acquire::http::Timeout=20", "update"])
+        .args([
+            "apt-get",
+            "-o",
+            "APT::Status-Fd=1",
+            "-o",
+            "Acquire::http::Timeout=20",
+            "update",
+        ])
         .stdin(Stdio::null());
     crate::jobs::spawn(cmd)
 }
@@ -3072,7 +3079,7 @@ pub fn install_updates() -> std::sync::mpsc::Receiver<crate::jobs::JobEvent> {
     // include them instead of silently doing nothing. The apt result decides
     // the exit status; snap and Flatpak report their own errors in the log.
     let root = "export DEBIAN_FRONTEND=noninteractive; \
-        apt-get -y -o APT::Get::Always-Include-Phased-Updates=true \
+        apt-get -y -o APT::Status-Fd=1 -o APT::Get::Always-Include-Phased-Updates=true \
         -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold upgrade; \
         status=$?; \
         if command -v snap >/dev/null; then echo 'Updating snap apps…'; snap refresh; fi; \
