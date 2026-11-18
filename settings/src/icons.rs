@@ -38,6 +38,7 @@ pub enum Icon {
     Log,
     Pointer,
     Image,
+    Home,
 }
 
 struct Pen<'a> {
@@ -292,6 +293,14 @@ pub fn paint(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
         }
         Icon::ChevronRight => {
             pen.polyline(&[(0.40, 0.26), (0.64, 0.5), (0.40, 0.74)], 1.0);
+        }
+        Icon::Home => {
+            pen.polyline(&[(0.12, 0.5), (0.5, 0.16), (0.88, 0.5)], 1.0);
+            pen.polyline(
+                &[(0.24, 0.42), (0.24, 0.84), (0.76, 0.84), (0.76, 0.42)],
+                1.0,
+            );
+            pen.polyline(&[(0.42, 0.84), (0.42, 0.62), (0.58, 0.62), (0.58, 0.84)], 1.0);
         }
         Icon::Back => {
             pen.line((0.16, 0.5), (0.84, 0.5), 1.0);

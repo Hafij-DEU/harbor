@@ -18,6 +18,35 @@ pub static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock:
 
 fn main() -> eframe::Result<()> {
     let _ = START.set(std::time::Instant::now());
+    // `--ui win10` starts the same app in the Windows 10 interface without
+    // changing the saved choice; a launcher entry uses this.
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        let value = if let Some(value) = arg.strip_prefix("--ui=") {
+            Some(value.to_owned())
+        } else if arg == "--ui" {
+            args.next()
+        } else {
+            None
+        };
+        if let Some(value) = value {
+            match value.as_str() {
+                "win10" | "10" => std::env::set_var("WIN11_SETTINGS_UI", "win10"),
+                "win11" | "11" => std::env::set_var("WIN11_SETTINGS_UI", "win11"),
+                other => {
+                    eprintln!("unknown interface '{other}' (use win10 or win11)");
+                    return Ok(());
+                }
+            }
+        }
+    }
+    // Diagnostic: list every pending update (apt, snap, Flatpak) and exit.
+    if std::env::var("WIN11_SETTINGS_UPDATES").is_ok() {
+        for u in system::check_updates() {
+            println!("{:8} {:40} {} -> {}", u.source, u.name, u.old, u.new);
+        }
+        return Ok(());
+    }
     // Diagnostic: time one full system probe without opening a window.
     if std::env::var("WIN11_SETTINGS_PROBE").is_ok() {
         let start = std::time::Instant::now();

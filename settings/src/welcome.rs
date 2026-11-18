@@ -168,7 +168,7 @@ pub fn show(app: &mut App, ctx: &Context, pal: &Palette) {
             egui::Frame::new()
                 .fill(pal.card)
                 .stroke(Stroke::new(1.0, pal.card_border))
-                .corner_radius(10)
+                .corner_radius(pal.corner(10))
                 .inner_margin(Margin::same(26)),
         )
         .show(ctx, |ui| {
@@ -237,7 +237,7 @@ fn header(ui: &mut Ui, pal: &Palette, w: &Welcome, close: &mut bool) {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let (rect, resp) = ui.allocate_exact_size(Vec2::splat(30.0), Sense::click());
             if resp.hovered() {
-                ui.painter().rect_filled(rect, 5, pal.hover);
+                ui.painter().rect_filled(rect, pal.corner(5), pal.hover);
             }
             let c = rect.center();
             let s = 5.0;
@@ -261,7 +261,7 @@ fn welcome_page(ui: &mut Ui, pal: &Palette, w: &mut Welcome, close: &mut bool) {
     ui.vertical_centered(|ui| {
         ui.add_space(26.0);
         let (rect, _) = ui.allocate_exact_size(Vec2::splat(76.0), Sense::hover());
-        widgets::icon_tile(ui.painter(), rect, Icon::System, pal.accent, pal.on_accent);
+        widgets::icon_tile(ui.painter(), rect, Icon::System, pal.accent, pal.on_accent, pal);
         ui.add_space(18.0);
         title(ui, "Welcome to Settings", 30.0, pal.text);
         ui.add_space(6.0);
@@ -299,7 +299,7 @@ fn tour_page(ui: &mut Ui, pal: &Palette, w: &mut Welcome) {
     ui.vertical_centered(|ui| {
         ui.add_space(18.0);
         let (rect, _) = ui.allocate_exact_size(Vec2::splat(64.0), Sense::hover());
-        widgets::icon_tile(ui.painter(), rect, icon, pal.accent, pal.on_accent);
+        widgets::icon_tile(ui.painter(), rect, icon, pal.accent, pal.on_accent, pal);
         ui.add_space(16.0);
         title(ui, head, 22.0, pal.text);
         ui.add_space(8.0);
@@ -382,10 +382,10 @@ fn look_page(app: &mut App, ui: &mut Ui, pal: &Palette) {
             } else {
                 (Color32::from_rgb(0x20, 0x20, 0x20), Color32::WHITE)
             };
-            ui.painter().rect_filled(rect, 8, bg);
+            ui.painter().rect_filled(rect, pal.corner(8), bg);
             // Tiny window sketch with the accent.
             let bar = Rect::from_min_size(rect.min + Vec2::new(14.0, 14.0), Vec2::new(46.0, 8.0));
-            ui.painter().rect_filled(bar, 4, app.accent);
+            ui.painter().rect_filled(bar, pal.corner(4), app.accent);
             ui.painter().rect_stroke(
                 rect,
                 8,

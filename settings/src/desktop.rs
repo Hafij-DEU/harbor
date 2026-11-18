@@ -720,7 +720,7 @@ const FUSION_KEYS: &[(&str, &str)] = &[
 fn option_row(ui: &mut egui::Ui, pal: &crate::theme::Palette, label: &str, on: &mut bool) -> bool {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 36.0), egui::Sense::click());
     if resp.hovered() {
-        ui.painter().rect_filled(rect.shrink2(egui::vec2(4.0, 1.0)), 4, pal.hover);
+        ui.painter().rect_filled(rect.shrink2(egui::vec2(4.0, 1.0)), pal.corner(4), pal.hover);
     }
     let left = rect.left() + ROW_PAD + 54.0;
     let sw = egui::Rect::from_center_size(egui::pos2(rect.right() - ROW_PAD - 20.0, rect.center().y), egui::vec2(40.0, 20.0));

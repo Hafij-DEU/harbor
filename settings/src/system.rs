@@ -10,10 +10,13 @@ use serde::{Deserialize, Serialize};
 use crate::theme::Mode;
 
 #[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PackageUpdate {
     pub name: String,
     pub old: String,
     pub new: String,
+    /// "apt", "snap" or "flatpak" (empty means apt, for old snapshots).
+    pub source: String,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -2920,10 +2923,78 @@ pub fn check_updates() -> Vec<PackageUpdate> {
                 name: name.to_owned(),
                 old,
                 new,
+                source: "apt".to_owned(),
             });
         }
     }
+    packages.extend(snap_updates());
+    packages.extend(flatpak_updates());
     packages
+}
+
+/// Snap apps with a newer revision, like App Hub lists them. Bases, snapd,
+/// kernels and gadgets update themselves and are not shown.
+fn snap_updates() -> Vec<PackageUpdate> {
+    if !command_exists("snap") {
+        return Vec::new();
+    }
+    let installed: std::collections::HashMap<String, String> = sh("snap list 2>/dev/null")
+        .lines()
+        .skip(1)
+        .filter_map(|l| {
+            let f = l.split_whitespace().collect::<Vec<_>>();
+            Some((f.first()?.to_string(), f.get(1)?.to_string()))
+        })
+        .collect();
+    sh("timeout 60 snap refresh --list 2>/dev/null")
+        .lines()
+        .skip(1)
+        .filter_map(|line| {
+            let f = line.split_whitespace().collect::<Vec<_>>();
+            if f.len() < 3 {
+                return None;
+            }
+            let name = f[0];
+            let notes = f.last().copied().unwrap_or("");
+            let system = ["base", "snapd", "kernel", "gadget", "core"]
+                .iter()
+                .any(|kind| notes.contains(kind))
+                || name == "snapd"
+                || name.starts_with("core");
+            if system {
+                return None;
+            }
+            Some(PackageUpdate {
+                name: name.to_owned(),
+                old: installed.get(name).cloned().unwrap_or_default(),
+                new: f[1].to_owned(),
+                source: "snap".to_owned(),
+            })
+        })
+        .collect()
+}
+
+/// Flatpak apps (system and user) with an update on their remote.
+fn flatpak_updates() -> Vec<PackageUpdate> {
+    if !command_exists("flatpak") {
+        return Vec::new();
+    }
+    sh("timeout 90 flatpak remote-ls --updates --app --columns=application,version 2>/dev/null")
+        .lines()
+        .filter_map(|line| {
+            let mut cols = line.split('\t');
+            let id = cols.next()?.trim();
+            if id.is_empty() || id.eq_ignore_ascii_case("application id") {
+                return None;
+            }
+            Some(PackageUpdate {
+                name: id.to_owned(),
+                old: String::new(),
+                new: cols.next().unwrap_or("").trim().to_owned(),
+                source: "flatpak".to_owned(),
+            })
+        })
+        .collect()
 }
 
 pub fn install_package(package: &str) -> std::sync::mpsc::Receiver<crate::jobs::JobEvent> {
@@ -2954,27 +3025,33 @@ pub fn refresh_package_lists() -> std::sync::mpsc::Receiver<crate::jobs::JobEven
     crate::jobs::spawn(cmd)
 }
 
-/// Install every pending package upgrade. One password prompt, streamed live.
+/// Install every pending update: apt packages, snap apps and Flatpak apps.
+/// One password prompt for the system part, streamed live; user-installed
+/// Flatpaks update afterwards without a password.
 pub fn install_updates() -> std::sync::mpsc::Receiver<crate::jobs::JobEvent> {
-    let mut cmd = Command::new("pkexec");
-    cmd.arg("env")
-        .arg("DEBIAN_FRONTEND=noninteractive")
-        .args([
-            "apt-get",
-            "-y",
-            // Ubuntu phases some upgrades; installing is an explicit user
-            // action, so include them instead of silently doing nothing.
-            "-o",
-            "APT::Get::Always-Include-Phased-Updates=true",
-            "-o",
-            "Dpkg::Options::=--force-confdef",
-            "-o",
-            "Dpkg::Options::=--force-confold",
-            "upgrade",
-        ])
-        .stdin(Stdio::null());
+    // Ubuntu phases some upgrades; installing is an explicit user action, so
+    // include them instead of silently doing nothing. The apt result decides
+    // the exit status; snap and Flatpak report their own errors in the log.
+    let root = "export DEBIAN_FRONTEND=noninteractive; \
+        apt-get -y -o APT::Get::Always-Include-Phased-Updates=true \
+        -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold upgrade; \
+        status=$?; \
+        if command -v snap >/dev/null; then echo 'Updating snap apps…'; snap refresh; fi; \
+        if command -v flatpak >/dev/null; then echo 'Updating Flatpak apps (system)…'; \
+        flatpak update --system -y --noninteractive; fi; \
+        exit $status";
+    let script = format!(
+        "pkexec sh -c {}; status=$?; \
+         if [ $status -eq 0 ] && command -v flatpak >/dev/null; then \
+         echo 'Updating Flatpak apps (user)…'; flatpak update --user -y --noninteractive; fi; \
+         exit $status",
+        shell_quote(root)
+    );
+    let mut cmd = Command::new("sh");
+    cmd.args(["-c", &script]).stdin(Stdio::null());
     crate::jobs::spawn(cmd)
 }
+
 
 pub fn reboot_required() -> bool {
     Path::new("/var/run/reboot-required").exists()
@@ -3098,6 +3175,45 @@ pub fn appearance() -> Appearance {
         accent_name,
         accent,
     }
+}
+
+/// Where the chosen interface design is remembered between launches.
+fn design_path() -> Option<std::path::PathBuf> {
+    let base = std::env::var("XDG_CONFIG_HOME")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var("HOME")
+                .ok()
+                .map(|h| std::path::PathBuf::from(h).join(".config"))
+        })?;
+    Some(base.join("win11-settings").join("ui"))
+}
+
+/// The interface design chosen in Personalisation. `WIN11_SETTINGS_UI`
+/// overrides the saved choice (used by the screenshot and test runs).
+pub fn saved_design() -> Option<crate::theme::Design> {
+    if let Ok(value) = std::env::var("WIN11_SETTINGS_UI") {
+        if let Some(design) = crate::theme::Design::from_key(&value) {
+            return Some(design);
+        }
+    }
+    let text = fs::read_to_string(design_path()?).ok()?;
+    crate::theme::Design::from_key(&text)
+}
+
+/// Remember the interface design. The environment override is a test hook, so
+/// it is deliberately not written back.
+pub fn save_design(design: crate::theme::Design) {
+    if std::env::var("WIN11_SETTINGS_UI").is_ok() {
+        return;
+    }
+    let Some(path) = design_path() else { return };
+    if let Some(dir) = path.parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    let _ = fs::write(path, design.key());
 }
 
 pub fn set_color_scheme(mode: Mode) -> bool {

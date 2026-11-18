@@ -2,7 +2,7 @@
 Type=Application
 Name=Settings
 GenericName=System Settings
-Comment=Windows 11 style settings for Ubuntu, with App Hub built in
+Comment=Windows 11 and Windows 10 style settings for Ubuntu, with App Hub built in
 Exec=win11-settings
 Icon=win11-settings
 Terminal=false

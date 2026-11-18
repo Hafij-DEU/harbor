@@ -2,7 +2,8 @@
 //! through gsettings/pactl/nmcli/bluetoothctl and reported with a toast.
 
 use eframe::egui::{
-    self, Align2, Color32, CursorIcon, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2,
+    self, Align, Align2, Color32, CursorIcon, Id, Layout, Pos2, Rect, ScrollArea, Sense,
+    Stroke, StrokeKind, Ui, UiBuilder, Vec2,
 };
 
 use crate::app::{App, AppsTab, Detail, Page, PromptKind, View};
@@ -48,7 +49,7 @@ fn slider_row(
     ui.horizontal(|ui| {
         ui.add_space(ROW_PAD);
         let (chip, _) = ui.allocate_exact_size(Vec2::splat(28.0), Sense::hover());
-        widgets::icon_tile(ui.painter(), chip, icon, pal.accent, pal.on_accent);
+        widgets::icon_tile(ui.painter(), chip, icon, pal.accent, pal.on_accent, &pal);
         ui.add_space(14.0);
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 1.0;
@@ -101,7 +102,7 @@ pub(crate) fn combo_row(
     ui.horizontal(|ui| {
         ui.add_space(ROW_PAD);
         let (chip, _) = ui.allocate_exact_size(Vec2::splat(28.0), Sense::hover());
-        widgets::icon_tile(ui.painter(), chip, icon, pal.accent, pal.on_accent);
+        widgets::icon_tile(ui.painter(), chip, icon, pal.accent, pal.on_accent, &pal);
         ui.add_space(14.0);
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 1.0;
@@ -164,7 +165,7 @@ pub(crate) fn range_row(
     ui.horizontal(|ui| {
         ui.add_space(ROW_PAD);
         let (chip, _) = ui.allocate_exact_size(Vec2::splat(28.0), Sense::hover());
-        widgets::icon_tile(ui.painter(), chip, icon, pal.accent, pal.on_accent);
+        widgets::icon_tile(ui.painter(), chip, icon, pal.accent, pal.on_accent, &pal);
         ui.add_space(14.0);
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 1.0;
@@ -484,9 +485,9 @@ fn disk_bar(app: &mut App, ui: &mut Ui, pal: &Palette) {
     let width = ui.available_width();
     let height = 52.0;
     let (rect, response) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
-    ui.painter().rect_filled(rect, 6, pal.card);
+    ui.painter().rect_filled(rect, pal.corner(6), pal.card);
     ui.painter()
-        .rect_stroke(rect, 6, Stroke::new(1.0, pal.card_border), StrokeKind::Inside);
+        .rect_stroke(rect, pal.corner(6), Stroke::new(1.0, pal.card_border), StrokeKind::Inside);
 
     let icon_rect = Rect::from_center_size(
         Pos2::new(rect.left() + ROW_PAD + 12.0, rect.center().y),
@@ -521,7 +522,7 @@ fn disk_bar(app: &mut App, ui: &mut Ui, pal: &Palette) {
         .interact(btn_rect, Id::new("free-up-space"), Sense::click())
         .on_hover_cursor(CursorIcon::PointingHand);
     if btn_resp.hovered() {
-        ui.painter().rect_filled(btn_rect, 5, pal.hover);
+        ui.painter().rect_filled(btn_rect, pal.corner(5), pal.hover);
     }
     crate::icons::paint(
         ui.painter(),
@@ -550,7 +551,7 @@ fn disk_bar(app: &mut App, ui: &mut Ui, pal: &Palette) {
             Pos2::new(bar_left, rect.center().y - 4.0),
             Pos2::new(bar_right, rect.center().y + 4.0),
         );
-        ui.painter().rect_filled(bar, 3, with_alpha(pal.text, 26));
+        ui.painter().rect_filled(bar, pal.corner(3), with_alpha(pal.text, 26));
         let fill = Rect::from_min_max(
             bar.left_top(),
             Pos2::new(bar.left() + bar.width() * fraction, bar.bottom()),
@@ -562,8 +563,8 @@ fn disk_bar(app: &mut App, ui: &mut Ui, pal: &Palette) {
         } else {
             pal.accent
         };
-        ui.painter().rect_filled(fill, 3, bar_color);
-        ui.painter().rect_stroke(bar, 3, Stroke::new(1.0, with_alpha(pal.text, 60)), StrokeKind::Inside);
+        ui.painter().rect_filled(fill, pal.corner(3), bar_color);
+        ui.painter().rect_stroke(bar, pal.corner(3), Stroke::new(1.0, with_alpha(pal.text, 60)), StrokeKind::Inside);
     }
 
     if btn_resp.clicked() {
@@ -631,16 +632,16 @@ pub fn display(app: &mut App, ui: &mut Ui) {
     let height = width * 9.0 / 16.0;
     let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::hover());
     let preview = Rect::from_center_size(rect.center(), Vec2::new(width, height));
-    ui.painter().rect_filled(preview, 10, pal.card);
+    ui.painter().rect_filled(preview, pal.corner(10), pal.card);
     ui.painter().rect_stroke(
         preview,
-        10,
+        pal.corner(10),
         Stroke::new(1.0, pal.card_border),
         StrokeKind::Inside,
     );
     let screen = preview.shrink(10.0);
     ui.painter()
-        .rect_filled(screen, 6, with_alpha(pal.accent, 34));
+        .rect_filled(screen, pal.corner(6), with_alpha(pal.accent, 34));
     ui.painter().text(
         screen.center() - Vec2::new(0.0, 12.0),
         Align2::CENTER_CENTER,
@@ -1348,7 +1349,7 @@ pub fn power(app: &mut App, ui: &mut Ui) {
         ui.horizontal(|ui| {
             ui.add_space(ROW_PAD);
             let (chip, _) = ui.allocate_exact_size(Vec2::splat(40.0), Sense::hover());
-            widgets::icon_tile(ui.painter(), chip, Icon::Battery, pal.accent, pal.on_accent);
+            widgets::icon_tile(ui.painter(), chip, Icon::Battery, pal.accent, pal.on_accent, &pal);
             ui.add_space(14.0);
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
@@ -1382,12 +1383,12 @@ pub fn power(app: &mut App, ui: &mut Ui) {
             let width = ui.available_width() - ROW_PAD;
             let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 8.0), Sense::hover());
             let fraction = app.info.battery.unwrap_or(100) as f32 / 100.0;
-            ui.painter().rect_filled(rect, 4, pal.track);
+            ui.painter().rect_filled(rect, pal.corner(4), pal.track);
             let filled = Rect::from_min_size(
                 rect.min,
                 Vec2::new((rect.width() * fraction).max(6.0), rect.height()),
             );
-            ui.painter().rect_filled(filled, 4, pal.accent);
+            ui.painter().rect_filled(filled, pal.corner(4), pal.accent);
         });
         ui.add_space(16.0);
     });
@@ -1692,7 +1693,7 @@ pub fn storage(app: &mut App, ui: &mut Ui) {
         ui.horizontal(|ui| {
             ui.add_space(ROW_PAD);
             let (chip, _) = ui.allocate_exact_size(Vec2::splat(40.0), Sense::hover());
-            widgets::icon_tile(ui.painter(), chip, Icon::Storage, pal.accent, pal.on_accent);
+            widgets::icon_tile(ui.painter(), chip, Icon::Storage, pal.accent, pal.on_accent, &pal);
             ui.add_space(14.0);
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
@@ -1716,13 +1717,13 @@ pub fn storage(app: &mut App, ui: &mut Ui) {
             ui.add_space(ROW_PAD);
             let width = ui.available_width() - ROW_PAD;
             let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 10.0), Sense::hover());
-            ui.painter().rect_filled(rect, 5, pal.track);
+            ui.painter().rect_filled(rect, pal.corner(5), pal.track);
             let fraction = (app.info.disk_used_pct / 100.0).clamp(0.0, 1.0);
             let filled = Rect::from_min_size(
                 rect.min,
                 Vec2::new((rect.width() * fraction).max(6.0), rect.height()),
             );
-            ui.painter().rect_filled(filled, 5, pal.accent);
+            ui.painter().rect_filled(filled, pal.corner(5), pal.accent);
         });
         ui.add_space(18.0);
     });
@@ -1823,7 +1824,7 @@ fn mount_row(ui: &mut Ui, pal: &Palette, mount: &Mount) {
         Pos2::new(rect.left() + ROW_PAD, rect.top() + 40.0),
         Pos2::new(rect.right() - ROW_PAD, rect.top() + 44.0),
     );
-    ui.painter().rect_filled(bar, 2, pal.track);
+    ui.painter().rect_filled(bar, pal.corner(2), pal.track);
     let fraction = if mount.total_gb > 0.0 {
         (mount.used_gb / mount.total_gb).clamp(0.0, 1.0)
     } else {
@@ -1833,7 +1834,7 @@ fn mount_row(ui: &mut Ui, pal: &Palette, mount: &Mount) {
         bar.min,
         Vec2::new((bar.width() * fraction).max(4.0), bar.height()),
     );
-    ui.painter().rect_filled(filled, 2, pal.accent);
+    ui.painter().rect_filled(filled, pal.corner(2), pal.accent);
 }
 
 pub fn about(app: &mut App, ui: &mut Ui) {
@@ -2399,7 +2400,7 @@ fn default_app_row(
     ui.horizontal(|ui| {
         ui.add_space(ROW_PAD);
         let (chip, _) = ui.allocate_exact_size(Vec2::splat(28.0), Sense::hover());
-        widgets::icon_tile(ui.painter(), chip, Icon::Apps, pal.accent, pal.on_accent);
+        widgets::icon_tile(ui.painter(), chip, Icon::Apps, pal.accent, pal.on_accent, &pal);
         ui.add_space(14.0);
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 2.0;
@@ -2843,6 +2844,68 @@ pub fn personalisation(app: &mut App, ui: &mut Ui) {
     let pal = app.pal();
     widgets::h1(ui, &pal, "Personalisation");
 
+    // The two interfaces share every setting; this only changes the chrome,
+    // the palette and the Windows 10 home screen.
+    widgets::section_label(ui, &pal, "Interface");
+    let mut chosen = app.design;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 12.0;
+        for design in [crate::theme::Design::Win11, crate::theme::Design::Win10] {
+            let selected = app.design == design;
+            let (rect, resp) = ui.allocate_exact_size(Vec2::new(220.0, 78.0), Sense::click());
+            let fill = if resp.hovered() { pal.hover } else { pal.card };
+            ui.painter().rect_filled(rect, pal.corner(8), fill);
+            ui.painter().rect_stroke(
+                rect,
+                pal.corner(8),
+                Stroke::new(
+                    if selected { 2.0 } else { 1.0 },
+                    if selected { pal.accent } else { pal.card_border },
+                ),
+                StrokeKind::Inside,
+            );
+            let dot = Rect::from_min_size(
+                rect.min + Vec2::new(16.0, 16.0),
+                Vec2::splat(18.0),
+            );
+            let preview_accent = if design == crate::theme::Design::Win10 {
+                Color32::from_rgb(0x00, 0x78, 0xD7)
+            } else {
+                pal.accent
+            };
+            ui.painter().rect_filled(dot, pal.corner(4), preview_accent);
+            ui.painter().text(
+                Pos2::new(dot.right() + 10.0, dot.center().y),
+                Align2::LEFT_CENTER,
+                design.label(),
+                semibold(14.0),
+                pal.text,
+            );
+            ui.painter().text(
+                Pos2::new(rect.left() + 16.0, rect.bottom() - 18.0),
+                Align2::LEFT_CENTER,
+                if design == crate::theme::Design::Win10 {
+                    "Category home, sub-page pane, soft corners"
+                } else {
+                    "Rounded cards, accent tiles, sidebar"
+                },
+                regular(11.5),
+                pal.text_faint,
+            );
+            if resp
+                .on_hover_cursor(CursorIcon::PointingHand)
+                .clicked()
+            {
+                chosen = design;
+            }
+        }
+    });
+    spacer(ui, 18.0);
+    if chosen != app.design {
+        app.set_design(chosen);
+        return;
+    }
+
     widgets::section_label(ui, &pal, "Choose your mode");
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 12.0;
@@ -2864,10 +2927,10 @@ pub fn personalisation(app: &mut App, ui: &mut Ui) {
                     }
                 }
             };
-            ui.painter().rect_filled(rect, 8, preview);
+            ui.painter().rect_filled(rect, pal.corner(8), preview);
             ui.painter().rect_stroke(
                 rect,
-                8,
+                pal.corner(8),
                 Stroke::new(
                     if selected { 2.0 } else { 1.0 },
                     if selected {
@@ -2932,10 +2995,23 @@ pub fn personalisation(app: &mut App, ui: &mut Ui) {
             for (name, color) in crate::theme::ACCENTS {
                 let (rect, resp) = ui.allocate_exact_size(Vec2::splat(34.0), Sense::click());
                 let selected = app.accent == color && !app.follow_system;
-                ui.painter().circle_filled(rect.center(), 12.5, color);
-                if selected {
-                    ui.painter()
-                        .circle_stroke(rect.center(), 15.5, Stroke::new(2.0, pal.text));
+                if pal.design == crate::theme::Design::Win10 {
+                    let swatch = Rect::from_center_size(rect.center(), Vec2::splat(25.0));
+                    ui.painter().rect_filled(swatch, 0, color);
+                    if selected {
+                        ui.painter().rect_stroke(
+                            swatch.expand(3.0),
+                            0,
+                            Stroke::new(1.5, pal.text),
+                            StrokeKind::Inside,
+                        );
+                    }
+                } else {
+                    ui.painter().circle_filled(rect.center(), 12.5, color);
+                    if selected {
+                        ui.painter()
+                            .circle_stroke(rect.center(), 15.5, Stroke::new(2.0, pal.text));
+                    }
                 }
                 let resp = resp
                     .on_hover_cursor(CursorIcon::PointingHand)
@@ -2957,7 +3033,15 @@ pub fn personalisation(app: &mut App, ui: &mut Ui) {
                 app.accent = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
             }
             let (dot, _) = ui.allocate_exact_size(Vec2::splat(14.0), Sense::hover());
-            ui.painter().circle_filled(dot.center(), 6.0, app.accent);
+            if pal.design == crate::theme::Design::Win10 {
+                ui.painter().rect_filled(
+                    Rect::from_center_size(dot.center(), Vec2::splat(12.0)),
+                    0,
+                    app.accent,
+                );
+            } else {
+                ui.painter().circle_filled(dot.center(), 6.0, app.accent);
+            }
             ui.label(
                 egui::RichText::new("Custom")
                     .font(regular(12.0))
@@ -3213,6 +3297,7 @@ pub fn accessibility(app: &mut App, ui: &mut Ui) {
                 Icon::Accessibility,
                 pal.accent,
                 pal.on_accent,
+                &pal,
             );
             ui.add_space(14.0);
             ui.vertical(|ui| {
@@ -3880,7 +3965,7 @@ pub fn updates(app: &mut App, ui: &mut Ui) {
         ui.horizontal(|ui| {
             ui.add_space(ROW_PAD);
             let (chip, _) = ui.allocate_exact_size(Vec2::splat(44.0), Sense::hover());
-            widgets::icon_tile(ui.painter(), chip, Icon::Update, pal.accent, pal.on_accent);
+            widgets::icon_tile(ui.painter(), chip, Icon::Update, pal.accent, pal.on_accent, &pal);
             ui.add_space(14.0);
             ui.vertical(|ui| {
                 ui.set_width(ui.available_width() - ROW_PAD);
@@ -3918,7 +4003,7 @@ pub fn updates(app: &mut App, ui: &mut Ui) {
                         app.apt_job
                             .as_ref()
                             .map(|j| format!("{}…", j.label))
-                            .unwrap_or_else(|| "Checking apt for upgrades…".to_owned()),
+                            .unwrap_or_else(|| "Checking apt, snap and Flatpak for updates…".to_owned()),
                     )
                     .font(regular(12.5))
                     .color(pal.text_faint),
@@ -4022,10 +4107,15 @@ pub fn updates(app: &mut App, ui: &mut Ui) {
                 if index > 0 {
                     widgets::divider(ui, &pal);
                 }
-                let subtitle = if package.old.is_empty() {
-                    "Package update".to_owned()
-                } else {
-                    format!("{} installed · {} available", package.old, package.new)
+                let kind = match package.source.as_str() {
+                    "snap" => "Snap app",
+                    "flatpak" => "Flatpak app",
+                    _ => "Ubuntu package",
+                };
+                let subtitle = match (package.old.is_empty(), package.new.is_empty()) {
+                    (false, _) => format!("{kind} · {} installed · {} available", package.old, package.new),
+                    (true, false) => format!("{kind} · {} available", package.new),
+                    (true, true) => format!("{kind} · update available"),
                 };
                 widgets::info_row(ui, &pal, &package.name, &subtitle, Right::None);
             }
@@ -4109,7 +4199,7 @@ fn hub_row(
             Pos2::new(rect.left() + 4.0, rect.top() + 2.0),
             Pos2::new(rect.right() - 4.0, rect.bottom() - 2.0),
         );
-        ui.painter().rect_filled(bg, 4, pal.hover);
+        ui.painter().rect_filled(bg, pal.corner(4), pal.hover);
     }
 
     let chip = Rect::from_center_size(
@@ -4122,7 +4212,7 @@ fn hub_row(
                 .corner_radius(6.0)
                 .paint_at(ui, chip);
         }
-        None => widgets::icon_tile(ui.painter(), chip, icon, pal.accent, pal.on_accent),
+        None => widgets::icon_tile(ui.painter(), chip, icon, pal.accent, pal.on_accent, pal),
     }
 
     // Lay the actions out right-to-left first so the text can be clipped.
@@ -4171,7 +4261,7 @@ fn hub_row(
             .interact(btn, response.id.with(("hub-act", index)), Sense::click())
             .on_hover_cursor(CursorIcon::PointingHand);
         if resp.hovered() {
-            ui.painter().rect_filled(btn, 4, pal.hover);
+            ui.painter().rect_filled(btn, pal.corner(4), pal.hover);
         }
         let color = if accent { pal.accent } else { pal.text_muted };
         ui.painter().galley(
@@ -4212,7 +4302,7 @@ fn sys_app_row(
             Pos2::new(rect.left() + 4.0, rect.top() + 2.0),
             Pos2::new(rect.right() - 4.0, rect.bottom() - 2.0),
         );
-        ui.painter().rect_filled(bg, 4, pal.hover);
+        ui.painter().rect_filled(bg, pal.corner(4), pal.hover);
     }
 
     let chip = Rect::from_center_size(
@@ -4225,7 +4315,7 @@ fn sys_app_row(
                 .corner_radius(6.0)
                 .paint_at(ui, chip);
         }
-        None => widgets::icon_tile(ui.painter(), chip, Icon::Apps, pal.accent, pal.on_accent),
+        None => widgets::icon_tile(ui.painter(), chip, Icon::Apps, pal.accent, pal.on_accent, pal),
     }
 
     #[derive(Clone, Copy, PartialEq, Eq)]
@@ -4307,7 +4397,7 @@ fn sys_app_row(
             .interact(btn_rect, response.id.with(("sys-act", btn as usize)), Sense::click())
             .on_hover_cursor(CursorIcon::PointingHand);
         if resp.hovered() {
-            ui.painter().rect_filled(btn_rect, 4, pal.hover);
+            ui.painter().rect_filled(btn_rect, pal.corner(4), pal.hover);
         }
         let color = if danger {
             Color32::from_rgb(0xE8, 0x8A, 0x8A)
@@ -4413,7 +4503,7 @@ fn apps_tab_button(
     let (rect, response) = ui.allocate_exact_size(Vec2::new(width, height), Sense::click());
 
     if !active && response.hovered() {
-        ui.painter().rect_filled(rect, 6, pal.hover);
+        ui.painter().rect_filled(rect, pal.corner(6), pal.hover);
     }
 
     let text_color = if active { pal.text } else { pal.text_faint };
@@ -4467,7 +4557,7 @@ fn render_my_apps_tab(
         ui.horizontal(|ui| {
             ui.add_space(ROW_PAD);
             let (chip, _) = ui.allocate_exact_size(Vec2::splat(46.0), Sense::hover());
-            widgets::icon_tile(ui.painter(), chip, Icon::Hub, pal.accent, pal.on_accent);
+            widgets::icon_tile(ui.painter(), chip, Icon::Hub, pal.accent, pal.on_accent, &pal);
             ui.add_space(14.0);
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 3.0;
@@ -4710,7 +4800,7 @@ fn render_updates_tab(
         ui.horizontal(|ui| {
             ui.add_space(ROW_PAD);
             let (chip, _) = ui.allocate_exact_size(Vec2::splat(40.0), Sense::hover());
-            widgets::icon_tile(ui.painter(), chip, Icon::Update, pal.accent, pal.on_accent);
+            widgets::icon_tile(ui.painter(), chip, Icon::Update, pal.accent, pal.on_accent, &pal);
             ui.add_space(12.0);
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
@@ -4844,7 +4934,7 @@ fn render_library_tab(app: &mut App, ui: &mut Ui, pending: &mut Option<(crate::h
         ui.horizontal(|ui| {
             ui.add_space(ROW_PAD);
             let (chip, _) = ui.allocate_exact_size(Vec2::splat(36.0), Sense::hover());
-            widgets::icon_tile(ui.painter(), chip, Icon::Hub, pal.accent, pal.on_accent);
+            widgets::icon_tile(ui.painter(), chip, Icon::Hub, pal.accent, pal.on_accent, &pal);
             ui.add_space(12.0);
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
@@ -5089,7 +5179,7 @@ fn library_row(
             Pos2::new(rect.left() + 4.0, rect.top() + 2.0),
             Pos2::new(rect.right() - 4.0, rect.bottom() - 2.0),
         );
-        ui.painter().rect_filled(bg, 4, pal.hover);
+        ui.painter().rect_filled(bg, pal.corner(4), pal.hover);
     }
 
     let chip = Rect::from_center_size(
@@ -5102,7 +5192,7 @@ fn library_row(
                 .corner_radius(6.0)
                 .paint_at(ui, chip);
         }
-        None => widgets::icon_tile(ui.painter(), chip, Icon::Hub, pal.accent, pal.on_accent),
+        None => widgets::icon_tile(ui.painter(), chip, Icon::Hub, pal.accent, pal.on_accent, pal),
     }
 
     let mut right = rect.right() - ROW_PAD;
@@ -5163,7 +5253,7 @@ fn library_row(
             resp
         };
         if resp.hovered() {
-            ui.painter().rect_filled(btn_rect, 4, pal.hover);
+            ui.painter().rect_filled(btn_rect, pal.corner(4), pal.hover);
         }
         let color = if strong { pal.accent } else { pal.text_faint };
         ui.painter().galley(
@@ -5509,4 +5599,238 @@ pub fn search(app: &mut App, ui: &mut Ui) {
     if let Some(view) = target {
         app.go(view);
     }
+}
+
+// ---------------------------------------------------------------- home (Win10)
+
+/// The Windows 10 home screen: a full-width header band with the account and
+/// status cards, the centred “Find a setting” box, then the accent tiles.
+pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
+    let width = rect.width();
+    ScrollArea::vertical()
+        .id_salt("home10")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            ui.set_width(width);
+            ui.spacing_mut().item_spacing = Vec2::ZERO;
+
+            // --- header band -------------------------------------------------
+            // Windows 10 puts the account, a few quick actions and the search
+            // box on a grey band above a flat grid of categories.
+            let hero_h = 184.0;
+            let (hero, _) = ui.allocate_exact_size(Vec2::new(width, hero_h), Sense::hover());
+            ui.painter().rect_filled(hero, 0, pal.nav_bg);
+            ui.painter().rect_filled(
+                Rect::from_min_max(Pos2::new(hero.left(), hero.bottom() - 1.0), hero.max),
+                0,
+                pal.card_border,
+            );
+
+            let margin = 40.0;
+            let account = app.info.full_name.clone();
+            let role = if app.info.is_admin {
+                "Administrator"
+            } else {
+                "Standard user"
+            };
+
+            // Account block: grey avatar circle, name, account type.
+            let avatar_c = Pos2::new(hero.left() + margin + 26.0, hero.top() + 46.0);
+            ui.painter()
+                .circle_filled(avatar_c, 26.0, pal.card_hover);
+            let ink = if pal.bg.r() < 128 {
+                Color32::from_rgb(0xB0, 0xB0, 0xB0)
+            } else {
+                Color32::WHITE
+            };
+            ui.painter()
+                .circle_filled(Pos2::new(avatar_c.x, avatar_c.y - 6.0), 8.5, ink);
+            ui.painter().add(egui::Shape::ellipse_filled(
+                Pos2::new(avatar_c.x, avatar_c.y + 13.0),
+                Vec2::new(16.0, 10.0),
+                ink,
+            ));
+            ui.painter().text(
+                Pos2::new(hero.left() + margin + 66.0, hero.top() + 30.0),
+                Align2::LEFT_CENTER,
+                &account,
+                semibold(18.0),
+                pal.text,
+            );
+            ui.painter().text(
+                Pos2::new(hero.left() + margin + 66.0, hero.top() + 52.0),
+                Align2::LEFT_CENTER,
+                "Local account",
+                regular(12.0),
+                pal.text_muted,
+            );
+            ui.painter().text(
+                Pos2::new(hero.left() + margin + 66.0, hero.top() + 70.0),
+                Align2::LEFT_CENTER,
+                role,
+                regular(12.0),
+                pal.accent,
+            );
+            let account_rect = Rect::from_min_max(
+                Pos2::new(hero.left() + margin, hero.top() + 14.0),
+                Pos2::new(hero.left() + margin + 280.0, hero.top() + 82.0),
+            );
+            if ui
+                .interact(
+                    account_rect,
+                    Id::new("home-account"),
+                    Sense::click(),
+                )
+                .on_hover_cursor(CursorIcon::PointingHand)
+                .clicked()
+            {
+                app.go(View::Page(Page::Accounts));
+            }
+
+            // Quick actions along the top of the band.
+            let update_line = if app.updates_loading {
+                "Checking for updates…".to_owned()
+            } else if let Some(list) = &app.info.updates {
+                if list.is_empty() {
+                    "You're up to date".to_owned()
+                } else {
+                    format!(
+                        "{} update{} available",
+                        list.len(),
+                        if list.len() == 1 { "" } else { "s" }
+                    )
+                }
+            } else {
+                "Check for updates".to_owned()
+            };
+            let storage_line = format!(
+                "{:.0} GB free of {:.0} GB",
+                app.info.disk_free_gb, app.info.disk_total_gb
+            );
+            let quick = [
+                ("Windows Update", update_line, Icon::Update, View::Page(Page::Updates)),
+                (
+                    "App Hub",
+                    "Install and manage apps".to_owned(),
+                    Icon::Hub,
+                    View::Page(Page::Apps),
+                ),
+                (
+                    "Storage",
+                    storage_line,
+                    Icon::Storage,
+                    View::Detail(Page::System, Detail::Storage),
+                ),
+            ];
+            let quick_w = 190.0;
+            let quick_gap = 18.0;
+            let quick_x = (hero.right() - margin - quick_w * 3.0 - quick_gap * 2.0)
+                .max(hero.left() + margin + 320.0);
+            let mut clicked: Option<View> = None;
+            for (index, (title, line, icon, view)) in quick.into_iter().enumerate() {
+                let item = Rect::from_min_size(
+                    Pos2::new(quick_x + index as f32 * (quick_w + quick_gap), hero.top() + 24.0),
+                    Vec2::new(quick_w, 56.0),
+                );
+                if ui
+                    .interact(item, Id::new(("home-quick", index)), Sense::click())
+                    .on_hover_cursor(CursorIcon::PointingHand)
+                    .clicked()
+                {
+                    clicked = Some(view);
+                }
+                let glyph = Rect::from_min_size(item.min + Vec2::new(0.0, 12.0), Vec2::splat(22.0));
+                crate::icons::paint(ui.painter(), icon, glyph, pal.accent);
+                ui.painter().text(
+                    Pos2::new(item.left() + 34.0, item.top() + 12.0),
+                    Align2::LEFT_CENTER,
+                    title,
+                    semibold(12.5),
+                    pal.text,
+                );
+                ui.painter().text(
+                    Pos2::new(item.left() + 34.0, item.top() + 31.0),
+                    Align2::LEFT_CENTER,
+                    &line,
+                    regular(11.0),
+                    pal.text_faint,
+                );
+            }
+
+            // Centred search box, inside the band.
+            let search_w = (width * 0.44).clamp(300.0, 560.0);
+            let search_rect = Rect::from_min_size(
+                Pos2::new(hero.center().x - search_w / 2.0, hero.top() + 120.0),
+                Vec2::new(search_w, 34.0),
+            );
+            ui.scope_builder(
+                UiBuilder::new()
+                    .max_rect(search_rect)
+                    .layout(Layout::left_to_right(Align::Center)),
+                |ui| {
+                    ui.set_width(search_w);
+                    let focus = std::mem::take(&mut app.focus_search);
+                    widgets::search_box(ui, pal, &mut app.search, focus, "Find a setting");
+                },
+            );
+
+            // --- flat category grid ------------------------------------------
+            let cols = 4usize;
+            let gap = 10.0;
+            let item_w = ((width - margin * 2.0 - gap * (cols as f32 - 1.0)) / cols as f32)
+                .max(160.0);
+            let item_h = 74.0;
+            let rows = crate::app::Cat10::ALL.len().div_ceil(cols);
+            let grid_h = rows as f32 * item_h;
+            let (grid, _) =
+                ui.allocate_exact_size(Vec2::new(width, grid_h + 26.0), Sense::hover());
+
+            for (index, cat) in crate::app::Cat10::ALL.iter().copied().enumerate() {
+                let col = index % cols;
+                let row = index / cols;
+                let item = Rect::from_min_size(
+                    Pos2::new(
+                        grid.left() + margin + col as f32 * (item_w + gap),
+                        grid.top() + 22.0 + row as f32 * item_h,
+                    ),
+                    Vec2::new(item_w, item_h),
+                );
+                if ui.rect_contains_pointer(item) {
+                    ui.painter().rect_filled(item, pal.corner(4), pal.card_hover);
+                }
+                let glyph =
+                    Rect::from_min_size(item.min + Vec2::new(10.0, 18.0), Vec2::splat(26.0));
+                crate::icons::paint(ui.painter(), cat.icon(), glyph, pal.accent);
+                let text_clip = Rect::from_min_max(
+                    Pos2::new(item.left() + 46.0, item.top()),
+                    Pos2::new(item.right() - 6.0, item.bottom()),
+                );
+                let painter = ui.painter().with_clip_rect(text_clip);
+                painter.text(
+                    Pos2::new(item.left() + 48.0, item.top() + 21.0),
+                    Align2::LEFT_CENTER,
+                    cat.title(),
+                    semibold(13.0),
+                    pal.text,
+                );
+                painter.text(
+                    Pos2::new(item.left() + 48.0, item.top() + 39.0),
+                    Align2::LEFT_CENTER,
+                    cat.subtitle(),
+                    regular(11.0),
+                    pal.text_faint,
+                );
+                if ui
+                    .interact(item, Id::new(("home-category", cat.title())), Sense::click())
+                    .on_hover_cursor(CursorIcon::PointingHand)
+                    .clicked()
+                {
+                    clicked = Some(cat.items()[0].2);
+                }
+            }
+            if let Some(view) = clicked {
+                app.go(view);
+            }
+            ui.add_space(26.0);
+        });
 }

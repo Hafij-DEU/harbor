@@ -13,6 +13,38 @@ pub enum Mode {
     Light,
 }
 
+/// Which Windows design the app paints. The settings, pages and behaviour are
+/// identical; only the chrome, palette and home screen change.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Design {
+    Win11,
+    Win10,
+}
+
+impl Design {
+    pub fn label(self) -> &'static str {
+        match self {
+            Design::Win11 => "Windows 11",
+            Design::Win10 => "Windows 10",
+        }
+    }
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Design::Win11 => "win11",
+            Design::Win10 => "win10",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Self> {
+        match key.trim().to_ascii_lowercase().as_str() {
+            "win11" | "11" | "windows11" => Some(Design::Win11),
+            "win10" | "10" | "windows10" => Some(Design::Win10),
+            _ => None,
+        }
+    }
+}
+
 /// Accent swatches offered on the Personalisation page.
 pub const ACCENTS: [(&str, Color32); 8] = [
     ("Rose", Color32::from_rgb(0xD6, 0x33, 0x6B)),
@@ -44,11 +76,92 @@ pub struct Palette {
     pub toggle_knob_off: Color32,
     pub track: Color32,
     pub nav_selected: Color32,
+    /// The navigation pane / Windows 10 home header band.
+    pub nav_bg: Color32,
     pub tooltip: Color32,
+    /// Which design this palette belongs to; widgets use it for corners,
+    /// icon tiles and navigation styling.
+    pub design: Design,
 }
 
 impl Palette {
-    pub fn new(mode: Mode, accent: Color32) -> Self {
+    pub fn new(mode: Mode, accent: Color32, design: Design) -> Self {
+        if design == Design::Win10 {
+            return Self::win10(mode, accent);
+        }
+        Self::win11(mode, accent)
+    }
+
+    /// Corner radius for this design: Windows 11 rounds, Windows 10 is square.
+    pub fn corner(&self, radius: u8) -> u8 {
+        if self.design == Design::Win10 {
+            // Windows 10 with a modern touch: small, soft corners (max 4 px).
+            radius.min(4)
+        } else {
+            radius
+        }
+    }
+
+    fn win10(mode: Mode, accent: Color32) -> Self {
+        let design = Design::Win10;
+        // GNOME's default blue is Adwaita's #3584E4; Windows 10's blue is
+        // #0078D7, so the design keeps its own accent when the desktop uses
+        // the stock GNOME blue.
+        let accent = if (accent.r(), accent.g(), accent.b()) == (0x35, 0x84, 0xE4) {
+            Color32::from_rgb(0x00, 0x78, 0xD7)
+        } else {
+            accent
+        };
+        match mode {
+            Mode::Dark => Self {
+                bg: Color32::from_rgb(0x1A, 0x1A, 0x1A),
+                card: Color32::from_rgb(0x24, 0x24, 0x24),
+                card_hover: Color32::from_rgb(0x2D, 0x2D, 0x2D),
+                card_border: Color32::from_rgb(0x2E, 0x2E, 0x2E),
+                text: Color32::from_rgb(0xFF, 0xFF, 0xFF),
+                text_muted: Color32::from_rgb(0xD0, 0xD0, 0xD0),
+                text_faint: Color32::from_rgb(0x9A, 0x9A, 0x9A),
+                accent,
+                on_accent: Color32::WHITE,
+                hover: Color32::from_rgb(0x2D, 0x2D, 0x2D),
+                pressed: Color32::from_rgb(0x38, 0x38, 0x38),
+                divider: Color32::from_rgb(0x30, 0x30, 0x30),
+                input_bg: Color32::from_rgb(0x24, 0x24, 0x24),
+                input_border: Color32::from_rgb(0x5A, 0x5A, 0x5A),
+                toggle_knob_off: Color32::from_rgb(0x9A, 0x9A, 0x9A),
+                track: Color32::from_rgb(0x5A, 0x5A, 0x5A),
+                nav_selected: Color32::from_rgb(0x33, 0x33, 0x33),
+                nav_bg: Color32::from_rgb(0x20, 0x20, 0x20),
+                tooltip: Color32::from_rgb(0x2B, 0x2B, 0x2B),
+                design,
+            },
+            Mode::Light => Self {
+                bg: Color32::from_rgb(0xFF, 0xFF, 0xFF),
+                card: Color32::from_rgb(0xF7, 0xF7, 0xF7),
+                card_hover: Color32::from_rgb(0xEF, 0xEF, 0xEF),
+                card_border: Color32::from_rgb(0xEB, 0xEB, 0xEB),
+                text: Color32::from_rgb(0x00, 0x00, 0x00),
+                text_muted: Color32::from_rgb(0x4D, 0x4D, 0x4D),
+                text_faint: Color32::from_rgb(0x6E, 0x6E, 0x6E),
+                accent,
+                on_accent: Color32::WHITE,
+                hover: Color32::from_rgb(0xEA, 0xEA, 0xEA),
+                pressed: Color32::from_rgb(0xDC, 0xDC, 0xDC),
+                divider: Color32::from_rgb(0xE6, 0xE6, 0xE6),
+                input_bg: Color32::from_rgb(0xFF, 0xFF, 0xFF),
+                input_border: Color32::from_rgb(0x8A, 0x8A, 0x8A),
+                toggle_knob_off: Color32::from_rgb(0x76, 0x76, 0x76),
+                track: Color32::from_rgb(0xCC, 0xCC, 0xCC),
+                nav_selected: Color32::from_rgb(0xE3, 0xE3, 0xE3),
+                nav_bg: Color32::from_rgb(0xF3, 0xF3, 0xF3),
+                tooltip: Color32::from_rgb(0xF2, 0xF2, 0xF2),
+                design,
+            },
+        }
+    }
+
+    fn win11(mode: Mode, accent: Color32) -> Self {
+        let design = Design::Win11;
         match mode {
             Mode::Dark => Self {
                 bg: Color32::from_rgb(0x20, 0x20, 0x20),
@@ -68,7 +181,9 @@ impl Palette {
                 toggle_knob_off: Color32::from_rgb(0xCF, 0xCF, 0xCF),
                 track: Color32::from_rgb(0x4A, 0x4A, 0x4A),
                 nav_selected: Color32::from_rgb(0x2E, 0x2E, 0x2E),
+                nav_bg: Color32::from_rgb(0x20, 0x20, 0x20),
                 tooltip: Color32::from_rgb(0x2D, 0x2D, 0x2D),
+                design,
             },
             Mode::Light => Self {
                 bg: Color32::from_rgb(0xF3, 0xF3, 0xF3),
@@ -88,7 +203,9 @@ impl Palette {
                 toggle_knob_off: Color32::from_rgb(0x5F, 0x5F, 0x5F),
                 track: Color32::from_rgb(0xC9, 0xC9, 0xC9),
                 nav_selected: Color32::from_rgb(0xE7, 0xE7, 0xE7),
+                nav_bg: Color32::from_rgb(0xF3, 0xF3, 0xF3),
                 tooltip: Color32::from_rgb(0xF0, 0xF0, 0xF0),
+                design,
             },
         }
     }
@@ -210,7 +327,14 @@ pub fn apply_style(ctx: &Context, pal: &Palette, mode: Mode) {
     style.visuals.selection.stroke = Stroke::new(1.0, pal.text);
     style.visuals.hyperlink_color = pal.accent;
     style.visuals.window_stroke = Stroke::new(1.0, pal.card_border);
-    style.visuals.window_corner_radius = egui::CornerRadius::same(8);
+    style.visuals.window_corner_radius = egui::CornerRadius::same(pal.corner(8));
+    style.visuals.menu_corner_radius = egui::CornerRadius::same(pal.corner(6));
+    let widget_radius = egui::CornerRadius::same(pal.corner(6));
+    style.visuals.widgets.noninteractive.corner_radius = widget_radius;
+    style.visuals.widgets.inactive.corner_radius = widget_radius;
+    style.visuals.widgets.hovered.corner_radius = widget_radius;
+    style.visuals.widgets.active.corner_radius = widget_radius;
+    style.visuals.widgets.open.corner_radius = widget_radius;
     style.visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, pal.text_muted);
     style.visuals.widgets.inactive.weak_bg_fill = pal.card;
     style.visuals.widgets.inactive.bg_fill = pal.card;

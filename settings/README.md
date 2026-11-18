@@ -4,7 +4,7 @@
 
 # Harbor Settings
 
-**A Windows 11-style Settings app for Ubuntu that edits the real system.**
+**A Windows 11-style Settings app for Ubuntu, with a built-in Windows 10 interface — both edit the real system.**
 
 [![Release](https://img.shields.io/github/v/release/Hafij-DEU/harbor?filter=settings-v*&label=release&color=5e35b1)](https://github.com/Hafij-DEU/harbor/releases?q=settings-v&expanded=true)
 ![Rust](https://img.shields.io/badge/Rust-eframe%20%C2%B7%20egui-b7410e?logo=rust&logoColor=white)
@@ -23,6 +23,38 @@ sliders) and drives the real Ubuntu stack underneath: `gsettings`/`dconf`,
 `wpctl`/`pactl`, `nmcli`, `bluetoothctl`, `powerprofilesctl`,
 `org.gnome.Mutter.DisplayConfig`, `AccountsService`, `df`, `/proc` and `/sys`.
 Every control is edited inside the app; it never opens GNOME Settings.
+
+## Two interfaces, one app
+
+The same binary, the same pages and the same package. **Windows 11** is the
+default; **Windows 10** changes only the presentation:
+
+- the Windows 10 home screen: a grey band with the account, Windows Update,
+  App Hub and Storage shortcuts and a centred “Find a setting” box, then the
+  ten Windows 10 categories (System, Devices, Network & Internet,
+  Personalisation, Apps, Accounts, Time & Language, Ease of Access, Privacy,
+  Update & Security);
+- inside a category, a navigation pane with **Home**, the search box, the
+  category name and its own sub-pages (for example System › Display, Sound,
+  Notifications & actions, Power & battery, Storage, About);
+- a 32 px title bar, accent-coloured line icons, denser 54 px rows and an
+  **On / Off** label beside every switch;
+- a modern touch: soft 4 px corners, borderless tinted cards and rounded
+  hover highlights instead of the hard 1 px boxes of the original.
+
+Switch in **Personalisation → Interface**, start the separate **Settings
+(Windows 10)** launcher entry, or force it for one run:
+
+```bash
+win11-settings --ui win10
+# or
+WIN11_SETTINGS_UI=win10 win11-settings
+```
+
+The choice is saved in `~/.config/win11-settings/ui`, so the next launch opens
+straight into it. Both designs edit exactly the same settings.
+
+![Windows 10 home](assets/home-win10.png)
 
 App management is built in: **My Apps · Updates · Library · All Apps**. The
 inventory, uninstalls, cleaner and disk bar work on their own
@@ -59,7 +91,7 @@ inventory, uninstalls, cleaner and disk bar work on their own
 | Privacy & security | Screen lock, lock-screen notifications, location, camera, microphone, file history, temp cleanup, problem reporting — all live |
 | Time & language | Timezone (browsable searchable list applied via `pkexec timedatectl`, with success feedback), automatic internet time, language picker (`localectl` + `locale-gen`), live local clock, 24-hour clock, top-bar date/weekday/seconds |
 | Compatibility | Wine, Waydroid and Steam detection with one-click “Install” through PolicyKit apt when missing |
-| Software updates | `apt` check with versions, install all updates in one PolicyKit prompt (including Ubuntu’s phased rollouts), refresh package lists, automatic security updates switch (unattended-upgrades), restart-required banner |
+| Software updates | apt, snap and Flatpak app updates checked once at start (the same list App Hub shows), install all of them with one PolicyKit prompt (including Ubuntu’s phased rollouts), refresh package lists, automatic security updates switch (unattended-upgrades), restart-required banner |
 | Search | Live filtering across every page with <kbd>Ctrl</kbd>+<kbd>F</kbd> |
 
 ## Install
@@ -81,6 +113,7 @@ Settings app. Remove it with `sudo apt remove win11-settings`.
 ```sh
 sudo install -Dm755 target/release/win11-settings /usr/local/bin/win11-settings
 sudo install -Dm644 win11-settings.desktop /usr/local/share/applications/win11-settings.desktop
+sudo install -Dm644 win11-settings-win10.desktop /usr/local/share/applications/win11-settings-win10.desktop
 sudo install -Dm644 assets/win11-settings.svg \
   /usr/local/share/icons/hicolor/scalable/apps/win11-settings.svg
 ```
@@ -193,6 +226,8 @@ falls back to `pkexec systemctl reboot` and then
 
 | Variable | Purpose |
 | --- | --- |
+| `WIN11_SETTINGS_UI=win11\|win10` | Start with that interface (does not change the saved choice) |
+| `WIN11_SETTINGS_UPDATES=1` | Print every pending apt, snap and Flatpak update and exit |
 | `WIN11_SETTINGS_MODE=dark\|light` | Force a mode instead of following Ubuntu |
 | `WIN11_SETTINGS_VIEW=<page>` | Open a page at start (e.g. `apps`, `display`, `privacy`) |
 | `WIN11_SETTINGS_APPS_TAB=myapps\|updates\|library\|allapps` | Open a specific Apps-page tab |

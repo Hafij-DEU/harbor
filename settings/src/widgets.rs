@@ -1,34 +1,47 @@
-//! Fluent-flavoured building blocks: cards, rows, switches, sliders, buttons.
+//! Building blocks for both designs: cards, rows, switches, sliders, buttons.
 
 use eframe::egui::{
-    self, Align2, Color32, CursorIcon, Id, Margin, Pos2, Rect, Response, Sense,
-    Stroke, StrokeKind, Ui, Vec2,
+    self, Align2, Color32, CursorIcon, Id, Margin, Pos2, Rect, Response, Sense, Stroke,
+    StrokeKind, Ui, Vec2,
 };
 
 use crate::icons::{self, Icon};
 use crate::theme::{regular, semibold, Palette};
 
 pub const ROW_H: f32 = 62.0;
+/// Windows 10 uses denser rows than Windows 11.
+pub const ROW_H_10: f32 = 54.0;
 pub const ROW_PAD: f32 = 16.0;
 pub const CHIP: f32 = 28.0;
 
 pub fn h1(ui: &mut Ui, pal: &Palette, text: &str) {
     ui.add_space(2.0);
+    let size = if pal.design == crate::theme::Design::Win10 {
+        24.0
+    } else {
+        28.0
+    };
     ui.label(
         egui::RichText::new(text)
-            .font(semibold(28.0))
+            .font(semibold(size))
             .color(pal.text),
     );
     ui.add_space(14.0);
 }
 
 pub fn h1_back(ui: &mut Ui, pal: &Palette, text: &str) -> bool {
+    // Windows 10 navigates sub-pages from the navigation pane, so its
+    // page titles carry no back arrow.
+    if pal.design == crate::theme::Design::Win10 {
+        h1(ui, pal, text);
+        return false;
+    }
     let mut back = false;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         let (rect, resp) = ui.allocate_exact_size(Vec2::splat(34.0), Sense::click());
         if resp.hovered() {
-            ui.painter().rect_filled(rect, 6, pal.hover);
+            ui.painter().rect_filled(rect, pal.corner(6), pal.hover);
         }
         let glyph = Rect::from_center_size(rect.center(), Vec2::splat(18.0));
         icons::paint(ui.painter(), Icon::Back, glyph, pal.text);
@@ -37,9 +50,14 @@ pub fn h1_back(ui: &mut Ui, pal: &Palette, text: &str) -> bool {
         }
         let resp = resp.on_hover_cursor(CursorIcon::PointingHand);
         let _ = resp;
+        let size = if pal.design == crate::theme::Design::Win10 {
+            24.0
+        } else {
+            28.0
+        };
         ui.label(
             egui::RichText::new(text)
-                .font(semibold(28.0))
+                .font(semibold(size))
                 .color(pal.text),
         );
     });
@@ -62,7 +80,7 @@ pub fn card<R>(ui: &mut Ui, pal: &Palette, add: impl FnOnce(&mut Ui) -> R) -> R 
     let frame = egui::Frame::new()
         .fill(pal.card)
         .stroke(Stroke::new(1.0, pal.card_border))
-        .corner_radius(8)
+        .corner_radius(pal.corner(8))
         .inner_margin(Margin::ZERO);
     frame
         .show(ui, |ui| {
@@ -82,7 +100,21 @@ pub fn divider(ui: &mut Ui, pal: &Palette) {
     ui.painter().rect_filled(inset, 0, pal.divider);
 }
 
-pub fn icon_tile(painter: &egui::Painter, rect: Rect, icon: Icon, fill: Color32, fg: Color32) {
+/// The leading glyph of a row. Windows 11 paints it on an accent tile;
+/// Windows 10 uses a flat, accent-coloured line glyph with no tile.
+pub fn icon_tile(
+    painter: &egui::Painter,
+    rect: Rect,
+    icon: Icon,
+    fill: Color32,
+    fg: Color32,
+    pal: &Palette,
+) {
+    if pal.design == crate::theme::Design::Win10 {
+        let glyph = Rect::from_center_size(rect.center(), Vec2::splat(rect.width() * 0.78));
+        icons::paint(painter, icon, glyph, pal.accent);
+        return;
+    }
     painter.rect_filled(rect, 6, fill);
     let glyph = Rect::from_center_size(rect.center(), Vec2::splat(rect.width() * 0.62));
     icons::paint_square(painter, icon, glyph, fg);
@@ -168,7 +200,8 @@ fn row_impl(
     mut right: Right<'_>,
 ) -> RowOutcome {
     let width = ui.available_width();
-    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, ROW_H), Sense::click());
+    let row_h = if pal.design == crate::theme::Design::Win10 { ROW_H_10 } else { ROW_H };
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, row_h), Sense::click());
     let hovered = response.hovered();
     let is_switch = matches!(&right, Right::Switch(_));
     let is_plain = matches!(&right, Right::None);
@@ -179,7 +212,7 @@ fn row_impl(
             Pos2::new(rect.left() + 4.0, rect.top() + 2.0),
             Pos2::new(rect.right() - 4.0, rect.bottom() - 2.0),
         );
-        ui.painter().rect_filled(bg, 4, pal.hover);
+        ui.painter().rect_filled(bg, pal.corner(4), pal.hover);
     }
 
     let mut toggled = false;
@@ -189,7 +222,7 @@ fn row_impl(
             Vec2::splat(CHIP),
         );
         egui::Image::new((texture.id(), chip.size()))
-            .corner_radius(5.0)
+            .corner_radius(pal.corner(5))
             .paint_at(ui, chip);
         chip.right() + 14.0
     } else if let Some(icon) = icon {
@@ -197,12 +230,31 @@ fn row_impl(
             Pos2::new(rect.left() + ROW_PAD + CHIP / 2.0, rect.center().y),
             Vec2::splat(CHIP),
         );
-        icon_tile(ui.painter(), chip, icon, accent, pal.on_accent);
+        icon_tile(ui.painter(), chip, icon, accent, pal.on_accent, pal);
         chip.right() + 14.0
     } else {
         rect.left() + ROW_PAD + 2.0
     };
 
+    // Keep the labels clear of whatever sits on the right of the row.
+    let win10 = pal.design == crate::theme::Design::Win10;
+    let reserve = match &right {
+        Right::Chevron | Right::Check => 44.0,
+        Right::Switch(_) => {
+            if win10 {
+                108.0
+            } else {
+                76.0
+            }
+        }
+        Right::AccentText(text) => 30.0 + text.chars().count() as f32 * 7.2,
+        Right::None => ROW_PAD,
+    };
+    let clip = Rect::from_min_max(
+        Pos2::new(rect.left(), rect.top()),
+        Pos2::new((rect.right() - reserve).max(text_x + 40.0), rect.bottom()),
+    );
+    let text_painter = ui.painter().with_clip_rect(clip.intersect(ui.clip_rect()));
     let has_subtitle = !subtitle.is_empty();
     let title_y = if has_subtitle {
         rect.center().y - 8.5
@@ -211,7 +263,7 @@ fn row_impl(
     };
     let title_font = regular(14.0);
     let title_color = pal.text;
-    ui.painter().text(
+    text_painter.text(
         Pos2::new(text_x, title_y),
         Align2::LEFT_CENTER,
         title,
@@ -219,7 +271,7 @@ fn row_impl(
         title_color,
     );
     if has_subtitle {
-        ui.painter().text(
+        text_painter.text(
             Pos2::new(text_x, rect.center().y + 10.5),
             Align2::LEFT_CENTER,
             subtitle,
@@ -246,6 +298,16 @@ fn row_impl(
             let id = response.id.with("switch");
             let t = ui.ctx().animate_bool_with_time(id, **state, 0.11);
             paint_switch(ui.painter(), r, t, pal, accent);
+            if win10 {
+                // Windows 10 names the state next to every switch.
+                ui.painter().text(
+                    Pos2::new(r.left() - 12.0, rect.center().y),
+                    Align2::RIGHT_CENTER,
+                    if **state { "On" } else { "Off" },
+                    regular(13.0),
+                    pal.text_muted,
+                );
+            }
             Some(r)
         }
         Right::AccentText(text) => {
@@ -296,6 +358,35 @@ fn row_impl(
 }
 
 pub fn paint_switch(painter: &egui::Painter, rect: Rect, t: f32, pal: &Palette, accent: Color32) {
+    let win10 = pal.design == crate::theme::Design::Win10;
+    if win10 {
+        // Windows 10: a thin outlined track when off and a solid accent track
+        // when on, with a white knob that always has a border.
+        let radius = rect.height() / 2.0;
+        painter.rect_filled(
+            rect,
+            radius,
+            lerp_color(pal.card, accent, t),
+        );
+        painter.rect_stroke(
+            rect,
+            radius,
+            Stroke::new(
+                1.0,
+                lerp_color(pal.text_faint, accent, t),
+            ),
+            StrokeKind::Inside,
+        );
+        let knob_x = egui::lerp((rect.left() + 10.0)..=(rect.right() - 10.0), t);
+        painter.circle_filled(Pos2::new(knob_x, rect.center().y), 6.0, Color32::WHITE);
+        painter.circle_stroke(
+            Pos2::new(knob_x, rect.center().y),
+            6.0,
+            Stroke::new(1.0, pal.text_faint),
+        );
+        return;
+    }
+
     let track = lerp_color(Color32::from_rgba_unmultiplied(0, 0, 0, 0), accent, t);
     painter.rect_filled(rect, rect.height() / 2.0, track);
     if t < 0.98 {
@@ -330,7 +421,34 @@ pub fn nav_item(
     selected: bool,
 ) -> Response {
     let width = ui.available_width();
-    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 38.0), Sense::click());
+    let nav_h = if pal.design == crate::theme::Design::Win10 { 40.0 } else { 38.0 };
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, nav_h), Sense::click());
+
+    let win10 = pal.design == crate::theme::Design::Win10;
+    if win10 {
+        // Windows 10: the selection fills the whole pane, with a 3 px accent
+        // bar at the pane edge; hover is a flat fill too.
+        if selected {
+            ui.painter().rect_filled(rect, 0, pal.nav_selected);
+            let bar = Rect::from_min_size(rect.min, Vec2::new(3.0, rect.height()));
+            ui.painter().rect_filled(bar, 0, accent);
+        } else if response.hovered() {
+            ui.painter().rect_filled(rect, 0, pal.hover);
+        }
+        let chip = Rect::from_center_size(
+            Pos2::new(rect.left() + 24.0, rect.center().y),
+            Vec2::splat(22.0),
+        );
+        icons::paint(ui.painter(), icon, chip, pal.text);
+        ui.painter().text(
+            Pos2::new(rect.left() + 44.0, rect.center().y),
+            Align2::LEFT_CENTER,
+            label,
+            regular(14.0),
+            pal.text,
+        );
+        return response.on_hover_cursor(CursorIcon::PointingHand);
+    }
 
     if selected {
         ui.painter()
@@ -354,7 +472,7 @@ pub fn nav_item(
     } else {
         accent.gamma_multiply(0.92)
     };
-    icon_tile(ui.painter(), chip, icon, tile_color, pal.on_accent);
+    icon_tile(ui.painter(), chip, icon, tile_color, pal.on_accent, pal);
 
     ui.painter().text(
         Pos2::new(rect.left() + 45.0, rect.center().y),
@@ -378,7 +496,7 @@ pub fn search_box(
     let frame = egui::Frame::new()
         .fill(pal.input_bg)
         .stroke(Stroke::new(1.0, pal.input_border))
-        .corner_radius(6)
+        .corner_radius(pal.corner(6))
         .inner_margin(Margin::symmetric(10, 6));
     let inner = frame.show(ui, |ui| {
         ui.set_width(width - 22.0);
@@ -430,7 +548,7 @@ pub fn button(
     } else {
         accent
     };
-    ui.painter().rect_filled(rect, 5, fill);
+    ui.painter().rect_filled(rect, pal.corner(5), fill);
     let mut x = rect.center().x - galley.size().x / 2.0 + extra / 2.0;
     if let Some(icon) = icon {
         let icon_rect = Rect::from_center_size(
@@ -460,7 +578,7 @@ pub fn ghost_button(ui: &mut Ui, pal: &Palette, label: &str, icon: Option<Icon>)
     } else {
         Color32::TRANSPARENT
     };
-    ui.painter().rect_filled(rect, 5, fill);
+    ui.painter().rect_filled(rect, pal.corner(5), fill);
     ui.painter().rect_stroke(
         rect,
         5,
@@ -505,7 +623,7 @@ pub fn slider(ui: &mut Ui, pal: &Palette, accent: Color32, value: &mut f32, id: 
     let t = value.clamp(0.0, 1.0);
     let knob = Pos2::new(rect.left() + rect.width() * t, rect.center().y);
     let filled = Rect::from_min_max(track.min, Pos2::new(knob.x, track.max.y));
-    ui.painter().rect_filled(filled, 2, accent);
+    ui.painter().rect_filled(filled, pal.corner(2), accent);
     ui.painter().circle_filled(knob, 9.0, accent);
     ui.painter().circle_filled(knob, 4.0, pal.card);
     let _ = id;
@@ -608,8 +726,12 @@ pub fn caption_button(ui: &mut Ui, pal: &Palette, kind: Caption, accent: Color32
     if close_hover {
         // Square fill: the window has square corners, so a rounded corner
         // would leave a gap in the top-right corner of the screen.
-        ui.painter()
-            .rect_filled(rect, 0, Color32::from_rgb(0xC4, 0x2B, 0x1C));
+        let red = if pal.design == crate::theme::Design::Win10 {
+            Color32::from_rgb(0xE8, 0x11, 0x23)
+        } else {
+            Color32::from_rgb(0xC4, 0x2B, 0x1C)
+        };
+        ui.painter().rect_filled(rect, 0, red);
     } else if response.hovered() {
         ui.painter().rect_filled(rect, 0, pal.hover);
     }

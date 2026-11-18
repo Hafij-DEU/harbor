@@ -19,6 +19,16 @@ use crate::theme::{self, regular, semibold, Mode, Palette, ACCENTS};
 use crate::widgets::{self, avatar, caption_button, nav_item, Caption};
 
 pub const TITLE_H: f32 = 48.0;
+/// Windows 10 title bars are half the height of Windows 11 ones.
+pub const TITLE_H_10: f32 = 32.0;
+
+fn title_height(design: crate::theme::Design) -> f32 {
+    if design == crate::theme::Design::Win10 {
+        TITLE_H_10
+    } else {
+        TITLE_H
+    }
+}
 pub const SIDEBAR_W: f32 = 300.0;
 /// Keep Settings comfortably readable even when Ubuntu's text scale is 100%.
 pub const APP_ZOOM: f32 = 1.15;
@@ -123,8 +133,156 @@ impl Detail {
     }
 }
 
+/// Windows 10 groups the pages into its own ten categories. Each one has a
+/// short list of sub-pages shown in the navigation pane, like the real app.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Cat10 {
+    System,
+    Devices,
+    Network,
+    Personalisation,
+    Apps,
+    Accounts,
+    Time,
+    Ease,
+    Privacy,
+    Update,
+}
+
+impl Cat10 {
+    pub const ALL: [Cat10; 10] = [
+        Cat10::System,
+        Cat10::Devices,
+        Cat10::Network,
+        Cat10::Personalisation,
+        Cat10::Apps,
+        Cat10::Accounts,
+        Cat10::Time,
+        Cat10::Ease,
+        Cat10::Privacy,
+        Cat10::Update,
+    ];
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Cat10::System => "System",
+            Cat10::Devices => "Devices",
+            Cat10::Network => "Network & Internet",
+            Cat10::Personalisation => "Personalisation",
+            Cat10::Apps => "Apps",
+            Cat10::Accounts => "Accounts",
+            Cat10::Time => "Time & Language",
+            Cat10::Ease => "Ease of Access",
+            Cat10::Privacy => "Privacy",
+            Cat10::Update => "Update & Security",
+        }
+    }
+
+    pub fn subtitle(self) -> &'static str {
+        match self {
+            Cat10::System => "Display, sound, notifications",
+            Cat10::Devices => "Bluetooth, mouse, keyboard",
+            Cat10::Network => "Wi-Fi, wired, proxy",
+            Cat10::Personalisation => "Background, taskbar, extensions",
+            Cat10::Apps => "Install, defaults, compatibility",
+            Cat10::Accounts => "Your info, sign-in options",
+            Cat10::Time => "Date, time, language, region",
+            Cat10::Ease => "Text size, visual alerts, keys",
+            Cat10::Privacy => "Screen lock, location, camera",
+            Cat10::Update => "Software and security updates",
+        }
+    }
+
+    pub fn icon(self) -> Icon {
+        match self {
+            Cat10::System => Icon::Display,
+            Cat10::Devices => Icon::Keyboard,
+            Cat10::Network => Icon::Globe,
+            Cat10::Personalisation => Icon::Personalise,
+            Cat10::Apps => Icon::Apps,
+            Cat10::Accounts => Icon::Accounts,
+            Cat10::Time => Icon::Clock,
+            Cat10::Ease => Icon::Accessibility,
+            Cat10::Privacy => Icon::Shield,
+            Cat10::Update => Icon::Update,
+        }
+    }
+
+    /// The sub-pages of the category, in navigation-pane order.
+    pub fn items(self) -> &'static [(&'static str, Icon, View)] {
+        match self {
+            Cat10::System => &[
+                ("Overview", Icon::System, View::Page(Page::System)),
+                ("Display", Icon::Display, View::Detail(Page::System, Detail::Display)),
+                ("Sound", Icon::Sound, View::Detail(Page::System, Detail::Sound)),
+                (
+                    "Notifications & actions",
+                    Icon::Bell,
+                    View::Detail(Page::System, Detail::Notifications),
+                ),
+                ("Power & battery", Icon::Battery, View::Detail(Page::System, Detail::Power)),
+                ("Storage", Icon::Storage, View::Detail(Page::System, Detail::Storage)),
+                ("About", Icon::Info, View::Detail(Page::System, Detail::About)),
+            ],
+            Cat10::Devices => &[
+                ("Bluetooth & other devices", Icon::Bluetooth, View::Page(Page::Bluetooth)),
+                ("Mouse & touchpad", Icon::Pointer, View::Detail(Page::Bluetooth, Detail::Pointer)),
+                ("Keyboard", Icon::Keyboard, View::Detail(Page::Bluetooth, Detail::Keyboard)),
+            ],
+            Cat10::Network => &[("Status", Icon::Wifi, View::Page(Page::Network))],
+            Cat10::Personalisation => &[
+                ("Background & colours", Icon::Personalise, View::Page(Page::Personalisation)),
+                ("Taskbar & windows", Icon::Display, View::Page(Page::Desktop)),
+                ("Extensions", Icon::Hub, View::Page(Page::Extensions)),
+            ],
+            Cat10::Apps => &[
+                ("Apps & features", Icon::Apps, View::Page(Page::Apps)),
+                ("Default apps", Icon::Check, View::Detail(Page::Apps, Detail::DefaultApps)),
+                ("Compatibility", Icon::Compatibility, View::Page(Page::Compatibility)),
+            ],
+            Cat10::Accounts => &[("Your info", Icon::Accounts, View::Page(Page::Accounts))],
+            Cat10::Time => &[("Date & language", Icon::Clock, View::Page(Page::TimeLanguage))],
+            Cat10::Ease => &[("Vision & input", Icon::Accessibility, View::Page(Page::Accessibility))],
+            Cat10::Privacy => &[("Security & permissions", Icon::Shield, View::Page(Page::Privacy))],
+            Cat10::Update => &[("Software Update", Icon::Update, View::Page(Page::Updates))],
+        }
+    }
+
+    /// The category a view belongs to (none for the home screen).
+    pub fn of(view: View) -> Option<Cat10> {
+        Some(match view {
+            View::Home => return None,
+            View::Detail(_, Detail::Pointer | Detail::Keyboard) => Cat10::Devices,
+            View::Detail(_, Detail::DefaultApps) => Cat10::Apps,
+            View::Detail(_, _) => Cat10::System,
+            View::Page(Page::System) => Cat10::System,
+            View::Page(Page::Bluetooth) => Cat10::Devices,
+            View::Page(Page::Network) => Cat10::Network,
+            View::Page(Page::Personalisation | Page::Desktop | Page::Extensions) => {
+                Cat10::Personalisation
+            }
+            View::Page(Page::Apps | Page::Compatibility) => Cat10::Apps,
+            View::Page(Page::Accounts) => Cat10::Accounts,
+            View::Page(Page::TimeLanguage) => Cat10::Time,
+            View::Page(Page::Accessibility) => Cat10::Ease,
+            View::Page(Page::Privacy) => Cat10::Privacy,
+            View::Page(Page::Updates) => Cat10::Update,
+        })
+    }
+
+    /// Whether a navigation item stands for the current view.
+    pub fn same(item: View, current: View) -> bool {
+        match (item, current) {
+            (View::Detail(_, a), View::Detail(_, b)) => a == b,
+            (a, b) => a == b,
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum View {
+    /// The Windows 10 home screen (category tiles). Windows 11 opens System.
+    Home,
     Page(Page),
     Detail(Page, Detail),
 }
@@ -132,6 +290,7 @@ pub enum View {
 impl View {
     pub fn page(self) -> Page {
         match self {
+            View::Home => Page::System,
             View::Page(p) => p,
             View::Detail(p, _) => p,
         }
@@ -139,6 +298,7 @@ impl View {
 
     fn salt(self) -> &'static str {
         match self {
+            View::Home => "home",
             View::Page(Page::System) => "system",
             View::Page(Page::Bluetooth) => "bluetooth",
             View::Page(Page::Network) => "network",
@@ -326,8 +486,11 @@ pub struct App {
     pub mode: Mode,
     pub accent: Color32,
     pub follow_system: bool,
+    /// Windows 11 (default) or the Windows 10 interface.
+    pub design: crate::theme::Design,
     last_mode: Mode,
     last_accent: Color32,
+    last_design: crate::theme::Design,
     appearance_rx: Receiver<system::Appearance>,
     pub system_mode: Mode,
     pub system_accent: Option<Color32>,
@@ -431,7 +594,8 @@ impl App {
             });
         }
 
-        let pal = Palette::new(mode, accent);
+        let design = system::saved_design().unwrap_or(crate::theme::Design::Win11);
+        let pal = Palette::new(mode, accent, design);
         theme::apply_style(&cc.egui_ctx, &pal, mode);
 
         // Show the previous snapshot straight away so storage and hardware
@@ -462,10 +626,11 @@ impl App {
             ctx.request_repaint();
         });
 
-        let view = match std::env::var("WIN11_SETTINGS_VIEW")
-            .unwrap_or_default()
-            .as_str()
-        {
+        let requested_view = std::env::var("WIN11_SETTINGS_VIEW").unwrap_or_default();
+        let view = match requested_view.as_str() {
+            "home" if design == crate::theme::Design::Win10 => View::Home,
+            "home" => View::Page(Page::System),
+            "system" => View::Page(Page::System),
             "display" => View::Detail(Page::System, Detail::Display),
             "sound" => View::Detail(Page::System, Detail::Sound),
             "notifications" => View::Detail(Page::System, Detail::Notifications),
@@ -489,6 +654,7 @@ impl App {
             "time" => View::Page(Page::TimeLanguage),
             "compatibility" => View::Page(Page::Compatibility),
             "updates" => View::Page(Page::Updates),
+            _ if design == crate::theme::Design::Win10 => View::Home,
             _ => View::Page(Page::System),
         };
 
@@ -501,8 +667,10 @@ impl App {
             mode,
             accent,
             follow_system,
+            design,
             last_mode: mode,
             last_accent: accent,
+            last_design: design,
             appearance_rx,
             system_mode: appearance.mode,
             system_accent,
@@ -599,7 +767,7 @@ impl App {
     }
 
     pub fn pal(&self) -> Palette {
-        Palette::new(self.mode, self.accent)
+        Palette::new(self.mode, self.accent, self.design)
     }
 
     /// Refresh the system probe in the background (polled in `poll_background`).
@@ -1413,8 +1581,30 @@ The network will not reconnect automatically."
     pub fn back(&mut self) {
         match self.view {
             View::Detail(page, _) => self.view = View::Page(page),
-            View::Page(_) => {}
+            // Windows 10 returns to the tile home screen; Windows 11 keeps
+            // its current page (there is no home screen in that design).
+            View::Page(_) if self.design == crate::theme::Design::Win10 => {
+                self.search.clear();
+                self.view = View::Home;
+            }
+            View::Page(_) | View::Home => {}
         }
+    }
+
+    /// Switch the interface design. Only the presentation changes: every
+    /// setting, page and background job is shared by both designs.
+    pub fn set_design(&mut self, design: crate::theme::Design) {
+        if self.design == design {
+            return;
+        }
+        self.design = design;
+        system::save_design(design);
+        self.search.clear();
+        self.view = match design {
+            crate::theme::Design::Win10 => View::Home,
+            crate::theme::Design::Win11 => View::Page(Page::System),
+        };
+        self.notify(format!("{} interface applied", design.label()));
     }
 
     /// Apply the visible effect of a completed settings write.
@@ -1943,19 +2133,50 @@ The network will not reconnect automatically."
             ctx.send_viewport_cmd(ViewportCommand::Maximized(!maximized));
         }
 
-        let dot = Pos2::new(rect.left() + 18.0, rect.center().y);
-        ui.painter().circle_filled(dot, 2.6, pal.accent);
-        ui.painter().text(
-            Pos2::new(rect.left() + 28.0, rect.center().y),
-            Align2::LEFT_CENTER,
-            "Settings",
-            regular(12.5),
-            pal.text_muted,
-        );
+        if pal.design == crate::theme::Design::Win10 {
+            // Windows 10: a small app tile, the window title and the search
+            // box in the title bar, on a white (or black) strip.
+            let tile = Rect::from_center_size(
+                Pos2::new(rect.left() + 20.0, rect.center().y),
+                Vec2::splat(16.0),
+            );
+            ui.painter().rect_filled(tile, 0, pal.accent);
+            crate::icons::paint_square(
+                ui.painter(),
+                Icon::System,
+                tile.shrink(3.0),
+                Color32::WHITE,
+            );
+            ui.painter().text(
+                Pos2::new(rect.left() + 34.0, rect.center().y),
+                Align2::LEFT_CENTER,
+                "Settings",
+                regular(12.0),
+                pal.text,
+            );
+            ui.painter().rect_filled(
+                Rect::from_min_max(
+                    Pos2::new(rect.left(), rect.bottom() - 1.0),
+                    rect.max,
+                ),
+                0,
+                pal.divider,
+            );
+        } else {
+            let dot = Pos2::new(rect.left() + 18.0, rect.center().y);
+            ui.painter().circle_filled(dot, 2.6, pal.accent);
+            ui.painter().text(
+                Pos2::new(rect.left() + 28.0, rect.center().y),
+                Align2::LEFT_CENTER,
+                "Settings",
+                regular(12.5),
+                pal.text_muted,
+            );
+        }
 
         let max = ctx.input(|i| i.viewport().maximized).unwrap_or(false);
         // Caption buttons fill the title bar and touch the window edge, so the
-        // very corner of the screen still hits Close (Windows 11 behaviour).
+        // very corner of the screen still hits Close.
         let controls = Rect::from_min_size(
             Pos2::new(rect.right() - buttons_w, rect.top()),
             Vec2::new(buttons_w, rect.height()),
@@ -1985,6 +2206,9 @@ The network will not reconnect automatically."
     }
 
     fn sidebar(&mut self, ui: &mut Ui, pal: &Palette, rect: Rect) {
+        if pal.design == crate::theme::Design::Win10 {
+            return self.sidebar10(ui, pal, rect);
+        }
         let margin = 14.0;
         let inner = Rect::from_min_max(
             Pos2::new(rect.left() + margin, rect.top() + 2.0),
@@ -2048,16 +2272,151 @@ The network will not reconnect automatically."
         });
     }
 
-    fn content(&mut self, ui: &mut Ui, _pal: &Palette, rect: Rect) {
+    /// Windows 10 navigation pane: a flat, full-bleed list on the grey pane,
+    /// with the account strip pinned to the bottom.
+    fn sidebar10(&mut self, ui: &mut Ui, pal: &Palette, rect: Rect) {
+        ui.painter().rect_filled(rect, 0, pal.nav_bg);
+        ui.painter().rect_filled(
+            Rect::from_min_max(Pos2::new(rect.right() - 1.0, rect.top()), rect.max),
+            0,
+            pal.card_border,
+        );
+        let account_h = 62.0;
+        // "Home" sits above the search box, as in Windows 10.
+        let home_rect = Rect::from_min_size(
+            rect.min + Vec2::new(0.0, 6.0),
+            Vec2::new(rect.width() - 1.0, 40.0),
+        );
+        ui.scope_builder(UiBuilder::new().max_rect(home_rect), |ui| {
+            ui.set_width(home_rect.width());
+            if nav_item(ui, pal, pal.accent, Icon::Home, "Home", false).clicked() {
+                self.go(View::Home);
+            }
+        });
+        let search_rect = Rect::from_min_size(
+            Pos2::new(rect.left() + 12.0, home_rect.bottom() + 6.0),
+            Vec2::new(rect.width() - 26.0, 36.0),
+        );
+        ui.scope_builder(
+            UiBuilder::new()
+                .max_rect(search_rect)
+                .layout(Layout::left_to_right(Align::Center)),
+            |ui| {
+                ui.set_width(search_rect.width());
+                widgets::search_box(
+                    ui,
+                    pal,
+                    &mut self.search,
+                    std::mem::take(&mut self.focus_search),
+                    "Find a setting",
+                );
+            },
+        );
+        let list_rect = Rect::from_min_max(
+            Pos2::new(rect.left(), search_rect.bottom() + 10.0),
+            Pos2::new(rect.right() - 1.0, rect.bottom() - account_h - 6.0),
+        );
+        let cat = Cat10::of(self.view);
+        ui.scope_builder(UiBuilder::new().max_rect(list_rect), |ui| {
+            ui.set_width(list_rect.width());
+            ScrollArea::vertical()
+                .id_salt("nav10")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.set_width(list_rect.width());
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    match cat {
+                        Some(cat) => {
+                            // The category name heads its own sub-pages.
+                            ui.add_space(4.0);
+                            ui.horizontal(|ui| {
+                                ui.add_space(16.0);
+                                ui.label(
+                                    egui::RichText::new(cat.title())
+                                        .font(semibold(15.0))
+                                        .color(pal.text),
+                                );
+                            });
+                            ui.add_space(10.0);
+                            for (label, icon, view) in cat.items() {
+                                let selected = Cat10::same(*view, self.view);
+                                if nav_item(ui, pal, pal.accent, *icon, label, selected).clicked() {
+                                    self.go(*view);
+                                }
+                            }
+                        }
+                        None => {
+                            for cat in Cat10::ALL {
+                                if nav_item(ui, pal, pal.accent, cat.icon(), cat.title(), false)
+                                    .clicked()
+                                {
+                                    self.go(cat.items()[0].2);
+                                }
+                            }
+                        }
+                    }
+                    ui.add_space(8.0);
+                });
+        });
+
+        // Account strip along the bottom of the pane.
+        let strip = Rect::from_min_max(
+            Pos2::new(rect.left(), rect.bottom() - account_h),
+            rect.max,
+        );
+        ui.painter().rect_filled(
+            Rect::from_min_size(strip.min, Vec2::new(strip.width(), 1.0)),
+            0,
+            pal.card_border,
+        );
+        ui.scope_builder(
+            UiBuilder::new()
+                .max_rect(strip.shrink2(Vec2::new(12.0, 8.0)))
+                .layout(Layout::left_to_right(Align::Center)),
+            |ui| {
+                avatar(ui, pal, &self.info.full_name, 32.0);
+                ui.add_space(10.0);
+                ui.vertical(|ui| {
+                    ui.spacing_mut().item_spacing.y = 1.0;
+                    ui.label(
+                        egui::RichText::new(&self.info.full_name)
+                            .font(semibold(13.0))
+                            .color(pal.text),
+                    );
+                    ui.label(
+                        egui::RichText::new(if self.info.is_admin {
+                            "Administrator"
+                        } else {
+                            "Standard user"
+                        })
+                        .font(regular(11.0))
+                        .color(pal.text_faint),
+                    );
+                });
+            },
+        );
+    }
+
+    fn content(&mut self, ui: &mut Ui, pal: &Palette, rect: Rect) {
         let view = self.view;
         let searching = !self.search.trim().is_empty();
+        if !searching && matches!(view, View::Home) && pal.design == crate::theme::Design::Win10 {
+            ui.scope_builder(UiBuilder::new().max_rect(rect), |ui| {
+                pages::home10(self, ui, rect, pal);
+            });
+            return;
+        }
         if !searching && matches!(view, View::Page(Page::Apps)) && !self.hub.tried {
             self.hub_refresh();
         }
-        if !searching
-            && matches!(view, View::Page(Page::Updates))
-            && self.updates_checked.is_none()
+        // Check for updates once per run, in the background, so the counts
+        // on Home, System, Apps › Updates and Software updates are real.
+        static AUTO_CHECKED: std::sync::atomic::AtomicBool =
+            std::sync::atomic::AtomicBool::new(false);
+        if self.updates_checked.is_none()
             && !self.updates_loading
+            && std::env::var("WIN11_SETTINGS_SCREENSHOT").is_err()
+            && !AUTO_CHECKED.swap(true, std::sync::atomic::Ordering::Relaxed)
         {
             self.check_updates();
         }
@@ -2068,11 +2427,20 @@ The network will not reconnect automatically."
                 .show(ui, |ui| {
                     ui.set_width(rect.width());
                     egui::Frame::new()
-                        .inner_margin(Margin {
-                            left: 34,
-                            right: 26,
-                            top: 8,
-                            bottom: 32,
+                        .inner_margin(if pal.design == crate::theme::Design::Win10 {
+                            Margin {
+                                left: 30,
+                                right: 24,
+                                top: 6,
+                                bottom: 30,
+                            }
+                        } else {
+                            Margin {
+                                left: 34,
+                                right: 26,
+                                top: 8,
+                                bottom: 32,
+                            }
                         })
                         .show(ui, |ui| {
                             ui.set_width(ui.available_width());
@@ -2081,6 +2449,13 @@ The network will not reconnect automatically."
                                 return;
                             }
                             match view {
+                                View::Home => {
+                                    if pal.design == crate::theme::Design::Win10 {
+                                        pages::home10(self, ui, rect, &pal)
+                                    } else {
+                                        pages::system(self, ui)
+                                    }
+                                }
                                 View::Page(Page::System) => pages::system(self, ui),
                                 View::Page(Page::Bluetooth) => pages::bluetooth(self, ui),
                                 View::Page(Page::Network) => pages::network(self, ui),
@@ -3071,7 +3446,7 @@ The network will not reconnect automatically."
         if maximized || fullscreen {
             return;
         }
-        let direction = resize_direction(pos, ctx.viewport_rect());
+        let direction = resize_direction(pos, ctx.viewport_rect(), title_height(self.design));
         if let Some(direction) = direction {
             ctx.send_viewport_cmd(ViewportCommand::BeginResize(direction));
         }
@@ -3094,11 +3469,15 @@ impl eframe::App for App {
         self.poll_background(&ctx);
         self.handle_shortcuts(&ctx);
 
-        if self.mode != self.last_mode || self.accent != self.last_accent {
-            let pal = Palette::new(self.mode, self.accent);
+        if self.mode != self.last_mode
+            || self.accent != self.last_accent
+            || self.design != self.last_design
+        {
+            let pal = Palette::new(self.mode, self.accent, self.design);
             theme::apply_style(&ctx, &pal, self.mode);
             self.last_mode = self.mode;
             self.last_accent = self.accent;
+            self.last_design = self.design;
         }
 
         let pal = self.pal();
@@ -3107,16 +3486,31 @@ impl eframe::App for App {
         let full = root.max_rect();
         root.painter().rect_filled(full, 0, pal.bg);
 
-        let title_rect = Rect::from_min_size(full.min, Vec2::new(full.width(), TITLE_H));
+        let title_h = title_height(self.design);
+        let title_rect = Rect::from_min_size(full.min, Vec2::new(full.width(), title_h));
         self.titlebar(root, &ctx, &pal, title_rect);
 
-        let body = Rect::from_min_max(Pos2::new(full.left(), full.top() + TITLE_H), full.max);
-        let sidebar_w = SIDEBAR_W.min(body.width() * 0.36).max(240.0);
-        let side_rect = Rect::from_min_size(body.min, Vec2::new(sidebar_w, body.height()));
-        let content_rect = Rect::from_min_max(Pos2::new(side_rect.right(), body.top()), body.max);
+        let body = Rect::from_min_max(Pos2::new(full.left(), full.top() + title_h), full.max);
+        // The Windows 10 home screen uses the full window width; every other
+        // view keeps its navigation pane.
+        let home = pal.design == crate::theme::Design::Win10
+            && matches!(self.view, View::Home)
+            && self.search.trim().is_empty();
+        if home {
+            self.content(root, &pal, body);
+        } else {
+            let sidebar_w = if pal.design == crate::theme::Design::Win10 {
+                SIDEBAR_W.min(body.width() * 0.32).max(220.0)
+            } else {
+                SIDEBAR_W.min(body.width() * 0.36).max(240.0)
+            };
+            let side_rect = Rect::from_min_size(body.min, Vec2::new(sidebar_w, body.height()));
+            let content_rect =
+                Rect::from_min_max(Pos2::new(side_rect.right(), body.top()), body.max);
 
-        self.sidebar(root, &pal, side_rect);
-        self.content(root, &pal, content_rect);
+            self.sidebar(root, &pal, side_rect);
+            self.content(root, &pal, content_rect);
+        }
 
         self.dialogs(&ctx, &pal);
         self.toast(&ctx, &pal);
@@ -3237,10 +3631,10 @@ fn parse_host_port(raw: &str) -> (String, u32) {
 /// Which window edge a press at `pos` should resize, if any. The caption
 /// buttons reach the window edge, so their outer margin must click the
 /// button, not start a resize (Close at the very corner, Windows 11 style).
-fn resize_direction(pos: Pos2, screen: Rect) -> Option<egui::ResizeDirection> {
+fn resize_direction(pos: Pos2, screen: Rect, title_h: f32) -> Option<egui::ResizeDirection> {
     let captions = Rect::from_min_max(
         Pos2::new(screen.right() - 46.0 * 3.0, screen.top()),
-        Pos2::new(screen.right(), screen.top() + TITLE_H),
+        Pos2::new(screen.right(), screen.top() + title_h),
     );
     if captions.contains(pos) {
         return None;
@@ -3275,16 +3669,20 @@ mod resize_tests {
     #[test]
     fn close_button_margin_is_not_a_resize_edge() {
         for pos in [(1279.0, 0.0), (1279.0, 20.0), (1250.0, 0.0), (1145.0, 2.0), (1279.0, 47.0)] {
-            assert_eq!(resize_direction(Pos2::new(pos.0, pos.1), screen()), None, "{pos:?}");
+            assert_eq!(
+                resize_direction(Pos2::new(pos.0, pos.1), screen(), TITLE_H),
+                None,
+                "{pos:?}"
+            );
         }
     }
 
     #[test]
     fn edges_outside_captions_still_resize() {
-        assert_eq!(resize_direction(Pos2::new(1279.0, 100.0), screen()), Some(D::East));
-        assert_eq!(resize_direction(Pos2::new(500.0, 1.0), screen()), Some(D::North));
-        assert_eq!(resize_direction(Pos2::new(1.0, 1.0), screen()), Some(D::NorthWest));
-        assert_eq!(resize_direction(Pos2::new(1279.0, 799.0), screen()), Some(D::SouthEast));
-        assert_eq!(resize_direction(Pos2::new(600.0, 400.0), screen()), None);
+        assert_eq!(resize_direction(Pos2::new(1279.0, 100.0), screen(), TITLE_H), Some(D::East));
+        assert_eq!(resize_direction(Pos2::new(500.0, 1.0), screen(), TITLE_H), Some(D::North));
+        assert_eq!(resize_direction(Pos2::new(1.0, 1.0), screen(), TITLE_H), Some(D::NorthWest));
+        assert_eq!(resize_direction(Pos2::new(1279.0, 799.0), screen(), TITLE_H), Some(D::SouthEast));
+        assert_eq!(resize_direction(Pos2::new(600.0, 400.0), screen(), TITLE_H), None);
     }
 }
