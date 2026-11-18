@@ -594,6 +594,9 @@ pub struct HubState {
     /// Every installed desktop app on the system (All Apps inventory).
     pub sys_apps: Vec<inventory::SysApp>,
     pub sys_loading: bool,
+    /// The app being uninstalled: (channel, id, desktop file). Dropped from
+    /// `sys_apps` as soon as the uninstall succeeds.
+    pub sys_removing: Option<(String, String, String)>,
     pub sys_error: Option<String>,
     pub loading: bool,
     pub error: Option<String>,
@@ -1176,6 +1179,22 @@ impl App {
         });
     }
 
+    /// Read the installed-apps list again in the background. The old list
+    /// stays on screen until the new one arrives.
+    pub fn reload_sys_apps(&mut self) {
+        if self.hub.sys_apps.is_empty() && self.hub.sys_rx.is_none() {
+            // Never loaded: the All Apps tab loads it when opened.
+            return;
+        }
+        self.hub.sys_error = None;
+        self.hub.sys_loading = true;
+        let (tx, rx) = mpsc::channel();
+        self.hub.sys_rx = Some(rx);
+        std::thread::spawn(move || {
+            let _ = tx.send(inventory::list());
+        });
+    }
+
     /// Refresh the App Hub catalogue, Library and the standalone installed-apps
     /// inventory in the background (network work happens inside `app-hub list`,
     /// which is what App Hub itself does).
@@ -1625,6 +1644,16 @@ Your personal files are kept."
             self.hub.job = None;
             self.hub.tried = false;
             self.hub_refresh();
+            // The installed-apps list was loaded once; read it again so
+            // an uninstalled (or newly installed) app shows the change.
+            if let Some((channel, id, desktop)) = self.hub.sys_removing.take() {
+                if success {
+                    self.hub
+                        .sys_apps
+                        .retain(|a| !(a.channel == channel && a.id == id && a.desktop == desktop));
+                }
+            }
+            self.reload_sys_apps();
         } else if success {
             self.record_activity(
                 format!("{label} completed"),
@@ -3658,6 +3687,8 @@ The network will not reconnect automatically."
                     self.confirm = None;
                     let label = format!("Uninstalling {}", app.name);
                     self.record_activity(label.clone(), "Started.", false);
+                    self.hub.sys_removing =
+                        Some((app.channel.clone(), app.id.clone(), app.desktop.clone()));
                     self.hub.job = Some(HubJob {
                         label,
                         log: Vec::new(),

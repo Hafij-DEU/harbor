@@ -145,7 +145,10 @@ fn status_fields(rest: &str) -> Option<(f32, &str)> {
 
 /// "Need to get 45.2 MB of archives." / "Need to get 1,234 kB/2,345 kB of archives."
 fn need_to_get(line: &str) -> Option<f64> {
-    let rest = line.strip_prefix("Need to get ")?;
+    // apt 3 prints "Download size: 1,234 kB / 2,345 kB" (to get / total).
+    let rest = line
+        .strip_prefix("Need to get ")
+        .or_else(|| line.strip_prefix("Download size: "))?;
     let mut words = rest.split_whitespace();
     let number: f64 = words.next()?.replace(',', "").parse().ok()?;
     let unit = words.next()?.split('/').next()?;
@@ -428,6 +431,11 @@ mod tests {
             Some(1_234_000.0)
         );
         assert_eq!(need_to_get("Need to get 0 B/1 MB of archives."), Some(0.0));
+        assert_eq!(
+            need_to_get("Download size: 12.5 MB / 40 MB"),
+            Some(12_500_000.0)
+        );
+        assert_eq!(need_to_get("Download size: 3,544 kB"), Some(3_544_000.0));
     }
 
     #[test]
