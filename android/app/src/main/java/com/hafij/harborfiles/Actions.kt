@@ -26,15 +26,35 @@ private fun localCopy(ctx: Context, fs: Fs, e: Entry): File {
     return f
 }
 
+const val APK_MIME = "application/vnd.android.package-archive"
+
+fun isApk(name: String) = name.endsWith(".apk", ignoreCase = true)
+
 suspend fun openEntry(state: AppState, fs: Fs, e: Entry, chooser: Boolean = false) {
     val ctx = state.ctx
+    // Android only hands an APK to the installer once the user allows this app
+    // to install unknown apps. Send them to that switch first.
+    if (isApk(e.name) && !chooser && !ctx.packageManager.canRequestPackageInstalls()) {
+        state.toast("Allow Harbor Files to install apps, then tap the APK again")
+        try {
+            ctx.startActivity(
+                Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:${ctx.packageName}"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (_: ActivityNotFoundException) {}
+        return
+    }
     if (!fs.isLocal) state.busy = "Downloading ${e.name}…"
     val f = try { withContext(Dispatchers.IO) { localCopy(ctx, fs, e) } } catch (x: Exception) {
         state.toast(x.message ?: "Couldn't open"); return
     } finally { state.busy = null }
-    val mime = e.mime ?: mimeOf(e.name)
+    val apk = isApk(e.name)
+    val mime = if (apk) APK_MIME else e.mime ?: mimeOf(e.name)
+    // The installer rejects a write grant on an APK, so APKs get read only.
+    val grant = if (apk) Intent.FLAG_GRANT_READ_URI_PERMISSION
+    else Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
     val i = Intent(Intent.ACTION_VIEW).setDataAndType(uriFor(ctx, f), mime)
-        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        .addFlags(grant or Intent.FLAG_ACTIVITY_NEW_TASK)
     try {
         ctx.startActivity(if (chooser) Intent.createChooser(i, "Open with").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) else i)
     } catch (_: ActivityNotFoundException) {
