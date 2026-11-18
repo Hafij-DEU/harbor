@@ -690,7 +690,7 @@ const FUSION_KEYS: &[(&str, &str)] = &[
     ("activities-visible", "Activities button"),
     ("taskbar-visible", "Taskbar"),
     ("windows-extras-in-fusion", "Search and Task View buttons"),
-    ("settings-button", "Settings button"),
+    ("settings-button", "Settings on the taskbar"),
     ("apps-visible", "Show Applications button"),
     ("title-visible", "Window title"),
     ("workspaces-visible", "Workspace switcher"),
