@@ -432,8 +432,8 @@ impl Info {
             }
             let _ = fs::write(&marker, "1\n");
         }
-        info.night_light_scheduled =
-            info.night_light_auto || !night_light_all_day(info.night_light_from, info.night_light_to);
+        info.night_light_scheduled = info.night_light_auto
+            || !night_light_all_day(info.night_light_from, info.night_light_to);
         info.idle_delay = gs_uint("org.gnome.desktop.session", "idle-delay").unwrap_or(300);
 
         info.clock_show_date =
@@ -444,8 +444,7 @@ impl Info {
             gs_bool("org.gnome.desktop.interface", "clock-show-seconds").unwrap_or(false);
         info.battery_percentage =
             gs_bool("org.gnome.desktop.interface", "show-battery-percentage").unwrap_or(true);
-        info.cursor_size =
-            gs_uint("org.gnome.desktop.interface", "cursor-size").unwrap_or(24);
+        info.cursor_size = gs_uint("org.gnome.desktop.interface", "cursor-size").unwrap_or(24);
 
         info.mouse_speed = gsettings_text("org.gnome.desktop.peripherals.mouse", "speed")
             .parse::<f32>()
@@ -458,12 +457,16 @@ impl Info {
             gs_bool("org.gnome.desktop.peripherals.touchpad", "tap-to-click").unwrap_or(true);
         info.touchpad_natural =
             gs_bool("org.gnome.desktop.peripherals.touchpad", "natural-scroll").unwrap_or(false);
-        info.touchpad_disable_typing =
-            gs_bool("org.gnome.desktop.peripherals.touchpad", "disable-while-typing")
-                .unwrap_or(true);
-        info.touchpad_two_finger =
-            gs_bool("org.gnome.desktop.peripherals.touchpad", "two-finger-scrolling-enabled")
-                .unwrap_or(true);
+        info.touchpad_disable_typing = gs_bool(
+            "org.gnome.desktop.peripherals.touchpad",
+            "disable-while-typing",
+        )
+        .unwrap_or(true);
+        info.touchpad_two_finger = gs_bool(
+            "org.gnome.desktop.peripherals.touchpad",
+            "two-finger-scrolling-enabled",
+        )
+        .unwrap_or(true);
         info.touchpad_speed = gsettings_text("org.gnome.desktop.peripherals.touchpad", "speed")
             .parse::<f32>()
             .unwrap_or(0.0);
@@ -486,13 +489,18 @@ impl Info {
             "sleep-inactive-battery-type",
         )
         .contains("suspend");
-        info.lid_ac = gsettings_text("org.gnome.settings-daemon.plugins.power", "lid-close-ac-action")
-            .trim_matches('\'')
-            .to_owned();
-        info.lid_battery =
-            gsettings_text("org.gnome.settings-daemon.plugins.power", "lid-close-battery-action")
-                .trim_matches('\'')
-                .to_owned();
+        info.lid_ac = gsettings_text(
+            "org.gnome.settings-daemon.plugins.power",
+            "lid-close-ac-action",
+        )
+        .trim_matches('\'')
+        .to_owned();
+        info.lid_battery = gsettings_text(
+            "org.gnome.settings-daemon.plugins.power",
+            "lid-close-battery-action",
+        )
+        .trim_matches('\'')
+        .to_owned();
         info.power_button = gsettings_text(
             "org.gnome.settings-daemon.plugins.power",
             "power-button-action",
@@ -580,13 +588,11 @@ impl Info {
         info.proxy_http_host = gsettings_text("org.gnome.system.proxy.http", "host")
             .trim_matches('\'')
             .to_owned();
-        info.proxy_http_port =
-            gs_uint("org.gnome.system.proxy.http", "port").unwrap_or(8080);
+        info.proxy_http_port = gs_uint("org.gnome.system.proxy.http", "port").unwrap_or(8080);
         info.proxy_socks_host = gsettings_text("org.gnome.system.proxy.socks", "host")
             .trim_matches('\'')
             .to_owned();
-        info.proxy_socks_port =
-            gs_uint("org.gnome.system.proxy.socks", "port").unwrap_or(1080);
+        info.proxy_socks_port = gs_uint("org.gnome.system.proxy.socks", "port").unwrap_or(1080);
         info.proxy_ignore = gsettings_text("org.gnome.system.proxy", "ignore-hosts")
             .trim()
             .trim_start_matches("@as")
@@ -1019,7 +1025,11 @@ fn display_monitors() -> Vec<DisplayMonitor> {
                     .unwrap_or(&[])
                 {
                     modes.push(DisplayMode {
-                        id: m.get("id").and_then(|v| v.as_str()).unwrap_or_default().to_owned(),
+                        id: m
+                            .get("id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default()
+                            .to_owned(),
                         width: m.get("width").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
                         height: m.get("height").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
                         rate: m.get("rate").and_then(|v| v.as_f64()).unwrap_or(60.0) as f32,
@@ -1083,7 +1093,9 @@ fn display_monitors_xrandr() -> Vec<DisplayMonitor> {
         for token in &fields[1..] {
             let current = token.contains('*');
             let hz = token.trim_end_matches(['*', '+']);
-            let Ok(rate) = hz.parse::<f32>() else { continue };
+            let Ok(rate) = hz.parse::<f32>() else {
+                continue;
+            };
             monitor.modes.push(DisplayMode {
                 id: (*mode).to_owned(),
                 width: w,
@@ -1288,8 +1300,12 @@ fn input_sources() -> Vec<String> {
     let mut rest = raw.as_str();
     while let Some(pos) = rest.find("('xkb'") {
         let after = rest[pos + "('xkb'".len()..].trim_start();
-        let Some(after) = after.strip_prefix(',') else { break };
-        let Some(after) = after.trim_start().strip_prefix('\'') else { break };
+        let Some(after) = after.strip_prefix(',') else {
+            break;
+        };
+        let Some(after) = after.trim_start().strip_prefix('\'') else {
+            break;
+        };
         let Some(end) = after.find('\'') else { break };
         let id = after[..end].trim();
         if !id.is_empty() {
@@ -1311,7 +1327,12 @@ pub fn set_input_sources(ids: &[String]) -> bool {
         .collect::<Vec<_>>()
         .join(", ");
     Command::new("gsettings")
-        .args(["set", "org.gnome.desktop.input-sources", "sources", &format!("[{tuple}]")])
+        .args([
+            "set",
+            "org.gnome.desktop.input-sources",
+            "sources",
+            &format!("[{tuple}]"),
+        ])
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
@@ -1542,7 +1563,9 @@ fn desktop_entries() -> Vec<(String, String, String, String)> {
     ];
     if let Ok(home) = std::env::var("HOME") {
         roots.push(format!("{home}/.local/share/applications"));
-        roots.push(format!("{home}/.local/share/flatpak/exports/share/applications"));
+        roots.push(format!(
+            "{home}/.local/share/flatpak/exports/share/applications"
+        ));
     }
     let mut found: Vec<(String, String, String, String)> = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -1841,7 +1864,9 @@ fn desktop_file_exists(id: &str) -> bool {
         .map(|d| d.join("applications"))
         .collect();
     if let Ok(home) = std::env::var("HOME") {
-        roots.push(std::path::PathBuf::from(format!("{home}/.local/share/applications")));
+        roots.push(std::path::PathBuf::from(format!(
+            "{home}/.local/share/applications"
+        )));
     }
     roots.iter().any(|root| root.join(id).is_file())
 }
@@ -1901,7 +1926,12 @@ fn xdg_defaults() -> std::collections::HashMap<String, String> {
     for dir in data.iter().rev() {
         let apps = dir.join("applications");
         for name in ["mimeinfo.cache", "defaults.list"] {
-            parse_associations(&apps.join(format!("{menu_prefix}{name}")), false, false, &mut map);
+            parse_associations(
+                &apps.join(format!("{menu_prefix}{name}")),
+                false,
+                false,
+                &mut map,
+            );
             if !menu_prefix.is_empty() {
                 parse_associations(&apps.join(name), false, false, &mut map);
             }
@@ -1998,32 +2028,34 @@ pub fn list_timezones() -> Vec<String> {
                     .map(str::to_owned)
                     .collect();
             }
-    // Fall back to the zoneinfo tree.
-    let mut zones = Vec::new();
-    fn walk(dir: &std::path::Path, zones: &mut Vec<String>) {
-        let Ok(entries) = fs::read_dir(dir) else { return };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                walk(&path, zones);
-            } else if let Ok(rel) = path.strip_prefix("/usr/share/zoneinfo") {
-                let rel = rel.to_string_lossy().replace('\\', "/");
-                if !rel.is_empty()
-                    && !rel.ends_with(".tab")
-                    && !rel.ends_with(".list")
-                    && !rel.starts_with("posix/")
-                    && !rel.starts_with("right/")
-                    && rel != "posixrules"
-                {
-                    zones.push(rel);
+            // Fall back to the zoneinfo tree.
+            let mut zones = Vec::new();
+            fn walk(dir: &std::path::Path, zones: &mut Vec<String>) {
+                let Ok(entries) = fs::read_dir(dir) else {
+                    return;
+                };
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        walk(&path, zones);
+                    } else if let Ok(rel) = path.strip_prefix("/usr/share/zoneinfo") {
+                        let rel = rel.to_string_lossy().replace('\\', "/");
+                        if !rel.is_empty()
+                            && !rel.ends_with(".tab")
+                            && !rel.ends_with(".list")
+                            && !rel.starts_with("posix/")
+                            && !rel.starts_with("right/")
+                            && rel != "posixrules"
+                        {
+                            zones.push(rel);
+                        }
+                    }
                 }
             }
-        }
-    }
-    walk(std::path::Path::new("/usr/share/zoneinfo"), &mut zones);
-    zones.sort();
-    zones.dedup();
-    zones
+            walk(std::path::Path::new("/usr/share/zoneinfo"), &mut zones);
+            zones.sort();
+            zones.dedup();
+            zones
         })
         .clone()
 }
@@ -2035,7 +2067,10 @@ pub fn local_time() -> String {
 
 /// Set the system time zone. Requires administrator authorisation via pkexec.
 pub fn set_timezone(tz: &str) -> bool {
-    if !tz.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '-' | '_' | '+')) {
+    if !tz
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '-' | '_' | '+'))
+    {
         return false;
     }
     Command::new("pkexec")
@@ -2174,11 +2209,7 @@ fn dconf_begin() {
 
 fn gsettings_text(schema: &str, key: &str) -> String {
     let path = format!("/{}/{}", schema.replace('.', "/"), key);
-    if let Some(v) = DCONF.with(|c| {
-        c.borrow()
-            .as_ref()
-            .and_then(|m| m.get(&path).cloned())
-    }) {
+    if let Some(v) = DCONF.with(|c| c.borrow().as_ref().and_then(|m| m.get(&path).cloned())) {
         return v;
     }
     sh(&format!("gsettings get {} {} 2>/dev/null", schema, key))
@@ -2390,7 +2421,11 @@ pub fn set_muted(muted: bool) -> bool {
 pub fn set_input_volume(pct: u32) -> bool {
     if command_exists("pactl") {
         return Command::new("pactl")
-            .args(["set-source-volume", "@DEFAULT_SOURCE@", &format!("{}%", pct)])
+            .args([
+                "set-source-volume",
+                "@DEFAULT_SOURCE@",
+                &format!("{}%", pct),
+            ])
             .status()
             .map(|s| s.success())
             .unwrap_or(false);
@@ -2621,7 +2656,11 @@ pub fn set_repeat_delay(ms: u32) -> bool {
 }
 
 pub fn set_repeat_interval(ms: u32) -> bool {
-    gsettings_set_uint("org.gnome.desktop.peripherals.keyboard", "repeat-interval", ms)
+    gsettings_set_uint(
+        "org.gnome.desktop.peripherals.keyboard",
+        "repeat-interval",
+        ms,
+    )
 }
 
 fn gsettings_set_uint(schema: &str, key: &str, value: u32) -> bool {
@@ -2998,22 +3037,22 @@ fn flatpak_updates() -> Vec<PackageUpdate> {
 }
 
 pub fn install_package(package: &str) -> std::sync::mpsc::Receiver<crate::jobs::JobEvent> {
-        let mut cmd = Command::new("pkexec");
-        cmd.arg("env")
-            .arg("DEBIAN_FRONTEND=noninteractive")
-            .args([
-                "apt-get",
-                "-y",
-                "-o",
-                "Dpkg::Options::=--force-confdef",
-                "-o",
-                "Dpkg::Options::=--force-confold",
-                "install",
-                package,
-            ])
-            .stdin(Stdio::null());
-        crate::jobs::spawn(cmd)
-    }
+    let mut cmd = Command::new("pkexec");
+    cmd.arg("env")
+        .arg("DEBIAN_FRONTEND=noninteractive")
+        .args([
+            "apt-get",
+            "-y",
+            "-o",
+            "Dpkg::Options::=--force-confdef",
+            "-o",
+            "Dpkg::Options::=--force-confold",
+            "install",
+            package,
+        ])
+        .stdin(Stdio::null());
+    crate::jobs::spawn(cmd)
+}
 
 /// `apt-get update` through PolicyKit; streams output lines.
 pub fn refresh_package_lists() -> std::sync::mpsc::Receiver<crate::jobs::JobEvent> {
@@ -3051,7 +3090,6 @@ pub fn install_updates() -> std::sync::mpsc::Receiver<crate::jobs::JobEvent> {
     cmd.args(["-c", &script]).stdin(Stdio::null());
     crate::jobs::spawn(cmd)
 }
-
 
 pub fn reboot_required() -> bool {
     Path::new("/var/run/reboot-required").exists()
@@ -3191,6 +3229,31 @@ fn design_path() -> Option<std::path::PathBuf> {
     Some(base.join("win11-settings").join("ui"))
 }
 
+/// Whether the Windows 10 home cards list their pages. On unless turned off;
+/// `WIN11_SETTINGS_HOME_LINKS=0|1` overrides it for screenshot runs.
+pub fn saved_home_links() -> bool {
+    if let Ok(value) = std::env::var("WIN11_SETTINGS_HOME_LINKS") {
+        return value != "0";
+    }
+    design_path()
+        .and_then(|p| fs::read_to_string(p.with_file_name("home-links")).ok())
+        .map(|text| text.trim() != "off")
+        .unwrap_or(true)
+}
+
+pub fn save_home_links(on: bool) {
+    if std::env::var("WIN11_SETTINGS_HOME_LINKS").is_ok() {
+        return;
+    }
+    let Some(path) = design_path().map(|p| p.with_file_name("home-links")) else {
+        return;
+    };
+    if let Some(dir) = path.parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    let _ = fs::write(path, if on { "on" } else { "off" });
+}
+
 /// The interface design chosen in Personalisation. `WIN11_SETTINGS_UI`
 /// overrides the saved choice (used by the screenshot and test runs).
 pub fn saved_design() -> Option<crate::theme::Design> {
@@ -3274,8 +3337,7 @@ pub fn accessibility() -> A11y {
         visual_alerts: gs_bool("org.gnome.desktop.wm.preferences", "visual-bell").unwrap_or(false),
         sticky_keys: gs_bool("org.gnome.desktop.a11y.keyboard", "stickykeys-enable")
             .unwrap_or(false),
-        mouse_keys: gs_bool("org.gnome.desktop.a11y.keyboard", "mousekeys-enable")
-            .unwrap_or(false),
+        mouse_keys: gs_bool("org.gnome.desktop.a11y.keyboard", "mousekeys-enable").unwrap_or(false),
         animations: gs_bool("org.gnome.desktop.interface", "enable-animations").unwrap_or(true),
     }
 }
@@ -3406,7 +3468,9 @@ pub fn set_autologin(on: bool, user: &str) -> Result<(), String> {
         ));
     }
     status_ok(
-        Command::new("pkexec").args(["bash", "-c", &script]).status(),
+        Command::new("pkexec")
+            .args(["bash", "-c", &script])
+            .status(),
         "The login manager refused the change",
     )
 }
@@ -3488,7 +3552,10 @@ fn clean_error(raw: &str, fallback: &str) -> String {
     }
 }
 
-fn status_ok(status: std::io::Result<std::process::ExitStatus>, fallback: &str) -> Result<(), String> {
+fn status_ok(
+    status: std::io::Result<std::process::ExitStatus>,
+    fallback: &str,
+) -> Result<(), String> {
     match status {
         Ok(s) if s.success() => Ok(()),
         Ok(_) => Err(fallback.to_owned()),
@@ -3561,7 +3628,11 @@ pub fn set_proxy(
         && gsettings_set_uint("org.gnome.system.proxy.http", "port", http_port)
         && gsettings_set_string("org.gnome.system.proxy.socks", "host", socks_host)
         && gsettings_set_uint("org.gnome.system.proxy.socks", "port", socks_port)
-        && gsettings_set_raw("org.gnome.system.proxy", "ignore-hosts", &format!("[{hosts}]"))
+        && gsettings_set_raw(
+            "org.gnome.system.proxy",
+            "ignore-hosts",
+            &format!("[{hosts}]"),
+        )
 }
 
 /// Turn the Wi-Fi radio itself on or off.
@@ -3612,9 +3683,8 @@ pub fn set_locale(locale: &str) -> Result<(), String> {
         return Err("pkexec is required to change the language".to_owned());
     }
     let locale = locale.replace(['\'', ' ', '\n'], "");
-    let script = format!(
-        "locale-gen '{locale}' >/dev/null 2>&1; localectl set-locale LANG='{locale}'"
-    );
+    let script =
+        format!("locale-gen '{locale}' >/dev/null 2>&1; localectl set-locale LANG='{locale}'");
     let out = sh(&format!("pkexec bash -c {} 2>&1", shell_quote(&script)));
     if out.contains("Error") || out.contains("error") {
         Err(clean_error(&out, "The language was not changed"))
@@ -3687,4 +3757,3 @@ pub fn launch_desktop(path: &str) -> bool {
         .spawn()
         .is_ok()
 }
-

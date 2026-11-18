@@ -126,12 +126,10 @@ fn chip(ui: &mut Ui, pal: &Palette, s: &str) {
         .painter()
         .layout_no_wrap(s.to_owned(), regular(12.0), pal.text);
     let (rect, _) = ui.allocate_exact_size(galley.size() + Vec2::new(20.0, 10.0), Sense::hover());
-    ui.painter().rect_filled(rect, 99, pal.accent.gamma_multiply(0.14));
-    ui.painter().galley(
-        rect.center() - galley.size() / 2.0,
-        galley,
-        pal.text,
-    );
+    ui.painter()
+        .rect_filled(rect, 99, pal.accent.gamma_multiply(0.14));
+    ui.painter()
+        .galley(rect.center() - galley.size() / 2.0, galley, pal.text);
 }
 
 pub fn show(app: &mut App, ctx: &Context, pal: &Palette) {
@@ -261,7 +259,14 @@ fn welcome_page(ui: &mut Ui, pal: &Palette, w: &mut Welcome, close: &mut bool) {
     ui.vertical_centered(|ui| {
         ui.add_space(26.0);
         let (rect, _) = ui.allocate_exact_size(Vec2::splat(76.0), Sense::hover());
-        widgets::icon_tile(ui.painter(), rect, Icon::System, pal.accent, pal.on_accent, pal);
+        widgets::icon_tile(
+            ui.painter(),
+            rect,
+            Icon::System,
+            pal.accent,
+            pal.on_accent,
+            pal,
+        );
         ui.add_space(18.0);
         title(ui, "Welcome to Settings", 30.0, pal.text);
         ui.add_space(6.0);
@@ -378,7 +383,10 @@ fn look_page(app: &mut App, ui: &mut Ui, pal: &Palette) {
             };
             let (rect, resp) = ui.allocate_exact_size(card, Sense::click());
             let (bg, fg) = if preview_mode == Mode::Light {
-                (Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x20, 0x20, 0x20))
+                (
+                    Color32::from_rgb(0xF3, 0xF3, 0xF3),
+                    Color32::from_rgb(0x20, 0x20, 0x20),
+                )
             } else {
                 (Color32::from_rgb(0x20, 0x20, 0x20), Color32::WHITE)
             };
@@ -391,7 +399,11 @@ fn look_page(app: &mut App, ui: &mut Ui, pal: &Palette) {
                 8,
                 Stroke::new(
                     if selected { 2.0 } else { 1.0 },
-                    if selected { pal.accent } else { pal.card_border },
+                    if selected {
+                        pal.accent
+                    } else {
+                        pal.card_border
+                    },
                 ),
                 StrokeKind::Inside,
             );
@@ -463,13 +475,16 @@ fn finish_page(app: &mut App, ui: &mut Ui, pal: &Palette, w: &mut Welcome) {
         "Ubuntu accent"
     } else {
         ACCENTS
-        .iter()
-        .find(|(_, c)| *c == app.accent)
-        .map(|(n, _)| *n)
-        .unwrap_or("Custom")
+            .iter()
+            .find(|(_, c)| *c == app.accent)
+            .map(|(n, _)| *n)
+            .unwrap_or("Custom")
     };
     widgets::card(ui, pal, |ui| {
-        for (icon, label, value) in [(Icon::Moon, "Mode", mode), (Icon::Personalise, "Accent", accent)] {
+        for (icon, label, value) in [
+            (Icon::Moon, "Mode", mode),
+            (Icon::Personalise, "Accent", accent),
+        ] {
             ui.horizontal(|ui| {
                 ui.add_space(16.0);
                 let (rect, _) = ui.allocate_exact_size(Vec2::new(22.0, 44.0), Sense::hover());
@@ -524,12 +539,19 @@ fn footer(ui: &mut Ui, pal: &Palette, w: &mut Welcome, finish: &mut bool) {
                 w.step -= 1;
             }
         }
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            match w.step {
+        ui.with_layout(
+            egui::Layout::right_to_left(egui::Align::Center),
+            |ui| match w.step {
                 0 => {}
                 3 => {
-                    if widgets::button(ui, pal, pal.accent, "Start using Settings", Some(Icon::Check))
-                        .clicked()
+                    if widgets::button(
+                        ui,
+                        pal,
+                        pal.accent,
+                        "Start using Settings",
+                        Some(Icon::Check),
+                    )
+                    .clicked()
                     {
                         *finish = true;
                     }
@@ -542,13 +564,11 @@ fn footer(ui: &mut Ui, pal: &Palette, w: &mut Welcome, finish: &mut bool) {
                             w.step += 1;
                         }
                     }
-                    if w.step == 1
-                        && widgets::ghost_button(ui, pal, "Skip tour", None).clicked()
-                    {
+                    if w.step == 1 && widgets::ghost_button(ui, pal, "Skip tour", None).clicked() {
                         w.step = 2;
                     }
                 }
-            }
-        });
+            },
+        );
     });
 }

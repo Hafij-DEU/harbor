@@ -5,14 +5,14 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use eframe::egui::{
-    self, Align, Align2, Color32, Context, CursorIcon, Id, Layout, Margin, Pos2, Rect,
-    ScrollArea, Sense, Stroke, StrokeKind, Ui, UiBuilder, Vec2, ViewportCommand,
+    self, Align, Align2, Color32, Context, CursorIcon, Id, Layout, Margin, Pos2, Rect, ScrollArea,
+    Sense, Stroke, StrokeKind, Ui, UiBuilder, Vec2, ViewportCommand,
 };
 
 use crate::cleaner;
 use crate::hub::{self, Action as HubAction, HubApp};
-use crate::inventory;
 use crate::icons::Icon;
+use crate::inventory;
 use crate::pages;
 use crate::system::{self, Info};
 use crate::theme::{self, regular, semibold, Mode, Palette, ACCENTS};
@@ -115,6 +115,9 @@ pub enum Detail {
     Pointer,
     Keyboard,
     DefaultApps,
+    /// One section of Desktop & windows (index into `desktop::SECTIONS`,
+    /// the last one is Startup apps).
+    Desk(u8),
 }
 
 impl Detail {
@@ -129,6 +132,7 @@ impl Detail {
             Detail::Pointer => "Mouse & touchpad",
             Detail::Keyboard => "Keyboard",
             Detail::DefaultApps => "Default applications",
+            Detail::Desk(i) => crate::desktop::section_name(i),
         }
     }
 }
@@ -141,6 +145,8 @@ pub enum Cat10 {
     Devices,
     Network,
     Personalisation,
+    Desktop,
+    Fusion,
     Apps,
     Accounts,
     Time,
@@ -150,11 +156,13 @@ pub enum Cat10 {
 }
 
 impl Cat10 {
-    pub const ALL: [Cat10; 10] = [
+    pub const ALL: [Cat10; 12] = [
         Cat10::System,
         Cat10::Devices,
         Cat10::Network,
         Cat10::Personalisation,
+        Cat10::Desktop,
+        Cat10::Fusion,
         Cat10::Apps,
         Cat10::Accounts,
         Cat10::Time,
@@ -169,6 +177,8 @@ impl Cat10 {
             Cat10::Devices => "Devices",
             Cat10::Network => "Network & Internet",
             Cat10::Personalisation => "Personalisation",
+            Cat10::Desktop => "Desktop & Windows",
+            Cat10::Fusion => "Fusion Desk",
             Cat10::Apps => "Apps",
             Cat10::Accounts => "Accounts",
             Cat10::Time => "Time & Language",
@@ -183,7 +193,9 @@ impl Cat10 {
             Cat10::System => "Display, sound, notifications",
             Cat10::Devices => "Bluetooth, mouse, keyboard",
             Cat10::Network => "Wi-Fi, wired, proxy",
-            Cat10::Personalisation => "Background, taskbar, extensions",
+            Cat10::Personalisation => "Background, colours, extensions",
+            Cat10::Desktop => "Multitasking, dock, windows, themes",
+            Cat10::Fusion => "Panel, taskbar, start menu, glass",
             Cat10::Apps => "Install, defaults, compatibility",
             Cat10::Accounts => "Your info, sign-in options",
             Cat10::Time => "Date, time, language, region",
@@ -199,6 +211,8 @@ impl Cat10 {
             Cat10::Devices => Icon::Keyboard,
             Cat10::Network => Icon::Globe,
             Cat10::Personalisation => Icon::Personalise,
+            Cat10::Desktop => Icon::Display,
+            Cat10::Fusion => Icon::Sparkle,
             Cat10::Apps => Icon::Apps,
             Cat10::Accounts => Icon::Accounts,
             Cat10::Time => Icon::Clock,
@@ -213,37 +227,176 @@ impl Cat10 {
         match self {
             Cat10::System => &[
                 ("Overview", Icon::System, View::Page(Page::System)),
-                ("Display", Icon::Display, View::Detail(Page::System, Detail::Display)),
-                ("Sound", Icon::Sound, View::Detail(Page::System, Detail::Sound)),
+                (
+                    "Display",
+                    Icon::Display,
+                    View::Detail(Page::System, Detail::Display),
+                ),
+                (
+                    "Sound",
+                    Icon::Sound,
+                    View::Detail(Page::System, Detail::Sound),
+                ),
                 (
                     "Notifications & actions",
                     Icon::Bell,
                     View::Detail(Page::System, Detail::Notifications),
                 ),
-                ("Power & battery", Icon::Battery, View::Detail(Page::System, Detail::Power)),
-                ("Storage", Icon::Storage, View::Detail(Page::System, Detail::Storage)),
-                ("About", Icon::Info, View::Detail(Page::System, Detail::About)),
+                (
+                    "Power & battery",
+                    Icon::Battery,
+                    View::Detail(Page::System, Detail::Power),
+                ),
+                (
+                    "Storage",
+                    Icon::Storage,
+                    View::Detail(Page::System, Detail::Storage),
+                ),
+                (
+                    "About",
+                    Icon::Info,
+                    View::Detail(Page::System, Detail::About),
+                ),
             ],
             Cat10::Devices => &[
-                ("Bluetooth & other devices", Icon::Bluetooth, View::Page(Page::Bluetooth)),
-                ("Mouse & touchpad", Icon::Pointer, View::Detail(Page::Bluetooth, Detail::Pointer)),
-                ("Keyboard", Icon::Keyboard, View::Detail(Page::Bluetooth, Detail::Keyboard)),
+                (
+                    "Bluetooth & other devices",
+                    Icon::Bluetooth,
+                    View::Page(Page::Bluetooth),
+                ),
+                (
+                    "Mouse & touchpad",
+                    Icon::Pointer,
+                    View::Detail(Page::Bluetooth, Detail::Pointer),
+                ),
+                (
+                    "Keyboard",
+                    Icon::Keyboard,
+                    View::Detail(Page::Bluetooth, Detail::Keyboard),
+                ),
             ],
             Cat10::Network => &[("Status", Icon::Wifi, View::Page(Page::Network))],
             Cat10::Personalisation => &[
-                ("Background & colours", Icon::Personalise, View::Page(Page::Personalisation)),
-                ("Taskbar & windows", Icon::Display, View::Page(Page::Desktop)),
+                (
+                    "Background & colours",
+                    Icon::Personalise,
+                    View::Page(Page::Personalisation),
+                ),
                 ("Extensions", Icon::Hub, View::Page(Page::Extensions)),
+            ],
+            Cat10::Desktop => &[
+                (
+                    "Multitasking",
+                    Icon::Pointer,
+                    View::Detail(Page::Desktop, Detail::Desk(0)),
+                ),
+                (
+                    "Ubuntu Dock",
+                    Icon::Apps,
+                    View::Detail(Page::Desktop, Detail::Desk(1)),
+                ),
+                (
+                    "Desktop icons",
+                    Icon::Image,
+                    View::Detail(Page::Desktop, Detail::Desk(2)),
+                ),
+                (
+                    "Windows",
+                    Icon::Display,
+                    View::Detail(Page::Desktop, Detail::Desk(3)),
+                ),
+                (
+                    "Fonts",
+                    Icon::Keyboard,
+                    View::Detail(Page::Desktop, Detail::Desk(4)),
+                ),
+                (
+                    "Themes",
+                    Icon::Personalise,
+                    View::Detail(Page::Desktop, Detail::Desk(5)),
+                ),
+                (
+                    "Mouse, keyboard and sound",
+                    Icon::Sound,
+                    View::Detail(Page::Desktop, Detail::Desk(6)),
+                ),
+                (
+                    "Startup apps",
+                    Icon::Power,
+                    View::Detail(Page::Desktop, Detail::Desk(7)),
+                ),
+            ],
+            Cat10::Fusion => &[
+                (
+                    "Overview",
+                    Icon::Sparkle,
+                    View::Detail(Page::Desktop, Detail::Desk(8)),
+                ),
+                (
+                    "Panel",
+                    Icon::Display,
+                    View::Detail(Page::Desktop, Detail::Desk(9)),
+                ),
+                (
+                    "Panel items",
+                    Icon::Apps,
+                    View::Detail(Page::Desktop, Detail::Desk(10)),
+                ),
+                (
+                    "Taskbar",
+                    Icon::Apps,
+                    View::Detail(Page::Desktop, Detail::Desk(11)),
+                ),
+                (
+                    "Start menu",
+                    Icon::Home,
+                    View::Detail(Page::Desktop, Detail::Desk(12)),
+                ),
+                (
+                    "Widgets",
+                    Icon::Log,
+                    View::Detail(Page::Desktop, Detail::Desk(13)),
+                ),
+                (
+                    "Glass & effects",
+                    Icon::Personalise,
+                    View::Detail(Page::Desktop, Detail::Desk(14)),
+                ),
+                (
+                    "Desktop",
+                    Icon::Storage,
+                    View::Detail(Page::Desktop, Detail::Desk(15)),
+                ),
             ],
             Cat10::Apps => &[
                 ("Apps & features", Icon::Apps, View::Page(Page::Apps)),
-                ("Default apps", Icon::Check, View::Detail(Page::Apps, Detail::DefaultApps)),
-                ("Compatibility", Icon::Compatibility, View::Page(Page::Compatibility)),
+                (
+                    "Default apps",
+                    Icon::Check,
+                    View::Detail(Page::Apps, Detail::DefaultApps),
+                ),
+                (
+                    "Compatibility",
+                    Icon::Compatibility,
+                    View::Page(Page::Compatibility),
+                ),
             ],
             Cat10::Accounts => &[("Your info", Icon::Accounts, View::Page(Page::Accounts))],
-            Cat10::Time => &[("Date & language", Icon::Clock, View::Page(Page::TimeLanguage))],
-            Cat10::Ease => &[("Vision & input", Icon::Accessibility, View::Page(Page::Accessibility))],
-            Cat10::Privacy => &[("Security & permissions", Icon::Shield, View::Page(Page::Privacy))],
+            Cat10::Time => &[(
+                "Date & language",
+                Icon::Clock,
+                View::Page(Page::TimeLanguage),
+            )],
+            Cat10::Ease => &[(
+                "Vision & input",
+                Icon::Accessibility,
+                View::Page(Page::Accessibility),
+            )],
+            Cat10::Privacy => &[(
+                "Security & permissions",
+                Icon::Shield,
+                View::Page(Page::Privacy),
+            )],
             Cat10::Update => &[("Software Update", Icon::Update, View::Page(Page::Updates))],
         }
     }
@@ -254,13 +407,14 @@ impl Cat10 {
             View::Home => return None,
             View::Detail(_, Detail::Pointer | Detail::Keyboard) => Cat10::Devices,
             View::Detail(_, Detail::DefaultApps) => Cat10::Apps,
+            View::Detail(_, Detail::Desk(i)) if i >= 8 => Cat10::Fusion,
+            View::Detail(_, Detail::Desk(_)) => Cat10::Desktop,
             View::Detail(_, _) => Cat10::System,
             View::Page(Page::System) => Cat10::System,
             View::Page(Page::Bluetooth) => Cat10::Devices,
             View::Page(Page::Network) => Cat10::Network,
-            View::Page(Page::Personalisation | Page::Desktop | Page::Extensions) => {
-                Cat10::Personalisation
-            }
+            View::Page(Page::Personalisation | Page::Extensions) => Cat10::Personalisation,
+            View::Page(Page::Desktop) => Cat10::Desktop,
             View::Page(Page::Apps | Page::Compatibility) => Cat10::Apps,
             View::Page(Page::Accounts) => Cat10::Accounts,
             View::Page(Page::TimeLanguage) => Cat10::Time,
@@ -321,6 +475,7 @@ impl View {
             View::Detail(_, Detail::Pointer) => "pointer",
             View::Detail(_, Detail::Keyboard) => "keyboard",
             View::Detail(_, Detail::DefaultApps) => "default-apps",
+            View::Detail(_, Detail::Desk(i)) => crate::desktop::section_key(i),
         }
     }
 }
@@ -339,7 +494,6 @@ pub enum PromptKind {
     ProxySocks,
     ProxyIgnore,
 }
-
 
 pub struct TextPrompt {
     pub kind: PromptKind,
@@ -488,6 +642,8 @@ pub struct App {
     pub follow_system: bool,
     /// Windows 11 (default) or the Windows 10 interface.
     pub design: crate::theme::Design,
+    /// Windows 10 home: list each category's pages on its card.
+    pub home_links: bool,
     last_mode: Mode,
     last_accent: Color32,
     last_design: crate::theme::Design,
@@ -605,7 +761,11 @@ impl App {
         if std::env::var("WIN11_SETTINGS_STARTUP").is_ok() {
             eprintln!(
                 "startup snapshot: {} at {:.0} ms",
-                if startup_info.is_some() { "hit" } else { "miss" },
+                if startup_info.is_some() {
+                    "hit"
+                } else {
+                    "miss"
+                },
                 crate::START
                     .get()
                     .map(|t| t.elapsed().as_secs_f64() * 1000.0)
@@ -647,7 +807,12 @@ impl App {
             // Kept for old launch links: App Hub is now part of Apps.
             "apphub" => View::Page(Page::Apps),
             "accounts" => View::Page(Page::Accounts),
-            "desktop" | "tweaks" | "multitasking" => View::Page(Page::Desktop),
+            "desktop" | "tweaks" => View::Page(Page::Desktop),
+            "multitasking" => View::Detail(Page::Desktop, Detail::Desk(0)),
+            "dock" => View::Detail(Page::Desktop, Detail::Desk(1)),
+            "startup" => View::Detail(Page::Desktop, Detail::Desk(7)),
+            "fusion" => View::Detail(Page::Desktop, Detail::Desk(8)),
+            "fusion-taskbar" => View::Detail(Page::Desktop, Detail::Desk(11)),
             "extensions" => View::Page(Page::Extensions),
             "accessibility" => View::Page(Page::Accessibility),
             "privacy" => View::Page(Page::Privacy),
@@ -668,6 +833,7 @@ impl App {
             accent,
             follow_system,
             design,
+            home_links: system::saved_home_links(),
             last_mode: mode,
             last_accent: accent,
             last_design: design,
@@ -749,19 +915,17 @@ impl App {
         } else {
             system::find_icon(name)
         };
-        let loaded = path
-            .and_then(|path| image::open(path).ok())
-            .map(|img| {
-                let img = img.to_rgba8();
-                let size = [img.width() as usize, img.height() as usize];
-                let pixels = img.into_raw();
-                let color = egui::ColorImage::from_rgba_unmultiplied(size, &pixels);
-                ctx.load_texture(
-                    format!("app-icon:{name}"),
-                    color,
-                    egui::TextureOptions::LINEAR,
-                )
-            });
+        let loaded = path.and_then(|path| image::open(path).ok()).map(|img| {
+            let img = img.to_rgba8();
+            let size = [img.width() as usize, img.height() as usize];
+            let pixels = img.into_raw();
+            let color = egui::ColorImage::from_rgba_unmultiplied(size, &pixels);
+            ctx.load_texture(
+                format!("app-icon:{name}"),
+                color,
+                egui::TextureOptions::LINEAR,
+            )
+        });
         self.icons.insert(name.to_owned(), loaded.clone());
         loaded
     }
@@ -850,7 +1014,9 @@ impl App {
     }
 
     pub fn set_wifi_radio(&mut self, on: bool) {
-        self.run_sys(SysAction::WifiRadio(on), move || system::set_wifi_enabled(on));
+        self.run_sys(SysAction::WifiRadio(on), move || {
+            system::set_wifi_enabled(on)
+        });
     }
 
     pub fn set_discoverable(&mut self, on: bool) {
@@ -1136,27 +1302,27 @@ Your personal files are kept."
         } else {
             (Vec::new(), Vec::new())
         };
-            if !preview.is_empty() {
+        if !preview.is_empty() {
+            lines.push(String::new());
+            let shown = preview.len().min(8);
+            let mut text = format!(
+                "Also removes {} package{}: {}",
+                preview.len(),
+                if preview.len() == 1 { "" } else { "s" },
+                preview[..shown].join(", ")
+            );
+            if preview.len() > shown {
+                text.push_str(&format!(" and {} more", preview.len() - shown));
+            }
+            lines.push(text);
+            if !risky.is_empty() {
                 lines.push(String::new());
-                let shown = preview.len().min(8);
-                let mut text = format!(
-                    "Also removes {} package{}: {}",
-                    preview.len(),
-                    if preview.len() == 1 { "" } else { "s" },
-                    preview[..shown].join(", ")
-                );
-                if preview.len() > shown {
-                    text.push_str(&format!(" and {} more", preview.len() - shown));
-                }
-                lines.push(text);
-                if !risky.is_empty() {
-                    lines.push(String::new());
-                    lines.push(format!(
+                lines.push(format!(
                         "Warning: this includes parts of the desktop ({}). Only uninstall if you are sure.",
                         risky.join(", ")
                     ));
-                }
             }
+        }
 
         self.confirm = Some(ConfirmDialog {
             title: format!("Uninstall {}?", app.name),
@@ -1591,6 +1757,11 @@ The network will not reconnect automatically."
         }
     }
 
+    pub fn set_home_links(&mut self, on: bool) {
+        self.home_links = on;
+        system::save_home_links(on);
+    }
+
     /// Switch the interface design. Only the presentation changes: every
     /// setting, page and background job is shared by both designs.
     pub fn set_design(&mut self, design: crate::theme::Design) {
@@ -1661,7 +1832,11 @@ The network will not reconnect automatically."
             }
             SysAction::WifiRadio(on) => {
                 self.info.wifi_enabled = on;
-                self.notify(if on { "Wi-Fi turned on" } else { "Wi-Fi turned off" });
+                self.notify(if on {
+                    "Wi-Fi turned on"
+                } else {
+                    "Wi-Fi turned off"
+                });
                 self.reload_info();
             }
             SysAction::Proxy => {
@@ -1797,10 +1972,8 @@ The network will not reconnect automatically."
                     match result {
                         Ok(()) => self.finish_sys(action),
                         Err(err) => {
-                            let inline = matches!(
-                                action,
-                                SysAction::RealName(_) | SysAction::Password
-                            );
+                            let inline =
+                                matches!(action, SysAction::RealName(_) | SysAction::Password);
                             if inline {
                                 if let Some(prompt) = &mut self.text_prompt {
                                     prompt.busy = false;
@@ -1936,7 +2109,8 @@ The network will not reconnect automatically."
                 Some(Err(mpsc::TryRecvError::Disconnected)) => {
                     self.hub.sys_loading = false;
                     self.hub.sys_rx = None;
-                    self.hub.sys_error = Some("The installed-apps scan stopped unexpectedly.".to_owned());
+                    self.hub.sys_error =
+                        Some("The installed-apps scan stopped unexpectedly.".to_owned());
                 }
                 None => {}
             }
@@ -2122,8 +2296,12 @@ The network will not reconnect automatically."
 
     fn titlebar(&mut self, ui: &mut Ui, ctx: &Context, pal: &Palette, rect: Rect) {
         let buttons_w = 46.0 * 3.0;
-        let drag_rect =
-            Rect::from_min_max(rect.min, Pos2::new(rect.right() - buttons_w, rect.bottom()));
+        // Design and light/dark switches sit just left of the caption buttons.
+        let quick_w = 8.0 + 110.0 + 6.0 + 30.0 + 10.0;
+        let drag_rect = Rect::from_min_max(
+            rect.min,
+            Pos2::new(rect.right() - buttons_w - quick_w, rect.bottom()),
+        );
         let response = ui.interact(drag_rect, Id::new("titlebar-drag"), Sense::click_and_drag());
         if response.drag_started() {
             ctx.send_viewport_cmd(ViewportCommand::StartDrag);
@@ -2155,10 +2333,7 @@ The network will not reconnect automatically."
                 pal.text,
             );
             ui.painter().rect_filled(
-                Rect::from_min_max(
-                    Pos2::new(rect.left(), rect.bottom() - 1.0),
-                    rect.max,
-                ),
+                Rect::from_min_max(Pos2::new(rect.left(), rect.bottom() - 1.0), rect.max),
                 0,
                 pal.divider,
             );
@@ -2173,6 +2348,8 @@ The network will not reconnect automatically."
                 pal.text_muted,
             );
         }
+
+        self.title_switches(ui, ctx, pal, rect, buttons_w + 10.0);
 
         let max = ctx.input(|i| i.viewport().maximized).unwrap_or(false);
         // Caption buttons fill the title bar and touch the window edge, so the
@@ -2203,6 +2380,99 @@ The network will not reconnect automatically."
                 }
             },
         );
+    }
+
+    /// "Win 10 | Win 11" design switch and a light/dark button in the title
+    /// bar, `right_gap` points left of the window's right edge.
+    fn title_switches(
+        &mut self,
+        ui: &mut Ui,
+        ctx: &Context,
+        pal: &Palette,
+        rect: Rect,
+        right_gap: f32,
+    ) {
+        use crate::theme::{Design, Mode};
+        let h = 24.0;
+        let cy = rect.center().y;
+
+        // Light/dark: shows the mode you switch to.
+        let mode_rect = Rect::from_center_size(
+            Pos2::new(rect.right() - right_gap - 15.0, cy),
+            Vec2::new(30.0, h),
+        );
+        let resp = ui
+            .interact(mode_rect, Id::new("title-mode"), Sense::click())
+            .on_hover_cursor(egui::CursorIcon::PointingHand);
+        let dark = self.mode == Mode::Dark;
+        let resp = resp.on_hover_text(if dark {
+            "Switch to light mode"
+        } else {
+            "Switch to dark mode"
+        });
+        if resp.hovered() {
+            ui.painter()
+                .rect_filled(mode_rect, pal.corner(4), pal.hover);
+        }
+        crate::icons::paint(
+            ui.painter(),
+            if dark { Icon::Sun } else { Icon::Moon },
+            Rect::from_center_size(mode_rect.center(), Vec2::splat(15.0)),
+            pal.text_muted,
+        );
+        if resp.clicked() {
+            self.follow_system = false;
+            self.mode = if dark { Mode::Light } else { Mode::Dark };
+            ctx.request_repaint();
+        }
+
+        // Design: a two-part pill.
+        let pill = Rect::from_min_size(
+            Pos2::new(mode_rect.left() - 6.0 - 110.0, cy - h / 2.0),
+            Vec2::new(110.0, h),
+        );
+        let radius = pal.corner(12);
+        ui.painter().rect_filled(pill, radius, pal.hover);
+        for (i, (design, label)) in [(Design::Win10, "Win 10"), (Design::Win11, "Win 11")]
+            .into_iter()
+            .enumerate()
+        {
+            let seg = Rect::from_min_size(
+                Pos2::new(pill.left() + i as f32 * 55.0, pill.top()),
+                Vec2::new(55.0, h),
+            )
+            .shrink(2.0);
+            let resp = ui
+                .interact(seg, Id::new(("title-design", i)), Sense::click())
+                .on_hover_cursor(egui::CursorIcon::PointingHand)
+                .on_hover_text(format!("{} design", design.label()));
+            let active = self.design == design;
+            if active {
+                ui.painter().rect_filled(seg, pal.corner(10), pal.accent);
+            } else if resp.hovered() {
+                ui.painter().rect_filled(seg, pal.corner(10), pal.pressed);
+            }
+            let color = if active {
+                pal.on_accent
+            } else {
+                pal.text_muted
+            };
+            ui.painter().text(
+                seg.center(),
+                Align2::CENTER_CENTER,
+                label,
+                if active {
+                    semibold(11.5)
+                } else {
+                    regular(11.5)
+                },
+                color,
+            );
+            if resp.clicked() && !active {
+                self.set_design(design);
+                ctx.request_repaint();
+            }
+        }
     }
 
     fn sidebar(&mut self, ui: &mut Ui, pal: &Palette, rect: Rect) {
@@ -2360,10 +2630,7 @@ The network will not reconnect automatically."
         });
 
         // Account strip along the bottom of the pane.
-        let strip = Rect::from_min_max(
-            Pos2::new(rect.left(), rect.bottom() - account_h),
-            rect.max,
-        );
+        let strip = Rect::from_min_max(Pos2::new(rect.left(), rect.bottom() - account_h), rect.max);
         ui.painter().rect_filled(
             Rect::from_min_size(strip.min, Vec2::new(strip.width(), 1.0)),
             0,
@@ -2463,7 +2730,9 @@ The network will not reconnect automatically."
                                     pages::personalisation(self, ui)
                                 }
                                 View::Page(Page::Desktop) => crate::desktop::desktop_page(self, ui),
-                                View::Page(Page::Extensions) => crate::desktop::extensions_page(self, ui),
+                                View::Page(Page::Extensions) => {
+                                    crate::desktop::extensions_page(self, ui)
+                                }
                                 View::Page(Page::Apps) => pages::apps(self, ui),
                                 View::Page(Page::Accounts) => pages::accounts(self, ui),
                                 View::Page(Page::Accessibility) => pages::accessibility(self, ui),
@@ -2483,6 +2752,9 @@ The network will not reconnect automatically."
                                 View::Detail(_, Detail::Keyboard) => pages::keyboard(self, ui),
                                 View::Detail(_, Detail::DefaultApps) => {
                                     pages::default_apps(self, ui)
+                                }
+                                View::Detail(_, Detail::Desk(i)) => {
+                                    crate::desktop::desktop_section(self, ui, i)
                                 }
                             }
                         });
@@ -2592,8 +2864,7 @@ The network will not reconnect automatically."
                 ui.add_space(18.0);
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
-                    if widgets::button(ui, pal, pal.accent, "Save", None).clicked()
-                        && !prompt.busy
+                    if widgets::button(ui, pal, pal.accent, "Save", None).clicked() && !prompt.busy
                     {
                         save = true;
                     }
@@ -2630,9 +2901,10 @@ The network will not reconnect automatically."
         }
         if let Some((kind, value)) = submit {
             match kind {
-                PromptKind::RealName => self.run_sys(SysAction::RealName(value.clone()), move || {
-                    system::set_real_name(&value)
-                }),
+                PromptKind::RealName => self
+                    .run_sys(SysAction::RealName(value.clone()), move || {
+                        system::set_real_name(&value)
+                    }),
                 PromptKind::Password => {
                     self.run_sys(SysAction::Password, move || system::set_password(&value))
                 }
@@ -2884,7 +3156,6 @@ The network will not reconnect automatically."
         }
     }
 
-
     fn cleaner_dialog(&mut self, ctx: &Context, pal: &Palette) {
         if !self.cleaner.open {
             return;
@@ -3094,7 +3365,12 @@ The network will not reconnect automatically."
             }
         }
         if let Some((gi, ii)) = toggle_item {
-            if let Some(item) = self.cleaner.groups.get_mut(gi).and_then(|g| g.items.get_mut(ii)) {
+            if let Some(item) = self
+                .cleaner
+                .groups
+                .get_mut(gi)
+                .and_then(|g| g.items.get_mut(ii))
+            {
                 item.selected = !item.selected;
             }
         }
@@ -3441,7 +3717,10 @@ The network will not reconnect automatically."
         // A maximized or fullscreen window cannot be resized from its edges.
         let (maximized, fullscreen) = ctx.input(|i| {
             let vp = i.viewport();
-            (vp.maximized.unwrap_or(false), vp.fullscreen.unwrap_or(false))
+            (
+                vp.maximized.unwrap_or(false),
+                vp.fullscreen.unwrap_or(false),
+            )
         });
         if maximized || fullscreen {
             return;
@@ -3531,12 +3810,19 @@ impl eframe::App for App {
 /// Small square checkbox used by the Free Up Space dialog.
 fn cleaner_checkbox(ui: &mut Ui, pal: &Palette, checked: bool) -> egui::Response {
     let size = 18.0;
-    let (rect, response) =
-        ui.allocate_exact_size(Vec2::new(size + 2.0, 26.0), Sense::click());
-    let box_rect = Rect::from_center_size(Pos2::new(rect.left() + size / 2.0, rect.center().y), Vec2::splat(size));
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(size + 2.0, 26.0), Sense::click());
+    let box_rect = Rect::from_center_size(
+        Pos2::new(rect.left() + size / 2.0, rect.center().y),
+        Vec2::splat(size),
+    );
     if checked {
         ui.painter().rect_filled(box_rect, 4, pal.accent);
-        crate::icons::paint(ui.painter(), Icon::Check, box_rect.shrink(3.5), pal.on_accent);
+        crate::icons::paint(
+            ui.painter(),
+            Icon::Check,
+            box_rect.shrink(3.5),
+            pal.on_accent,
+        );
     } else {
         ui.painter().rect_filled(box_rect, 4, pal.input_bg);
         ui.painter().rect_stroke(
@@ -3577,11 +3863,9 @@ fn cleaner_item_row(ui: &mut Ui, pal: &Palette, item: &cleaner::CleanerItem) -> 
         );
     }
     let size_text = cleaner::human_bytes(item.size);
-    let galley = ui.painter().layout_no_wrap(
-        size_text,
-        regular(11.5),
-        pal.text_faint,
-    );
+    let galley = ui
+        .painter()
+        .layout_no_wrap(size_text, regular(11.5), pal.text_faint);
     let size_x = rect.right() - 10.0 - galley.size().x;
     ui.painter().galley(
         Pos2::new(size_x, rect.center().y - galley.size().y / 2.0),
@@ -3668,7 +3952,13 @@ mod resize_tests {
 
     #[test]
     fn close_button_margin_is_not_a_resize_edge() {
-        for pos in [(1279.0, 0.0), (1279.0, 20.0), (1250.0, 0.0), (1145.0, 2.0), (1279.0, 47.0)] {
+        for pos in [
+            (1279.0, 0.0),
+            (1279.0, 20.0),
+            (1250.0, 0.0),
+            (1145.0, 2.0),
+            (1279.0, 47.0),
+        ] {
             assert_eq!(
                 resize_direction(Pos2::new(pos.0, pos.1), screen(), TITLE_H),
                 None,
@@ -3679,10 +3969,25 @@ mod resize_tests {
 
     #[test]
     fn edges_outside_captions_still_resize() {
-        assert_eq!(resize_direction(Pos2::new(1279.0, 100.0), screen(), TITLE_H), Some(D::East));
-        assert_eq!(resize_direction(Pos2::new(500.0, 1.0), screen(), TITLE_H), Some(D::North));
-        assert_eq!(resize_direction(Pos2::new(1.0, 1.0), screen(), TITLE_H), Some(D::NorthWest));
-        assert_eq!(resize_direction(Pos2::new(1279.0, 799.0), screen(), TITLE_H), Some(D::SouthEast));
-        assert_eq!(resize_direction(Pos2::new(600.0, 400.0), screen(), TITLE_H), None);
+        assert_eq!(
+            resize_direction(Pos2::new(1279.0, 100.0), screen(), TITLE_H),
+            Some(D::East)
+        );
+        assert_eq!(
+            resize_direction(Pos2::new(500.0, 1.0), screen(), TITLE_H),
+            Some(D::North)
+        );
+        assert_eq!(
+            resize_direction(Pos2::new(1.0, 1.0), screen(), TITLE_H),
+            Some(D::NorthWest)
+        );
+        assert_eq!(
+            resize_direction(Pos2::new(1279.0, 799.0), screen(), TITLE_H),
+            Some(D::SouthEast)
+        );
+        assert_eq!(
+            resize_direction(Pos2::new(600.0, 400.0), screen(), TITLE_H),
+            None
+        );
     }
 }

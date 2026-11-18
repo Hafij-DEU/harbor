@@ -54,7 +54,10 @@ fn main() -> eframe::Result<()> {
         println!(
             "probe finished in {:.0} ms ({} modes on {} display(s))",
             start.elapsed().as_secs_f64() * 1000.0,
-            info.display_monitors.iter().map(|m| m.modes.len()).sum::<usize>(),
+            info.display_monitors
+                .iter()
+                .map(|m| m.modes.len())
+                .sum::<usize>(),
             info.display_monitors.len()
         );
         return Ok(());
@@ -158,9 +161,9 @@ fn main() -> eframe::Result<()> {
         }
 
         let toggle = |schema: &str,
-                          key: &str,
-                          setter: &dyn Fn(bool) -> bool,
-                          failures: &mut u32|
+                      key: &str,
+                      setter: &dyn Fn(bool) -> bool,
+                      failures: &mut u32|
          -> String {
             let before = get(schema, key);
             let target = before != "true";
@@ -183,10 +186,7 @@ fn main() -> eframe::Result<()> {
             }
         };
 
-        println!(
-            "brightness           {}",
-            brightness
-        );
+        println!("brightness           {}", brightness);
         println!(
             "night light          {}",
             toggle(
@@ -298,10 +298,10 @@ fn main() -> eframe::Result<()> {
         // Accessibility and privacy switches (all were dead before the
         // gs_set_bool fix, so verify each one writes and restores).
         let check = |name: &str,
-                         schema: &str,
-                         key: &str,
-                         setter: &dyn Fn(bool) -> bool,
-                         failures: &mut u32| {
+                     schema: &str,
+                     key: &str,
+                     setter: &dyn Fn(bool) -> bool,
+                     failures: &mut u32| {
             let before = get(schema, key);
             let target = before != "true";
             let ok = setter(target);
@@ -311,9 +311,7 @@ fn main() -> eframe::Result<()> {
                 println!("{name:<21}ok");
             } else {
                 *failures += 1;
-                println!(
-                    "{name:<21}FAILED (ok={ok} changed={changed} restored={restored})"
-                );
+                println!("{name:<21}FAILED (ok={ok} changed={changed} restored={restored})");
             }
         };
         check(
@@ -435,13 +433,14 @@ fn main() -> eframe::Result<()> {
         let scale_before = get("org.gnome.desktop.interface", "text-scaling-factor");
         let scale_ok = system::set_text_scale(1.25)
             && get("org.gnome.desktop.interface", "text-scaling-factor") == "1.25"
-            && system::set_text_scale(
-                scale_before.parse::<f32>().unwrap_or(1.0),
-            );
+            && system::set_text_scale(scale_before.parse::<f32>().unwrap_or(1.0));
         if !scale_ok {
             failures += 1;
         }
-        println!("text scaling         {}", if scale_ok { "ok" } else { "FAILED" });
+        println!(
+            "text scaling         {}",
+            if scale_ok { "ok" } else { "FAILED" }
+        );
 
         // Input sources: add a second layout through the same setter the UI uses.
         let sources_before = String::from_utf8_lossy(
@@ -525,10 +524,14 @@ fn main() -> eframe::Result<()> {
                 )
                 .trim()
                 .to_string();
-                let restored = before.is_empty()
-                    || system::set_default_for("application/pdf", &before);
+                let restored =
+                    before.is_empty() || system::set_default_for("application/pdf", &before);
                 if set_ok && now == *id && restored {
-                    let from = if before.is_empty() { "none" } else { before.as_str() };
+                    let from = if before.is_empty() {
+                        "none"
+                    } else {
+                        before.as_str()
+                    };
                     pdf_result = format!("ok ({from} -> {name}, restored)");
                 } else {
                     failures += 1;

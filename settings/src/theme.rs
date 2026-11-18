@@ -267,8 +267,14 @@ pub fn install_fonts(ctx: &Context) {
     // egui's default fonts into the binary.
     let mut fallback = Vec::new();
     for (name, path) in [
-        ("sys-sans", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-        ("sys-mono", "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"),
+        (
+            "sys-sans",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        ),
+        (
+            "sys-mono",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+        ),
     ] {
         if let Ok(bytes) = std::fs::read(path) {
             fonts

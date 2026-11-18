@@ -84,7 +84,6 @@ impl SysApp {
             _ => true,
         }
     }
-
 }
 
 // The scan script intentionally does everything in one python process:
@@ -435,9 +434,21 @@ pub fn apt_removal_preview(package: &str) -> (Vec<String>, Vec<String>) {
         }
     }
     let risky = [
-        "app-hub", "apt", "dpkg", "sudo", "systemd", "polkitd", "pkexec", "gdm3",
-        "gnome-shell", "gnome-session-bin", "ubuntu-session", "network-manager",
-        "snapd", "flatpak", "xwayland",
+        "app-hub",
+        "apt",
+        "dpkg",
+        "sudo",
+        "systemd",
+        "polkitd",
+        "pkexec",
+        "gdm3",
+        "gnome-shell",
+        "gnome-session-bin",
+        "ubuntu-session",
+        "network-manager",
+        "snapd",
+        "flatpak",
+        "xwayland",
     ];
     let risky_removed = removed
         .iter()
@@ -511,7 +522,10 @@ pub fn remove(app: &SysApp) -> Receiver<JobEvent> {
             cmd.args([
                 "-c",
                 "import sys; print(sys.argv[1]); sys.exit(1)",
-                &format!("Uninstalling {} apps is not supported.", app.channel_label()),
+                &format!(
+                    "Uninstalling {} apps is not supported.",
+                    app.channel_label()
+                ),
             ]);
             cmd.stdin(Stdio::null());
             jobs::spawn(cmd)

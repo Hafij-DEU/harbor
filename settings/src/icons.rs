@@ -300,7 +300,10 @@ pub fn paint(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
                 &[(0.24, 0.42), (0.24, 0.84), (0.76, 0.84), (0.76, 0.42)],
                 1.0,
             );
-            pen.polyline(&[(0.42, 0.84), (0.42, 0.62), (0.58, 0.62), (0.58, 0.84)], 1.0);
+            pen.polyline(
+                &[(0.42, 0.84), (0.42, 0.62), (0.58, 0.62), (0.58, 0.84)],
+                1.0,
+            );
         }
         Icon::Back => {
             pen.line((0.16, 0.5), (0.84, 0.5), 1.0);
@@ -319,22 +322,16 @@ pub fn paint(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
             }
         }
         Icon::Moon => {
-            let outer = |a: f32| (0.5 + a.cos() * 0.34, 0.5 + a.sin() * 0.34);
-            let inner_center = (0.62, 0.38);
-            let inner = |a: f32| {
-                (
-                    inner_center.0 + a.cos() * 0.33,
-                    inner_center.1 + a.sin() * 0.33,
-                )
-            };
+            // Crescent: the outer circle's long arc between the two points
+            // where a smaller, offset circle cuts it, back along that circle.
             let mut pts = Vec::new();
-            for i in 0..=24 {
-                let a = -1.9 + 4.9 * i as f32 / 24.0;
-                pts.push(outer(a));
+            for i in 0..=32 {
+                let a = 0.182 + 4.349 * i as f32 / 32.0;
+                pts.push((0.5 + a.cos() * 0.34, 0.5 + a.sin() * 0.34));
             }
             for i in 0..=24 {
-                let a = 0.5 - 3.6 * i as f32 / 24.0;
-                pts.push(inner(a));
+                let a = 3.909 - 3.106 * i as f32 / 24.0;
+                pts.push((0.64 + a.cos() * 0.28, 0.36 + a.sin() * 0.28));
             }
             pen.polyline(&pts, 1.0);
         }
@@ -407,7 +404,16 @@ pub fn paint(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
         Icon::Image => {
             pen.rect((0.10, 0.16), (0.90, 0.84), 2.0, 1.0);
             pen.circle((0.36, 0.40), 0.085, 1.0);
-            pen.polyline(&[(0.10, 0.72), (0.38, 0.46), (0.56, 0.64), (0.68, 0.52), (0.90, 0.74)], 1.0);
+            pen.polyline(
+                &[
+                    (0.10, 0.72),
+                    (0.38, 0.46),
+                    (0.56, 0.64),
+                    (0.68, 0.52),
+                    (0.90, 0.74),
+                ],
+                1.0,
+            );
         }
         Icon::Keyboard => {
             pen.rect((0.08, 0.30), (0.92, 0.70), 2.0, 1.0);

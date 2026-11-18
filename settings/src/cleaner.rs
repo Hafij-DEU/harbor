@@ -7,8 +7,8 @@
 use std::process::{Command, Stdio};
 use std::sync::mpsc::Receiver;
 
-use crate::jobs::{self, JobEvent};
 use crate::inventory::ROOT_SCRIPT;
+use crate::jobs::{self, JobEvent};
 
 #[derive(Clone, Default)]
 pub struct CleanerItem {
@@ -43,7 +43,11 @@ impl CleanerGroup {
 
     pub fn selected_size(&self) -> i64 {
         if self.granular {
-            self.items.iter().filter(|i| i.selected).map(|i| i.size).sum()
+            self.items
+                .iter()
+                .filter(|i| i.selected)
+                .map(|i| i.size)
+                .sum()
         } else if self.enabled {
             self.size()
         } else {
@@ -337,11 +341,13 @@ pub fn scan() -> Result<Vec<CleanerGroup>, String> {
                 .and_then(|v| v.as_array())
                 .map(|cmds| {
                     cmds.iter()
-                        .filter_map(|s| s.as_array().map(|a| {
-                            a.iter()
-                                .filter_map(|v| v.as_str().map(str::to_owned))
-                                .collect()
-                        }))
+                        .filter_map(|s| {
+                            s.as_array().map(|a| {
+                                a.iter()
+                                    .filter_map(|v| v.as_str().map(str::to_owned))
+                                    .collect()
+                            })
+                        })
                         .collect()
                 })
                 .unwrap_or_default(),
@@ -393,9 +399,7 @@ pub fn selection(groups: &[CleanerGroup]) -> CleanerSelection {
                             }
                         }
                         Some("snap_remove") => {
-                            if let (Some(name), Some(rev)) =
-                                (item.step.get(1), item.step.get(2))
-                            {
+                            if let (Some(name), Some(rev)) = (item.step.get(1), item.step.get(2)) {
                                 snap_remove.push((name.clone(), rev.clone()));
                             }
                         }

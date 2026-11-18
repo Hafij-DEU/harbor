@@ -2,8 +2,8 @@
 //! through gsettings/pactl/nmcli/bluetoothctl and reported with a toast.
 
 use eframe::egui::{
-    self, Align, Align2, Color32, CursorIcon, Id, Layout, Pos2, Rect, ScrollArea, Sense,
-    Stroke, StrokeKind, Ui, UiBuilder, Vec2,
+    self, Align, Align2, Color32, CursorIcon, Id, Layout, Pos2, Rect, ScrollArea, Sense, Stroke,
+    StrokeKind, Ui, UiBuilder, Vec2,
 };
 
 use crate::app::{App, AppsTab, Detail, Page, PromptKind, View};
@@ -268,6 +268,14 @@ pub fn system(app: &mut App, ui: &mut Ui) {
     spacer(ui, 8.0);
     disk_bar(app, ui, &pal);
     spacer(ui, 8.0);
+    if app.design == crate::theme::Design::Win11 {
+        spacer(ui, 6.0);
+        widgets::section_label(ui, &pal, "Quick settings");
+        let width = ui.available_width();
+        let x0 = ui.cursor().left();
+        quick_settings(app, ui, &pal, width, x0, width, 1.0);
+        spacer(ui, 14.0);
+    }
 
     let outcome = widgets::row(
         ui,
@@ -399,7 +407,10 @@ pub fn system(app: &mut App, ui: &mut Ui) {
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
-            format!("{layouts} · Key repeat {}", if app.info.key_repeat { "on" } else { "off" })
+            format!(
+                "{layouts} · Key repeat {}",
+                if app.info.key_repeat { "on" } else { "off" }
+            )
         };
         if widgets::row(
             ui,
@@ -462,7 +473,6 @@ pub fn system(app: &mut App, ui: &mut Ui) {
             reload(app, ui);
         }
     });
-
 }
 
 pub fn reload(app: &mut App, _ui: &mut Ui) {
@@ -486,8 +496,12 @@ fn disk_bar(app: &mut App, ui: &mut Ui, pal: &Palette) {
     let height = 52.0;
     let (rect, response) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
     ui.painter().rect_filled(rect, pal.corner(6), pal.card);
-    ui.painter()
-        .rect_stroke(rect, pal.corner(6), Stroke::new(1.0, pal.card_border), StrokeKind::Inside);
+    ui.painter().rect_stroke(
+        rect,
+        pal.corner(6),
+        Stroke::new(1.0, pal.card_border),
+        StrokeKind::Inside,
+    );
 
     let icon_rect = Rect::from_center_size(
         Pos2::new(rect.left() + ROW_PAD + 12.0, rect.center().y),
@@ -551,7 +565,8 @@ fn disk_bar(app: &mut App, ui: &mut Ui, pal: &Palette) {
             Pos2::new(bar_left, rect.center().y - 4.0),
             Pos2::new(bar_right, rect.center().y + 4.0),
         );
-        ui.painter().rect_filled(bar, pal.corner(3), with_alpha(pal.text, 26));
+        ui.painter()
+            .rect_filled(bar, pal.corner(3), with_alpha(pal.text, 26));
         let fill = Rect::from_min_max(
             bar.left_top(),
             Pos2::new(bar.left() + bar.width() * fraction, bar.bottom()),
@@ -564,7 +579,12 @@ fn disk_bar(app: &mut App, ui: &mut Ui, pal: &Palette) {
             pal.accent
         };
         ui.painter().rect_filled(fill, pal.corner(3), bar_color);
-        ui.painter().rect_stroke(bar, pal.corner(3), Stroke::new(1.0, with_alpha(pal.text, 60)), StrokeKind::Inside);
+        ui.painter().rect_stroke(
+            bar,
+            pal.corner(3),
+            Stroke::new(1.0, with_alpha(pal.text, 60)),
+            StrokeKind::Inside,
+        );
     }
 
     if btn_resp.clicked() {
@@ -785,11 +805,8 @@ pub fn display(app: &mut App, ui: &mut Ui) {
                     .unwrap_or_default();
 
                 // Resolutions
-                let mut sizes: Vec<(u32, u32)> = monitor
-                    .modes
-                    .iter()
-                    .map(|m| (m.width, m.height))
-                    .collect();
+                let mut sizes: Vec<(u32, u32)> =
+                    monitor.modes.iter().map(|m| (m.width, m.height)).collect();
                 sizes.sort_by(|a, b| (b.0 * b.1).cmp(&(a.0 * a.1)));
                 sizes.dedup();
                 let res_options: Vec<(String, String)> = sizes
@@ -809,10 +826,7 @@ pub fn display(app: &mut App, ui: &mut Ui) {
                     170.0,
                 ) {
                     if let Some((w, h)) = res.split_once('x') {
-                        let (w, h) = (
-                            w.parse::<u32>().unwrap_or(0),
-                            h.parse::<u32>().unwrap_or(0),
-                        );
+                        let (w, h) = (w.parse::<u32>().unwrap_or(0), h.parse::<u32>().unwrap_or(0));
                         if let Some(mode) = monitor
                             .modes
                             .iter()
@@ -844,9 +858,8 @@ pub fn display(app: &mut App, ui: &mut Ui) {
                     .filter(|m| m.width == current.width && m.height == current.height)
                 {
                     let label = format!("{:.0} Hz", mode.rate);
-                    if let Some(existing) = refresh_options
-                        .iter_mut()
-                        .find(|(_, text)| *text == label)
+                    if let Some(existing) =
+                        refresh_options.iter_mut().find(|(_, text)| *text == label)
                     {
                         // Prefer the mode that is already active, else the
                         // non-VRR variant which is the plain panel mode.
@@ -1023,11 +1036,8 @@ pub fn display(app: &mut App, ui: &mut Ui) {
                 0.0,
                 23.75,
                 0.25,
-            ) && system::set_night_light_schedule(
-                false,
-                from,
-                app.info.night_light_to,
-            ) {
+            ) && system::set_night_light_schedule(false, from, app.info.night_light_to)
+            {
                 app.info.night_light_from = from;
             }
             widgets::divider(ui, &pal);
@@ -1043,11 +1053,8 @@ pub fn display(app: &mut App, ui: &mut Ui) {
                 0.0,
                 23.75,
                 0.25,
-            ) && system::set_night_light_schedule(
-                false,
-                app.info.night_light_from,
-                to,
-            ) {
+            ) && system::set_night_light_schedule(false, app.info.night_light_from, to)
+            {
                 app.info.night_light_to = to;
             }
         }
@@ -1206,7 +1213,14 @@ pub fn sound(app: &mut App, ui: &mut Ui) {
         } else {
             format!("{}%", app.info.microphone_volume)
         };
-        let changed = slider_row(ui, &pal, Icon::Sound, "Microphone volume", subtitle, &mut mic);
+        let changed = slider_row(
+            ui,
+            &pal,
+            Icon::Sound,
+            "Microphone volume",
+            subtitle,
+            &mut mic,
+        );
         if changed {
             let pct = (mic * 100.0).round() as u32;
             if pct != app.info.microphone_volume {
@@ -1236,7 +1250,11 @@ pub fn sound(app: &mut App, ui: &mut Ui) {
         if outcome.toggled {
             if system::set_input_muted(muted) {
                 app.info.input_muted = muted;
-                app.notify(if muted { "Microphone muted" } else { "Microphone on" });
+                app.notify(if muted {
+                    "Microphone muted"
+                } else {
+                    "Microphone on"
+                });
             } else {
                 app.notify_error("Could not mute the microphone");
             }
@@ -1261,7 +1279,11 @@ pub fn sound(app: &mut App, ui: &mut Ui) {
                     Icon::Sound,
                     &source.description,
                     &source.name,
-                    if is_default { Right::Check } else { Right::None },
+                    if is_default {
+                        Right::Check
+                    } else {
+                        Right::None
+                    },
                 )
                 .clicked()
                     && !is_default
@@ -1349,7 +1371,14 @@ pub fn power(app: &mut App, ui: &mut Ui) {
         ui.horizontal(|ui| {
             ui.add_space(ROW_PAD);
             let (chip, _) = ui.allocate_exact_size(Vec2::splat(40.0), Sense::hover());
-            widgets::icon_tile(ui.painter(), chip, Icon::Battery, pal.accent, pal.on_accent, &pal);
+            widgets::icon_tile(
+                ui.painter(),
+                chip,
+                Icon::Battery,
+                pal.accent,
+                pal.on_accent,
+                &pal,
+            );
             ui.add_space(14.0);
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
@@ -1547,7 +1576,10 @@ pub fn power(app: &mut App, ui: &mut Ui) {
     let lid_options = [("suspend", "Suspend"), ("nothing", "Do nothing")];
     let mut lid_change = None;
     widgets::card(ui, &pal, |ui| {
-        for (index, (title, key)) in [("On AC power", "ac"), ("On battery", "battery")].into_iter().enumerate() {
+        for (index, (title, key)) in [("On AC power", "ac"), ("On battery", "battery")]
+            .into_iter()
+            .enumerate()
+        {
             if index > 0 {
                 widgets::divider(ui, &pal);
             }
@@ -1561,7 +1593,11 @@ pub fn power(app: &mut App, ui: &mut Ui) {
                 );
             });
             for (value, label) in lid_options {
-                let current = if key == "ac" { &app.info.lid_ac } else { &app.info.lid_battery };
+                let current = if key == "ac" {
+                    &app.info.lid_ac
+                } else {
+                    &app.info.lid_battery
+                };
                 let selected = current == value;
                 if widgets::row(
                     ui,
@@ -1693,7 +1729,14 @@ pub fn storage(app: &mut App, ui: &mut Ui) {
         ui.horizontal(|ui| {
             ui.add_space(ROW_PAD);
             let (chip, _) = ui.allocate_exact_size(Vec2::splat(40.0), Sense::hover());
-            widgets::icon_tile(ui.painter(), chip, Icon::Storage, pal.accent, pal.on_accent, &pal);
+            widgets::icon_tile(
+                ui.painter(),
+                chip,
+                Icon::Storage,
+                pal.accent,
+                pal.on_accent,
+                &pal,
+            );
             ui.add_space(14.0);
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
@@ -1955,7 +1998,11 @@ pub fn pointer(app: &mut App, ui: &mut Ui) {
         if outcome.toggled {
             if system::set_mouse("natural-scroll", natural) {
                 app.info.mouse_natural = natural;
-                app.notify(if natural { "Natural scrolling on" } else { "Natural scrolling off" });
+                app.notify(if natural {
+                    "Natural scrolling on"
+                } else {
+                    "Natural scrolling off"
+                });
             } else {
                 app.notify_error("Could not change scrolling");
             }
@@ -1974,7 +2021,11 @@ pub fn pointer(app: &mut App, ui: &mut Ui) {
         if outcome.toggled {
             if system::set_mouse("left-handed", left_handed) {
                 app.info.mouse_left_handed = left_handed;
-                app.notify(if left_handed { "Mouse is left-handed" } else { "Mouse is right-handed" });
+                app.notify(if left_handed {
+                    "Mouse is left-handed"
+                } else {
+                    "Mouse is right-handed"
+                });
             } else {
                 app.notify_error("Could not change the mouse buttons");
             }
@@ -2400,7 +2451,14 @@ fn default_app_row(
     ui.horizontal(|ui| {
         ui.add_space(ROW_PAD);
         let (chip, _) = ui.allocate_exact_size(Vec2::splat(28.0), Sense::hover());
-        widgets::icon_tile(ui.painter(), chip, Icon::Apps, pal.accent, pal.on_accent, &pal);
+        widgets::icon_tile(
+            ui.painter(),
+            chip,
+            Icon::Apps,
+            pal.accent,
+            pal.on_accent,
+            &pal,
+        );
         ui.add_space(14.0);
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 2.0;
@@ -2409,12 +2467,20 @@ fn default_app_row(
                     .font(regular(14.0))
                     .color(pal.text),
             );
-            ui.label(egui::RichText::new(subtitle).font(regular(12.0)).color(pal.text_faint));
+            ui.label(
+                egui::RichText::new(subtitle)
+                    .font(regular(12.0))
+                    .color(pal.text_faint),
+            );
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(ROW_PAD);
             if apps.is_empty() {
-                ui.label(egui::RichText::new("None found").font(regular(12.5)).color(pal.text_faint));
+                ui.label(
+                    egui::RichText::new("None found")
+                        .font(regular(12.5))
+                        .color(pal.text_faint),
+                );
                 return;
             }
             let mut chosen = current.to_owned();
@@ -2660,7 +2726,11 @@ pub fn network(app: &mut App, ui: &mut Ui) {
         for (index, (value, label, subtitle)) in [
             ("none", "Off", "Connect to the internet directly"),
             ("manual", "Manual", "Use the proxy servers configured below"),
-            ("auto", "Automatic", "Use the proxy configuration script from the network"),
+            (
+                "auto",
+                "Automatic",
+                "Use the proxy configuration script from the network",
+            ),
         ]
         .iter()
         .enumerate()
@@ -2860,14 +2930,15 @@ pub fn personalisation(app: &mut App, ui: &mut Ui) {
                 pal.corner(8),
                 Stroke::new(
                     if selected { 2.0 } else { 1.0 },
-                    if selected { pal.accent } else { pal.card_border },
+                    if selected {
+                        pal.accent
+                    } else {
+                        pal.card_border
+                    },
                 ),
                 StrokeKind::Inside,
             );
-            let dot = Rect::from_min_size(
-                rect.min + Vec2::new(16.0, 16.0),
-                Vec2::splat(18.0),
-            );
+            let dot = Rect::from_min_size(rect.min + Vec2::new(16.0, 16.0), Vec2::splat(18.0));
             let preview_accent = if design == crate::theme::Design::Win10 {
                 Color32::from_rgb(0x00, 0x78, 0xD7)
             } else {
@@ -2892,10 +2963,7 @@ pub fn personalisation(app: &mut App, ui: &mut Ui) {
                 regular(11.5),
                 pal.text_faint,
             );
-            if resp
-                .on_hover_cursor(CursorIcon::PointingHand)
-                .clicked()
-            {
+            if resp.on_hover_cursor(CursorIcon::PointingHand).clicked() {
                 chosen = design;
             }
         }
@@ -2904,6 +2972,24 @@ pub fn personalisation(app: &mut App, ui: &mut Ui) {
     if chosen != app.design {
         app.set_design(chosen);
         return;
+    }
+    if app.design == crate::theme::Design::Win10 {
+        widgets::card(ui, &pal, |ui| {
+            let mut on = app.home_links;
+            let outcome = widgets::row(
+                ui,
+                &pal,
+                pal.accent,
+                Icon::Home,
+                "Page links on the home cards",
+                "List each category's pages under its name",
+                Right::Switch(&mut on),
+            );
+            if outcome.toggled {
+                app.set_home_links(on);
+            }
+        });
+        spacer(ui, 18.0);
     }
 
     widgets::section_label(ui, &pal, "Choose your mode");
@@ -3071,7 +3157,8 @@ pub fn personalisation(app: &mut App, ui: &mut Ui) {
         {
             app.use_system_appearance();
         }
-        if widgets::ghost_button(ui, &pal, "Show the welcome guide", Some(Icon::Sparkle)).clicked() {
+        if widgets::ghost_button(ui, &pal, "Show the welcome guide", Some(Icon::Sparkle)).clicked()
+        {
             app.welcome = Some(crate::welcome::Welcome::new(app));
         }
     });
@@ -3459,7 +3546,6 @@ pub fn accessibility(app: &mut App, ui: &mut Ui) {
             }
         }
     });
-
 }
 
 pub fn privacy(app: &mut App, ui: &mut Ui) {
@@ -3644,7 +3730,6 @@ pub fn privacy(app: &mut App, ui: &mut Ui) {
             }
         }
     });
-
 }
 
 pub fn time_language(app: &mut App, ui: &mut Ui) {
@@ -3688,7 +3773,10 @@ pub fn time_language(app: &mut App, ui: &mut Ui) {
             .iter()
             .map(|l| {
                 let base = l.split('.').next().unwrap_or(l);
-                (l.clone(), base.replace('_', " (" ) + if base.contains('_') { ")" } else { "" })
+                (
+                    l.clone(),
+                    base.replace('_', " (") + if base.contains('_') { ")" } else { "" },
+                )
             })
             .collect();
         if let Some(locale) = combo_row(
@@ -3784,7 +3872,13 @@ pub fn time_language(app: &mut App, ui: &mut Ui) {
     let mut filter = app.timezone_filter.clone();
     let mut chosen = None;
     widgets::card(ui, &pal, |ui| {
-        _ = widgets::search_box(ui, &pal, &mut filter, false, "Filter time zones, e.g. Berlin");
+        _ = widgets::search_box(
+            ui,
+            &pal,
+            &mut filter,
+            false,
+            "Filter time zones, e.g. Berlin",
+        );
         let query = filter.trim().to_lowercase();
         ui.add_space(6.0);
         let zones = system::list_timezones();
@@ -3833,7 +3927,6 @@ pub fn time_language(app: &mut App, ui: &mut Ui) {
     if let Some(zone) = chosen {
         app.set_timezone(zone);
     }
-
 }
 
 pub fn compatibility(app: &mut App, ui: &mut Ui) {
@@ -3965,7 +4058,14 @@ pub fn updates(app: &mut App, ui: &mut Ui) {
         ui.horizontal(|ui| {
             ui.add_space(ROW_PAD);
             let (chip, _) = ui.allocate_exact_size(Vec2::splat(44.0), Sense::hover());
-            widgets::icon_tile(ui.painter(), chip, Icon::Update, pal.accent, pal.on_accent, &pal);
+            widgets::icon_tile(
+                ui.painter(),
+                chip,
+                Icon::Update,
+                pal.accent,
+                pal.on_accent,
+                &pal,
+            );
             ui.add_space(14.0);
             ui.vertical(|ui| {
                 ui.set_width(ui.available_width() - ROW_PAD);
@@ -4003,7 +4103,9 @@ pub fn updates(app: &mut App, ui: &mut Ui) {
                         app.apt_job
                             .as_ref()
                             .map(|j| format!("{}…", j.label))
-                            .unwrap_or_else(|| "Checking apt, snap and Flatpak for updates…".to_owned()),
+                            .unwrap_or_else(|| {
+                                "Checking apt, snap and Flatpak for updates…".to_owned()
+                            }),
                     )
                     .font(regular(12.5))
                     .color(pal.text_faint),
@@ -4113,7 +4215,10 @@ pub fn updates(app: &mut App, ui: &mut Ui) {
                     _ => "Ubuntu package",
                 };
                 let subtitle = match (package.old.is_empty(), package.new.is_empty()) {
-                    (false, _) => format!("{kind} · {} installed · {} available", package.old, package.new),
+                    (false, _) => format!(
+                        "{kind} · {} installed · {} available",
+                        package.old, package.new
+                    ),
                     (true, false) => format!("{kind} · {} available", package.new),
                     (true, true) => format!("{kind} · update available"),
                 };
@@ -4315,7 +4420,14 @@ fn sys_app_row(
                 .corner_radius(6.0)
                 .paint_at(ui, chip);
         }
-        None => widgets::icon_tile(ui.painter(), chip, Icon::Apps, pal.accent, pal.on_accent, pal),
+        None => widgets::icon_tile(
+            ui.painter(),
+            chip,
+            Icon::Apps,
+            pal.accent,
+            pal.on_accent,
+            pal,
+        ),
     }
 
     #[derive(Clone, Copy, PartialEq, Eq)]
@@ -4346,9 +4458,11 @@ fn sys_app_row(
     }
 
     // Channel chip, just left of the action buttons.
-    let channel_galley = ui
-        .painter()
-        .layout_no_wrap(item.channel_label().to_owned(), regular(10.0), pal.text_faint);
+    let channel_galley = ui.painter().layout_no_wrap(
+        item.channel_label().to_owned(),
+        regular(10.0),
+        pal.text_faint,
+    );
     let channel_w = channel_galley.size().x + 16.0;
     let channel_rect = Rect::from_min_size(
         Pos2::new(right - channel_w, rect.center().y - 11.0),
@@ -4394,7 +4508,11 @@ fn sys_app_row(
     let mut clicked = None;
     for (btn, btn_rect, galley, danger) in laid {
         let resp = ui
-            .interact(btn_rect, response.id.with(("sys-act", btn as usize)), Sense::click())
+            .interact(
+                btn_rect,
+                response.id.with(("sys-act", btn as usize)),
+                Sense::click(),
+            )
             .on_hover_cursor(CursorIcon::PointingHand);
         if resp.hovered() {
             ui.painter().rect_filled(btn_rect, pal.corner(4), pal.hover);
@@ -4434,12 +4552,7 @@ fn apps_tab_bar(app: &mut App, ui: &mut Ui) {
         app.hub.tab = AppsTab::AllApps;
     }
     let current = app.hub.tab;
-    let hub_updates = app
-        .hub
-        .apps
-        .iter()
-        .filter(|a| a.update_available())
-        .count();
+    let hub_updates = app.hub.apps.iter().filter(|a| a.update_available()).count();
     let apt_updates = app.info.updates.as_ref().map(|l| l.len()).unwrap_or(0);
     let badge = (hub_updates + apt_updates).max(0);
 
@@ -4557,7 +4670,14 @@ fn render_my_apps_tab(
         ui.horizontal(|ui| {
             ui.add_space(ROW_PAD);
             let (chip, _) = ui.allocate_exact_size(Vec2::splat(46.0), Sense::hover());
-            widgets::icon_tile(ui.painter(), chip, Icon::Hub, pal.accent, pal.on_accent, &pal);
+            widgets::icon_tile(
+                ui.painter(),
+                chip,
+                Icon::Hub,
+                pal.accent,
+                pal.on_accent,
+                &pal,
+            );
             ui.add_space(14.0);
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 3.0;
@@ -4664,34 +4784,30 @@ fn render_my_apps_tab(
             || item.summary.to_lowercase().contains(&query)
     };
 
-        let mine = app.hub.my_ids.clone();
-        // Only apps from the user's own catalogue (plus user-added My Apps);
-        // third-party Library apps from other sources are excluded.
-        let apps: Vec<_> = app
-            .hub
-            .apps
-            .iter()
-            .filter(|a| mine.contains(&a.id))
-            .cloned()
-            .collect();
-        let installed = apps
-            .iter()
-            .filter(|a| a.ready() && matches(a))
-            .cloned()
-            .collect::<Vec<_>>();
-        let installable = apps
-            .iter()
-            .filter(|a| a.installable() && matches(a))
-            .cloned()
-            .collect::<Vec<_>>();
+    let mine = app.hub.my_ids.clone();
+    // Only apps from the user's own catalogue (plus user-added My Apps);
+    // third-party Library apps from other sources are excluded.
+    let apps: Vec<_> = app
+        .hub
+        .apps
+        .iter()
+        .filter(|a| mine.contains(&a.id))
+        .cloned()
+        .collect();
+    let installed = apps
+        .iter()
+        .filter(|a| a.ready() && matches(a))
+        .cloned()
+        .collect::<Vec<_>>();
+    let installable = apps
+        .iter()
+        .filter(|a| a.installable() && matches(a))
+        .cloned()
+        .collect::<Vec<_>>();
 
     // ------------------------------------------------------------ installed
     spacer(ui, 16.0);
-    widgets::section_label(
-        ui,
-        &pal,
-        &format!("My Apps ({})", installed.len()),
-    );
+    widgets::section_label(ui, &pal, &format!("My Apps ({})", installed.len()));
     widgets::card(ui, &pal, |ui| {
         if installed.is_empty() {
             widgets::empty_note(
@@ -4800,12 +4916,27 @@ fn render_updates_tab(
         ui.horizontal(|ui| {
             ui.add_space(ROW_PAD);
             let (chip, _) = ui.allocate_exact_size(Vec2::splat(40.0), Sense::hover());
-            widgets::icon_tile(ui.painter(), chip, Icon::Update, pal.accent, pal.on_accent, &pal);
+            widgets::icon_tile(
+                ui.painter(),
+                chip,
+                Icon::Update,
+                pal.accent,
+                pal.on_accent,
+                &pal,
+            );
             ui.add_space(12.0);
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
-                ui.label(egui::RichText::new(&title).font(semibold(16.0)).color(pal.text));
-                ui.label(egui::RichText::new(&subtitle).font(regular(12.0)).color(pal.text_faint));
+                ui.label(
+                    egui::RichText::new(&title)
+                        .font(semibold(16.0))
+                        .color(pal.text),
+                );
+                ui.label(
+                    egui::RichText::new(&subtitle)
+                        .font(regular(12.0))
+                        .color(pal.text_faint),
+                );
             });
         });
         ui.add_space(12.0);
@@ -4836,7 +4967,8 @@ fn render_updates_tab(
                 {
                     app.open_install_updates();
                 }
-                if widgets::ghost_button(ui, &pal, "Check for updates", Some(Icon::Update)).clicked()
+                if widgets::ghost_button(ui, &pal, "Check for updates", Some(Icon::Update))
+                    .clicked()
                 {
                     app.check_updates();
                 }
@@ -4924,7 +5056,11 @@ fn render_updates_tab(
     });
 }
 
-fn render_library_tab(app: &mut App, ui: &mut Ui, pending: &mut Option<(crate::hub::Action, String)>) {
+fn render_library_tab(
+    app: &mut App,
+    ui: &mut Ui,
+    pending: &mut Option<(crate::hub::Action, String)>,
+) {
     let pal = app.pal();
 
     // ------------------------------------------------------------ add app
@@ -4995,14 +5131,12 @@ fn render_library_tab(app: &mut App, ui: &mut Ui, pending: &mut Option<(crate::h
         return;
     }
 
-    let hub_apps: std::collections::HashMap<&str, &HubApp> = app
-        .hub
-        .apps
-        .iter()
-        .map(|a| (a.id.as_str(), a))
-        .collect();
-    let mut by_owner: std::collections::BTreeMap<String, Vec<(crate::hub::LibraryApp, Option<HubApp>)>> =
-        std::collections::BTreeMap::new();
+    let hub_apps: std::collections::HashMap<&str, &HubApp> =
+        app.hub.apps.iter().map(|a| (a.id.as_str(), a)).collect();
+    let mut by_owner: std::collections::BTreeMap<
+        String,
+        Vec<(crate::hub::LibraryApp, Option<HubApp>)>,
+    > = std::collections::BTreeMap::new();
     for item in &app.hub.library {
         if item.section == "mine" {
             continue;
@@ -5020,10 +5154,10 @@ fn render_library_tab(app: &mut App, ui: &mut Ui, pending: &mut Option<(crate::h
         } else {
             item.owner.clone()
         };
-        by_owner
-            .entry(owner)
-            .or_default()
-            .push((item.clone(), hub_apps.get(item.id.as_str()).map(|h| (*h).clone())));
+        by_owner.entry(owner).or_default().push((
+            item.clone(),
+            hub_apps.get(item.id.as_str()).map(|h| (*h).clone()),
+        ));
     }
 
     if by_owner.is_empty() {
@@ -5049,16 +5183,11 @@ fn render_library_tab(app: &mut App, ui: &mut Ui, pending: &mut Option<(crate::h
                 if index > 0 {
                     widgets::divider(ui, &pal);
                 }
-                let icon = item
-                    .icon
-                    .as_deref()
-                    .and_then(|i| app.app_icon(ui.ctx(), i));
+                let icon = item.icon.as_deref().and_then(|i| app.app_icon(ui.ctx(), i));
                 let status_text = match status {
-                    Some(h) if h.update_available() => format!(
-                        "{} installed · {} available",
-                        h.installed_label(),
-                        h.latest
-                    ),
+                    Some(h) if h.update_available() => {
+                        format!("{} installed · {} available", h.installed_label(), h.latest)
+                    }
                     Some(h) if h.installed.is_some() => {
                         format!("Installed {}", h.installed_label())
                     }
@@ -5192,7 +5321,14 @@ fn library_row(
                 .corner_radius(6.0)
                 .paint_at(ui, chip);
         }
-        None => widgets::icon_tile(ui.painter(), chip, Icon::Hub, pal.accent, pal.on_accent, pal),
+        None => widgets::icon_tile(
+            ui.painter(),
+            chip,
+            Icon::Hub,
+            pal.accent,
+            pal.on_accent,
+            pal,
+        ),
     }
 
     let mut right = rect.right() - ROW_PAD;
@@ -5281,7 +5417,13 @@ fn render_all_apps_tab(
 
     // ------------------------------------------------------------ filter
     spacer(ui, 16.0);
-    let _ = widgets::search_box(ui, &pal, &mut app.hub.filter, false, "Filter installed applications");
+    let _ = widgets::search_box(
+        ui,
+        &pal,
+        &mut app.hub.filter,
+        false,
+        "Filter installed applications",
+    );
     let sys_query = app.hub.filter.trim().to_lowercase();
     let sys_matches = |item: &crate::inventory::SysApp| {
         sys_query.is_empty()
@@ -5517,17 +5659,68 @@ pub fn search_entries() -> Vec<SearchEntry> {
         icon: Icon::Clock,
     });
     for (page, title, subtitle, icon) in [
-        (Page::Desktop, "Multitasking", "Hot corner, screen edges, workspaces, Alt+Tab", Icon::Apps),
-        (Page::Desktop, "Ubuntu Dock", "Auto-hide, panel mode, icon size, position", Icon::Apps),
-        (Page::Desktop, "Desktop icons", "Home folder, Trash, icon size", Icon::Image),
-        (Page::Desktop, "Title bar buttons", "Minimize, maximize, window focus, title bar clicks", Icon::Apps),
-        (Page::Desktop, "Fonts", "Interface, document and monospace fonts, hinting", Icon::Keyboard),
-        (Page::Desktop, "Themes", "Legacy app theme, icons, cursor", Icon::Personalise),
-        (Page::Desktop, "Startup apps", "Apps that start when you sign in", Icon::Power),
-        (Page::Desktop, "Tweaks", "Overview key, middle-click paste, mouse acceleration, over-amplification", Icon::Sparkle),
-        (Page::Extensions, "GNOME extensions", "Turn on or off, settings, install, remove", Icon::Hub),
+        (
+            Page::Desktop,
+            "Multitasking",
+            "Hot corner, screen edges, workspaces, Alt+Tab",
+            Icon::Apps,
+        ),
+        (
+            Page::Desktop,
+            "Ubuntu Dock",
+            "Auto-hide, panel mode, icon size, position",
+            Icon::Apps,
+        ),
+        (
+            Page::Desktop,
+            "Desktop icons",
+            "Home folder, Trash, icon size",
+            Icon::Image,
+        ),
+        (
+            Page::Desktop,
+            "Title bar buttons",
+            "Minimize, maximize, window focus, title bar clicks",
+            Icon::Apps,
+        ),
+        (
+            Page::Desktop,
+            "Fonts",
+            "Interface, document and monospace fonts, hinting",
+            Icon::Keyboard,
+        ),
+        (
+            Page::Desktop,
+            "Themes",
+            "Legacy app theme, icons, cursor",
+            Icon::Personalise,
+        ),
+        (
+            Page::Desktop,
+            "Startup apps",
+            "Apps that start when you sign in",
+            Icon::Power,
+        ),
+        (
+            Page::Desktop,
+            "Tweaks",
+            "Overview key, middle-click paste, mouse acceleration, over-amplification",
+            Icon::Sparkle,
+        ),
+        (
+            Page::Extensions,
+            "GNOME extensions",
+            "Turn on or off, settings, install, remove",
+            Icon::Hub,
+        ),
     ] {
-        entries.push(SearchEntry { page, detail: None, title, subtitle, icon });
+        entries.push(SearchEntry {
+            page,
+            detail: None,
+            title,
+            subtitle,
+            icon,
+        });
     }
     entries.push(SearchEntry {
         page: Page::Updates,
@@ -5603,8 +5796,351 @@ pub fn search(app: &mut App, ui: &mut Ui) {
 
 // ---------------------------------------------------------------- home (Win10)
 
-/// The Windows 10 home screen: a full-width header band with the account and
-/// status cards, the centred “Find a setting” box, then the accent tiles.
+/// A toggle on the Windows 10 home page.
+#[derive(Clone, Copy)]
+enum Quick {
+    Wifi,
+    Bluetooth,
+    NightLight,
+    Focus,
+    Mute,
+    Dark,
+}
+
+impl Quick {
+    const ALL: [Quick; 6] = [
+        Quick::Wifi,
+        Quick::Bluetooth,
+        Quick::NightLight,
+        Quick::Focus,
+        Quick::Mute,
+        Quick::Dark,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            Quick::Wifi => "Wi-Fi",
+            Quick::Bluetooth => "Bluetooth",
+            Quick::NightLight => "Night light",
+            Quick::Focus => "Do not disturb",
+            Quick::Mute => "Mute",
+            Quick::Dark => "Dark mode",
+        }
+    }
+
+    fn icon(self) -> Icon {
+        match self {
+            Quick::Wifi => Icon::Wifi,
+            Quick::Bluetooth => Icon::Bluetooth,
+            Quick::NightLight => Icon::Sun,
+            Quick::Focus => Icon::Bell,
+            Quick::Mute => Icon::Sound,
+            Quick::Dark => Icon::Moon,
+        }
+    }
+
+    fn is_on(self, app: &App) -> bool {
+        match self {
+            Quick::Wifi => app.info.wifi_enabled,
+            Quick::Bluetooth => app.info.bluetooth_on,
+            Quick::NightLight => app.info.night_light,
+            Quick::Focus => !app.info.notifications,
+            Quick::Mute => app.info.muted,
+            Quick::Dark => app.mode == crate::theme::Mode::Dark,
+        }
+    }
+
+    fn toggle(self, app: &mut App) {
+        let on = !self.is_on(app);
+        let state = if on { "on" } else { "off" };
+        let ok = match self {
+            Quick::Wifi => {
+                app.set_wifi_radio(on);
+                return;
+            }
+            Quick::Bluetooth => match system::set_bluetooth(on) {
+                Ok(()) => {
+                    app.info.bluetooth_on = on;
+                    true
+                }
+                Err(err) => {
+                    app.notify_error(err);
+                    return;
+                }
+            },
+            Quick::NightLight => {
+                let ok = system::set_night_light(on);
+                if ok {
+                    app.info.night_light = on;
+                }
+                ok
+            }
+            Quick::Focus => {
+                let ok = system::set_notifications(!on);
+                if ok {
+                    app.info.notifications = !on;
+                }
+                ok
+            }
+            Quick::Mute => {
+                let ok = system::set_muted(on);
+                if ok {
+                    app.info.muted = on;
+                }
+                ok
+            }
+            Quick::Dark => {
+                app.follow_system = false;
+                app.mode = if on {
+                    crate::theme::Mode::Dark
+                } else {
+                    crate::theme::Mode::Light
+                };
+                return;
+            }
+        };
+        if ok {
+            app.notify(format!("{} turned {state}", self.label()));
+        } else {
+            app.notify_error(format!("Could not change {}", self.label().to_lowercase()));
+        }
+    }
+}
+
+/// Extra home-page links for categories with few sub-pages: the main
+/// settings on that page, so every card shows what it holds.
+fn home_extras(cat: crate::app::Cat10) -> &'static [(&'static str, Icon, View)] {
+    use crate::app::Cat10;
+    match cat {
+        Cat10::Network => &[
+            ("Wi-Fi networks", Icon::Wifi, View::Page(Page::Network)),
+            ("Connected network", Icon::Globe, View::Page(Page::Network)),
+            ("Proxy", Icon::Shield, View::Page(Page::Network)),
+        ],
+        Cat10::Accounts => &[
+            ("Password", Icon::Shield, View::Page(Page::Accounts)),
+            ("Automatic sign-in", Icon::Power, View::Page(Page::Accounts)),
+            ("Lock screen", Icon::Display, View::Page(Page::Privacy)),
+        ],
+        Cat10::Time => &[
+            (
+                "Set time automatically",
+                Icon::Clock,
+                View::Page(Page::TimeLanguage),
+            ),
+            ("Language", Icon::Globe, View::Page(Page::TimeLanguage)),
+            ("Clock format", Icon::Clock, View::Page(Page::TimeLanguage)),
+        ],
+        Cat10::Ease => &[
+            ("Large text", Icon::Display, View::Page(Page::Accessibility)),
+            ("Visual alerts", Icon::Bell, View::Page(Page::Accessibility)),
+            (
+                "Sticky keys",
+                Icon::Keyboard,
+                View::Page(Page::Accessibility),
+            ),
+        ],
+        Cat10::Privacy => &[
+            ("Screen lock", Icon::Display, View::Page(Page::Privacy)),
+            ("Location services", Icon::Globe, View::Page(Page::Privacy)),
+            (
+                "Camera & microphone",
+                Icon::Image,
+                View::Page(Page::Privacy),
+            ),
+        ],
+        Cat10::Update => &[
+            ("Available updates", Icon::Update, View::Page(Page::Updates)),
+            ("Update policy", Icon::Clock, View::Page(Page::Updates)),
+            ("App Hub apps", Icon::Hub, View::Page(Page::Updates)),
+        ],
+        Cat10::Personalisation => &[(
+            "Light & dark mode",
+            Icon::Moon,
+            View::Page(Page::Personalisation),
+        )],
+        Cat10::Apps => &[("App Hub", Icon::Hub, View::Page(Page::Apps))],
+        _ => &[],
+    }
+}
+
+/// Quick toggles (Wi-Fi, Bluetooth, night light, do not disturb, mute, dark
+/// mode) and the volume and brightness sliders. Shared by the Windows 10 home
+/// and the Windows 11 System page.
+pub fn quick_settings(
+    app: &mut App,
+    ui: &mut Ui,
+    pal: &Palette,
+    width: f32,
+    x0: f32,
+    content_w: f32,
+    s: f32,
+) {
+    let cols = if content_w >= 6.0 * 150.0 { 6 } else { 3 };
+    let gap = 10.0 * s;
+    let qw = (content_w - gap * (cols as f32 - 1.0)) / cols as f32;
+    let qh = 74.0 * s;
+    let rows = Quick::ALL.len().div_ceil(cols);
+    let (area, _) = ui.allocate_exact_size(
+        Vec2::new(width, rows as f32 * qh + (rows as f32 - 1.0) * gap),
+        Sense::hover(),
+    );
+    let mut toggled: Option<Quick> = None;
+    for (i, quick) in Quick::ALL.into_iter().enumerate() {
+        let tile = Rect::from_min_size(
+            Pos2::new(
+                x0 + (i % cols) as f32 * (qw + gap),
+                area.top() + (i / cols) as f32 * (qh + gap),
+            ),
+            Vec2::new(qw, qh),
+        );
+        let on = quick.is_on(app);
+        let resp = ui
+            .interact(tile, Id::new(("home-toggle", i)), Sense::click())
+            .on_hover_cursor(CursorIcon::PointingHand);
+        let (fill, ink, sub) = if on {
+            let fill = if resp.hovered() {
+                crate::theme::lighten(pal.accent, 14)
+            } else {
+                pal.accent
+            };
+            (fill, pal.on_accent, pal.on_accent.gamma_multiply(0.85))
+        } else {
+            let fill = if resp.hovered() {
+                pal.card_hover
+            } else {
+                pal.card
+            };
+            (fill, pal.text, pal.text_faint)
+        };
+        ui.painter().rect_filled(tile, pal.corner(6), fill);
+        if !on {
+            ui.painter().rect_stroke(
+                tile,
+                pal.corner(6),
+                Stroke::new(1.0, pal.card_border),
+                StrokeKind::Inside,
+            );
+        }
+        let glyph = Rect::from_min_size(
+            tile.min + Vec2::new(14.0 * s, 14.0 * s),
+            Vec2::splat(20.0 * s),
+        );
+        crate::icons::paint(ui.painter(), quick.icon(), glyph, ink);
+        let painter = ui.painter().with_clip_rect(tile.shrink(4.0));
+        painter.text(
+            Pos2::new(tile.left() + 14.0 * s, tile.bottom() - 26.0 * s),
+            Align2::LEFT_CENTER,
+            quick.label(),
+            semibold(12.5 * s),
+            ink,
+        );
+        painter.text(
+            Pos2::new(tile.left() + 14.0 * s, tile.bottom() - 11.0 * s),
+            Align2::LEFT_CENTER,
+            if on { "On" } else { "Off" },
+            regular(11.0 * s),
+            sub,
+        );
+        if resp.clicked() {
+            toggled = Some(quick);
+        }
+    }
+    if let Some(quick) = toggled {
+        quick.toggle(app);
+    }
+
+    ui.add_space(gap);
+    let brightness = app.info.brightness;
+    let sliders = if brightness.is_some() { 2 } else { 1 };
+    let sw = (content_w - gap * (sliders as f32 - 1.0)) / sliders as f32;
+    let sh = 62.0 * s;
+    let (area, _) = ui.allocate_exact_size(Vec2::new(width, sh), Sense::hover());
+    for i in 0..sliders {
+        let card = Rect::from_min_size(
+            Pos2::new(x0 + i as f32 * (sw + gap), area.top()),
+            Vec2::new(sw, sh),
+        );
+        ui.painter().rect_filled(card, pal.corner(6), pal.card);
+        ui.painter().rect_stroke(
+            card,
+            pal.corner(6),
+            Stroke::new(1.0, pal.card_border),
+            StrokeKind::Inside,
+        );
+        let (icon, label, mut value, readout) = if i == 0 {
+            let v = app.info.volume as f32 / 100.0;
+            let text = if app.info.muted {
+                "Muted".to_owned()
+            } else {
+                format!("{}%", app.info.volume)
+            };
+            (Icon::Sound, "Volume", v, text)
+        } else {
+            let pct = brightness.unwrap_or(100);
+            (
+                Icon::Display,
+                "Brightness",
+                pct as f32 / 100.0,
+                format!("{pct}%"),
+            )
+        };
+        let glyph = Rect::from_center_size(
+            Pos2::new(card.left() + 26.0 * s, card.center().y),
+            Vec2::splat(20.0 * s),
+        );
+        crate::icons::paint(ui.painter(), icon, glyph, pal.accent);
+        ui.painter().text(
+            Pos2::new(card.left() + 48.0 * s, card.top() + 18.0 * s),
+            Align2::LEFT_CENTER,
+            label,
+            semibold(12.5 * s),
+            pal.text,
+        );
+        ui.painter().text(
+            Pos2::new(card.right() - 18.0 * s, card.top() + 18.0 * s),
+            Align2::RIGHT_CENTER,
+            readout,
+            regular(12.0 * s),
+            pal.text_muted,
+        );
+        let track = Rect::from_min_max(
+            Pos2::new(card.left() + 48.0 * s, card.top() + 28.0 * s),
+            Pos2::new(card.right() - 18.0 * s, card.bottom() - 4.0 * s),
+        );
+        let changed = ui
+            .scope_builder(UiBuilder::new().max_rect(track), |ui| {
+                widgets::slider(ui, pal, pal.accent, &mut value, Id::new(("home-slider", i)))
+            })
+            .inner;
+        if changed {
+            if i == 0 {
+                let pct = (value * 100.0).round() as u32;
+                if pct != app.info.volume && system::set_volume(pct) {
+                    app.info.volume = pct;
+                    app.test_volume = value;
+                    if app.info.muted && system::set_muted(false) {
+                        app.info.muted = false;
+                    }
+                }
+            } else {
+                let pct = (value * 100.0).round().max(1.0) as u8;
+                if Some(pct) != app.info.brightness {
+                    match system::set_brightness(pct) {
+                        Ok(()) => {
+                            app.test_brightness = value;
+                            app.info.brightness = Some(pct);
+                        }
+                        Err(err) => app.notify_error(err),
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The Windows 10 home screen: an account card with shortcuts, the search
+/// box, quick toggles and sliders, then every category as a card of links.
 pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
     let width = rect.width();
     ScrollArea::vertical()
@@ -5614,91 +6150,82 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
             ui.set_width(width);
             ui.spacing_mut().item_spacing = Vec2::ZERO;
 
-            // --- header band -------------------------------------------------
-            // Windows 10 puts the account, a few quick actions and the search
-            // box on a grey band above a flat grid of categories.
-            let hero_h = 184.0;
-            let (hero, _) = ui.allocate_exact_size(Vec2::new(width, hero_h), Sense::hover());
-            ui.painter().rect_filled(hero, 0, pal.nav_bg);
-            ui.painter().rect_filled(
-                Rect::from_min_max(Pos2::new(hero.left(), hero.bottom() - 1.0), hero.max),
-                0,
-                pal.card_border,
+            // Everything scales a little with the window and sits in one
+            // centred column, so a maximised window is neither tiny nor empty.
+            let s = (width / 1100.0).clamp(1.0, 1.22);
+            let content_w = (width - 64.0).min(1360.0).max(320.0);
+            let x0 = ui.cursor().left() + (width - content_w) / 2.0;
+            let x1 = x0 + content_w;
+            let corner = pal.corner(8);
+            let tint = with_alpha(pal.accent, if pal.bg.r() < 128 { 46 } else { 26 });
+            let mut go: Option<View> = None;
+
+            // --- hero card: account and three shortcuts ----------------------
+            ui.add_space(22.0);
+            let hero_h = 104.0 * s;
+            let (band, _) = ui.allocate_exact_size(Vec2::new(width, hero_h), Sense::hover());
+            let hero = Rect::from_min_max(Pos2::new(x0, band.top()), Pos2::new(x1, band.bottom()));
+            ui.painter().rect_filled(hero, corner, pal.card);
+            ui.painter().rect_stroke(
+                hero,
+                corner,
+                Stroke::new(1.0, pal.card_border),
+                StrokeKind::Inside,
             );
 
-            let margin = 40.0;
             let account = app.info.full_name.clone();
             let role = if app.info.is_admin {
-                "Administrator"
+                "Local account · Administrator"
             } else {
-                "Standard user"
+                "Local account · Standard user"
             };
-
-            // Account block: grey avatar circle, name, account type.
-            let avatar_c = Pos2::new(hero.left() + margin + 26.0, hero.top() + 46.0);
-            ui.painter()
-                .circle_filled(avatar_c, 26.0, pal.card_hover);
-            let ink = if pal.bg.r() < 128 {
-                Color32::from_rgb(0xB0, 0xB0, 0xB0)
-            } else {
-                Color32::WHITE
-            };
-            ui.painter()
-                .circle_filled(Pos2::new(avatar_c.x, avatar_c.y - 6.0), 8.5, ink);
-            ui.painter().add(egui::Shape::ellipse_filled(
-                Pos2::new(avatar_c.x, avatar_c.y + 13.0),
-                Vec2::new(16.0, 10.0),
-                ink,
-            ));
+            let r = 28.0 * s;
+            let avatar_c = Pos2::new(hero.left() + 24.0 * s + r, hero.center().y);
+            ui.painter().circle_filled(avatar_c, r, pal.accent);
+            let initial = account
+                .chars()
+                .next()
+                .map(|c| c.to_uppercase().to_string())
+                .unwrap_or_default();
             ui.painter().text(
-                Pos2::new(hero.left() + margin + 66.0, hero.top() + 30.0),
+                avatar_c,
+                Align2::CENTER_CENTER,
+                initial,
+                semibold(22.0 * s),
+                pal.on_accent,
+            );
+            let name_x = avatar_c.x + r + 16.0 * s;
+            ui.painter().text(
+                Pos2::new(name_x, hero.center().y - 11.0 * s),
                 Align2::LEFT_CENTER,
                 &account,
-                semibold(18.0),
+                semibold(20.0 * s),
                 pal.text,
             );
             ui.painter().text(
-                Pos2::new(hero.left() + margin + 66.0, hero.top() + 52.0),
-                Align2::LEFT_CENTER,
-                "Local account",
-                regular(12.0),
-                pal.text_muted,
-            );
-            ui.painter().text(
-                Pos2::new(hero.left() + margin + 66.0, hero.top() + 70.0),
+                Pos2::new(name_x, hero.center().y + 14.0 * s),
                 Align2::LEFT_CENTER,
                 role,
-                regular(12.0),
-                pal.accent,
+                regular(12.5 * s),
+                pal.text_muted,
             );
-            let account_rect = Rect::from_min_max(
-                Pos2::new(hero.left() + margin, hero.top() + 14.0),
-                Pos2::new(hero.left() + margin + 280.0, hero.top() + 82.0),
-            );
+            let account_rect =
+                Rect::from_min_max(hero.min, Pos2::new(name_x + 230.0 * s, hero.bottom()));
             if ui
-                .interact(
-                    account_rect,
-                    Id::new("home-account"),
-                    Sense::click(),
-                )
+                .interact(account_rect, Id::new("home-account"), Sense::click())
                 .on_hover_cursor(CursorIcon::PointingHand)
                 .clicked()
             {
-                app.go(View::Page(Page::Accounts));
+                go = Some(View::Page(Page::Accounts));
             }
 
-            // Quick actions along the top of the band.
             let update_line = if app.updates_loading {
-                "Checking for updates…".to_owned()
+                "Checking…".to_owned()
             } else if let Some(list) = &app.info.updates {
-                if list.is_empty() {
-                    "You're up to date".to_owned()
-                } else {
-                    format!(
-                        "{} update{} available",
-                        list.len(),
-                        if list.len() == 1 { "" } else { "s" }
-                    )
+                match list.len() {
+                    0 => "You're up to date".to_owned(),
+                    1 => "1 update available".to_owned(),
+                    n => format!("{n} updates available"),
                 }
             } else {
                 "Check for updates".to_owned()
@@ -5707,11 +6234,16 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
                 "{:.0} GB free of {:.0} GB",
                 app.info.disk_free_gb, app.info.disk_total_gb
             );
-            let quick = [
-                ("Windows Update", update_line, Icon::Update, View::Page(Page::Updates)),
+            let shortcuts = [
+                (
+                    "Windows Update",
+                    update_line,
+                    Icon::Update,
+                    View::Page(Page::Updates),
+                ),
                 (
                     "App Hub",
-                    "Install and manage apps".to_owned(),
+                    "Get and manage apps".to_owned(),
                     Icon::Hub,
                     View::Page(Page::Apps),
                 ),
@@ -5722,46 +6254,66 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
                     View::Detail(Page::System, Detail::Storage),
                 ),
             ];
-            let quick_w = 190.0;
-            let quick_gap = 18.0;
-            let quick_x = (hero.right() - margin - quick_w * 3.0 - quick_gap * 2.0)
-                .max(hero.left() + margin + 320.0);
-            let mut clicked: Option<View> = None;
-            for (index, (title, line, icon, view)) in quick.into_iter().enumerate() {
-                let item = Rect::from_min_size(
-                    Pos2::new(quick_x + index as f32 * (quick_w + quick_gap), hero.top() + 24.0),
-                    Vec2::new(quick_w, 56.0),
-                );
-                if ui
-                    .interact(item, Id::new(("home-quick", index)), Sense::click())
-                    .on_hover_cursor(CursorIcon::PointingHand)
-                    .clicked()
-                {
-                    clicked = Some(view);
+            let gap = 10.0 * s;
+            let free = hero.right() - 14.0 * s - (name_x + 240.0 * s);
+            let tile_w = ((free - gap * 2.0) / 3.0).min(220.0 * s);
+            if tile_w >= 130.0 {
+                let tile_h = hero_h - 28.0 * s;
+                for (i, (title, line, icon, view)) in shortcuts.into_iter().enumerate() {
+                    let tile = Rect::from_min_size(
+                        Pos2::new(
+                            hero.right()
+                                - 14.0 * s
+                                - (3 - i) as f32 * tile_w
+                                - (2 - i) as f32 * gap,
+                            hero.top() + 14.0 * s,
+                        ),
+                        Vec2::new(tile_w, tile_h),
+                    );
+                    let resp = ui
+                        .interact(tile, Id::new(("home-quick", i)), Sense::click())
+                        .on_hover_cursor(CursorIcon::PointingHand);
+                    let fill = if resp.hovered() {
+                        pal.card_hover
+                    } else {
+                        pal.nav_bg
+                    };
+                    ui.painter().rect_filled(tile, pal.corner(6), fill);
+                    let badge = Rect::from_center_size(
+                        Pos2::new(tile.left() + 26.0 * s, tile.center().y),
+                        Vec2::splat(32.0 * s),
+                    );
+                    ui.painter().rect_filled(badge, pal.corner(6), tint);
+                    crate::icons::paint(ui.painter(), icon, badge.shrink(8.0 * s), pal.accent);
+                    let painter = ui.painter().with_clip_rect(tile.shrink(4.0));
+                    let tx = badge.right() + 12.0 * s;
+                    painter.text(
+                        Pos2::new(tx, tile.center().y - 9.0 * s),
+                        Align2::LEFT_CENTER,
+                        title,
+                        semibold(13.0 * s),
+                        pal.text,
+                    );
+                    painter.text(
+                        Pos2::new(tx, tile.center().y + 10.0 * s),
+                        Align2::LEFT_CENTER,
+                        &line,
+                        regular(11.5 * s),
+                        pal.text_faint,
+                    );
+                    if resp.clicked() {
+                        go = Some(view);
+                    }
                 }
-                let glyph = Rect::from_min_size(item.min + Vec2::new(0.0, 12.0), Vec2::splat(22.0));
-                crate::icons::paint(ui.painter(), icon, glyph, pal.accent);
-                ui.painter().text(
-                    Pos2::new(item.left() + 34.0, item.top() + 12.0),
-                    Align2::LEFT_CENTER,
-                    title,
-                    semibold(12.5),
-                    pal.text,
-                );
-                ui.painter().text(
-                    Pos2::new(item.left() + 34.0, item.top() + 31.0),
-                    Align2::LEFT_CENTER,
-                    &line,
-                    regular(11.0),
-                    pal.text_faint,
-                );
             }
 
-            // Centred search box, inside the band.
-            let search_w = (width * 0.44).clamp(300.0, 560.0);
-            let search_rect = Rect::from_min_size(
-                Pos2::new(hero.center().x - search_w / 2.0, hero.top() + 120.0),
-                Vec2::new(search_w, 34.0),
+            // --- search ---------------------------------------------------
+            ui.add_space(18.0 * s);
+            let search_w = content_w.min(640.0 * s);
+            let (row, _) = ui.allocate_exact_size(Vec2::new(width, 36.0 * s), Sense::hover());
+            let search_rect = Rect::from_center_size(
+                Pos2::new((x0 + x1) / 2.0, row.center().y),
+                Vec2::new(search_w, 36.0 * s),
             );
             ui.scope_builder(
                 UiBuilder::new()
@@ -5774,63 +6326,194 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
                 },
             );
 
-            // --- flat category grid ------------------------------------------
-            let cols = 4usize;
-            let gap = 10.0;
-            let item_w = ((width - margin * 2.0 - gap * (cols as f32 - 1.0)) / cols as f32)
-                .max(160.0);
-            let item_h = 74.0;
-            let rows = crate::app::Cat10::ALL.len().div_ceil(cols);
-            let grid_h = rows as f32 * item_h;
-            let (grid, _) =
-                ui.allocate_exact_size(Vec2::new(width, grid_h + 26.0), Sense::hover());
+            let heading = |ui: &mut Ui, text: &str| {
+                ui.add_space(26.0 * s);
+                let (row, _) = ui.allocate_exact_size(Vec2::new(width, 22.0 * s), Sense::hover());
+                ui.painter().text(
+                    Pos2::new(x0 + 2.0, row.center().y),
+                    Align2::LEFT_CENTER,
+                    text,
+                    semibold(16.0 * s),
+                    pal.text,
+                );
+                ui.add_space(10.0 * s);
+            };
 
-            for (index, cat) in crate::app::Cat10::ALL.iter().copied().enumerate() {
-                let col = index % cols;
-                let row = index / cols;
-                let item = Rect::from_min_size(
-                    Pos2::new(
-                        grid.left() + margin + col as f32 * (item_w + gap),
-                        grid.top() + 22.0 + row as f32 * item_h,
-                    ),
-                    Vec2::new(item_w, item_h),
+            // --- quick settings: toggles and two sliders ------------------
+            heading(ui, "Quick settings");
+            quick_settings(app, ui, pal, width, x0, content_w, s);
+
+            // --- every category, with its pages as links ------------------
+            heading(ui, "All settings");
+            {
+                // Show or hide each card's list of pages.
+                let label = if app.home_links {
+                    "Hide page links"
+                } else {
+                    "Show page links"
+                };
+                let galley =
+                    ui.painter()
+                        .layout_no_wrap(label.to_owned(), regular(12.5 * s), pal.accent);
+                let pos = Pos2::new(
+                    x1 - galley.size().x - 2.0,
+                    ui.cursor().top() - 10.0 * s - 11.0 * s - galley.size().y / 2.0,
                 );
-                if ui.rect_contains_pointer(item) {
-                    ui.painter().rect_filled(item, pal.corner(4), pal.card_hover);
+                let hit = Rect::from_min_size(pos, galley.size()).expand(6.0);
+                let resp = ui
+                    .interact(hit, Id::new("home-links-toggle"), Sense::click())
+                    .on_hover_cursor(CursorIcon::PointingHand);
+                if resp.hovered() {
+                    ui.painter().rect_filled(hit, pal.corner(4), pal.hover);
                 }
-                let glyph =
-                    Rect::from_min_size(item.min + Vec2::new(10.0, 18.0), Vec2::splat(26.0));
-                crate::icons::paint(ui.painter(), cat.icon(), glyph, pal.accent);
-                let text_clip = Rect::from_min_max(
-                    Pos2::new(item.left() + 46.0, item.top()),
-                    Pos2::new(item.right() - 6.0, item.bottom()),
+                ui.painter().galley(pos, galley, pal.accent);
+                if resp.clicked() {
+                    let on = !app.home_links;
+                    app.set_home_links(on);
+                }
+            }
+            let show_links = app.home_links;
+            let gap = 12.0 * s;
+            let min_w = 290.0 * s;
+            let cols = (((content_w + gap) / (min_w + gap)).floor() as usize).clamp(1, 4);
+            let cw = (content_w - gap * (cols as f32 - 1.0)) / cols as f32;
+            let link_h = 28.0 * s;
+            let head_h = 66.0 * s;
+            let max_links = 4usize;
+            let ch = if show_links {
+                head_h + link_h * max_links as f32 + 12.0 * s
+            } else {
+                head_h + 6.0 * s
+            };
+            let cats = crate::app::Cat10::ALL;
+            let rows = cats.len().div_ceil(cols);
+            let (area, _) = ui.allocate_exact_size(
+                Vec2::new(width, rows as f32 * ch + (rows as f32 - 1.0) * gap),
+                Sense::hover(),
+            );
+            for (index, cat) in cats.iter().copied().enumerate() {
+                let card = Rect::from_min_size(
+                    Pos2::new(
+                        x0 + (index % cols) as f32 * (cw + gap),
+                        area.top() + (index / cols) as f32 * (ch + gap),
+                    ),
+                    Vec2::new(cw, ch),
                 );
-                let painter = ui.painter().with_clip_rect(text_clip);
+                let hovered = ui.rect_contains_pointer(card);
+                ui.painter().rect_filled(card, corner, pal.card);
+                ui.painter().rect_stroke(
+                    card,
+                    corner,
+                    Stroke::new(
+                        1.0,
+                        if hovered {
+                            with_alpha(pal.accent, 140)
+                        } else {
+                            pal.card_border
+                        },
+                    ),
+                    StrokeKind::Inside,
+                );
+                let head = Rect::from_min_size(card.min, Vec2::new(cw, head_h));
+                let badge = Rect::from_min_size(
+                    Pos2::new(card.left() + 16.0 * s, head.center().y - 20.0 * s),
+                    Vec2::splat(40.0 * s),
+                );
+                ui.painter().rect_filled(badge, pal.corner(8), tint);
+                crate::icons::paint(ui.painter(), cat.icon(), badge.shrink(9.0 * s), pal.accent);
+                let painter = ui.painter().with_clip_rect(card.shrink(6.0));
+                let tx = badge.right() + 14.0 * s;
                 painter.text(
-                    Pos2::new(item.left() + 48.0, item.top() + 21.0),
+                    Pos2::new(tx, head.center().y - 9.0 * s),
                     Align2::LEFT_CENTER,
                     cat.title(),
-                    semibold(13.0),
+                    semibold(15.0 * s),
                     pal.text,
                 );
                 painter.text(
-                    Pos2::new(item.left() + 48.0, item.top() + 39.0),
+                    Pos2::new(tx, head.center().y + 11.0 * s),
                     Align2::LEFT_CENTER,
                     cat.subtitle(),
-                    regular(11.0),
+                    regular(11.5 * s),
                     pal.text_faint,
                 );
                 if ui
-                    .interact(item, Id::new(("home-category", cat.title())), Sense::click())
+                    .interact(
+                        head,
+                        Id::new(("home-category", cat.title())),
+                        Sense::click(),
+                    )
                     .on_hover_cursor(CursorIcon::PointingHand)
                     .clicked()
                 {
-                    clicked = Some(cat.items()[0].2);
+                    go = Some(cat.items()[0].2);
+                }
+                if !show_links {
+                    continue;
+                }
+                ui.painter().line_segment(
+                    [
+                        Pos2::new(card.left() + 16.0 * s, head.bottom()),
+                        Pos2::new(card.right() - 16.0 * s, head.bottom()),
+                    ],
+                    Stroke::new(1.0, pal.divider),
+                );
+
+                let mut items: Vec<(&str, Icon, View)> = cat.items().to_vec();
+                items.extend_from_slice(home_extras(cat));
+                let overflow = items.len() > max_links;
+                let shown = if overflow { max_links - 1 } else { items.len() };
+                let mut links: Vec<(String, Icon, View, bool)> = items[..shown]
+                    .iter()
+                    .map(|(label, icon, view)| ((*label).to_owned(), *icon, *view, false))
+                    .collect();
+                if overflow {
+                    links.push((
+                        format!("{} more…", items.len() - shown),
+                        Icon::ChevronRight,
+                        items[shown].2,
+                        true,
+                    ));
+                }
+                for (j, (label, icon, view, more)) in links.into_iter().enumerate() {
+                    let link = Rect::from_min_size(
+                        Pos2::new(
+                            card.left() + 8.0 * s,
+                            head.bottom() + 6.0 * s + j as f32 * link_h,
+                        ),
+                        Vec2::new(cw - 16.0 * s, link_h),
+                    );
+                    let resp = ui
+                        .interact(link, Id::new(("home-link", index, j)), Sense::click())
+                        .on_hover_cursor(CursorIcon::PointingHand);
+                    if resp.hovered() {
+                        ui.painter().rect_filled(link, pal.corner(4), pal.hover);
+                    }
+                    let color = if more || resp.hovered() {
+                        pal.accent
+                    } else {
+                        pal.text_muted
+                    };
+                    let glyph = Rect::from_center_size(
+                        Pos2::new(link.left() + 16.0 * s, link.center().y),
+                        Vec2::splat(15.0 * s),
+                    );
+                    crate::icons::paint(ui.painter(), icon, glyph, color);
+                    painter.text(
+                        Pos2::new(link.left() + 34.0 * s, link.center().y),
+                        Align2::LEFT_CENTER,
+                        label,
+                        regular(13.0 * s),
+                        if more { pal.accent } else { pal.text },
+                    );
+                    if resp.clicked() {
+                        go = Some(view);
+                    }
                 }
             }
-            if let Some(view) = clicked {
+            if let Some(view) = go {
                 app.go(view);
             }
-            ui.add_space(26.0);
+            ui.add_space(32.0);
         });
 }

@@ -321,7 +321,6 @@ pub fn update_all() -> Receiver<JobEvent> {
     jobs::spawn(cmd)
 }
 
-
 // ---------------------------------------------------------------- favorites
 // App Hub 1.7 saves install recipes on a "Favorites" page: apt, snap, flatpak,
 // catalogue, GitHub .deb, direct .deb and AppImage. They are not part of the
@@ -515,7 +514,10 @@ pub fn run_favorite(favorite: &Favorite) -> Receiver<JobEvent> {
             let (tx, rx) = std::sync::mpsc::channel();
             std::thread::spawn(move || {
                 let _ = tx.send(JobEvent::Line(message.clone()));
-                let _ = tx.send(JobEvent::Finished { code: 1, log: message });
+                let _ = tx.send(JobEvent::Finished {
+                    code: 1,
+                    log: message,
+                });
             });
             rx
         }

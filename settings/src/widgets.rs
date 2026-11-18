@@ -1,8 +1,8 @@
 //! Building blocks for both designs: cards, rows, switches, sliders, buttons.
 
 use eframe::egui::{
-    self, Align2, Color32, CursorIcon, Id, Margin, Pos2, Rect, Response, Sense, Stroke,
-    StrokeKind, Ui, Vec2,
+    self, Align2, Color32, CursorIcon, Id, Margin, Pos2, Rect, Response, Sense, Stroke, StrokeKind,
+    Ui, Vec2,
 };
 
 use crate::icons::{self, Icon};
@@ -200,7 +200,11 @@ fn row_impl(
     mut right: Right<'_>,
 ) -> RowOutcome {
     let width = ui.available_width();
-    let row_h = if pal.design == crate::theme::Design::Win10 { ROW_H_10 } else { ROW_H };
+    let row_h = if pal.design == crate::theme::Design::Win10 {
+        ROW_H_10
+    } else {
+        ROW_H
+    };
     let (rect, response) = ui.allocate_exact_size(Vec2::new(width, row_h), Sense::click());
     let hovered = response.hovered();
     let is_switch = matches!(&right, Right::Switch(_));
@@ -363,18 +367,11 @@ pub fn paint_switch(painter: &egui::Painter, rect: Rect, t: f32, pal: &Palette, 
         // Windows 10: a thin outlined track when off and a solid accent track
         // when on, with a white knob that always has a border.
         let radius = rect.height() / 2.0;
-        painter.rect_filled(
-            rect,
-            radius,
-            lerp_color(pal.card, accent, t),
-        );
+        painter.rect_filled(rect, radius, lerp_color(pal.card, accent, t));
         painter.rect_stroke(
             rect,
             radius,
-            Stroke::new(
-                1.0,
-                lerp_color(pal.text_faint, accent, t),
-            ),
+            Stroke::new(1.0, lerp_color(pal.text_faint, accent, t)),
             StrokeKind::Inside,
         );
         let knob_x = egui::lerp((rect.left() + 10.0)..=(rect.right() - 10.0), t);
@@ -421,7 +418,11 @@ pub fn nav_item(
     selected: bool,
 ) -> Response {
     let width = ui.available_width();
-    let nav_h = if pal.design == crate::theme::Design::Win10 { 40.0 } else { 38.0 };
+    let nav_h = if pal.design == crate::theme::Design::Win10 {
+        40.0
+    } else {
+        38.0
+    };
     let (rect, response) = ui.allocate_exact_size(Vec2::new(width, nav_h), Sense::click());
 
     let win10 = pal.design == crate::theme::Design::Win10;

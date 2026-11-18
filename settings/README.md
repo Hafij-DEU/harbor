@@ -29,18 +29,32 @@ Every control is edited inside the app; it never opens GNOME Settings.
 The same binary, the same pages and the same package. **Windows 11** is the
 default; **Windows 10** changes only the presentation:
 
-- the Windows 10 home screen: a grey band with the account, Windows Update,
-  App Hub and Storage shortcuts and a centred “Find a setting” box, then the
-  ten Windows 10 categories (System, Devices, Network & Internet,
-  Personalisation, Apps, Accounts, Time & Language, Ease of Access, Privacy,
-  Update & Security);
+- the Windows 10 home screen: an account card with Windows Update, App Hub
+  and Storage shortcuts, a centred “Find a setting” box, **Quick settings**
+  (Wi-Fi, Bluetooth, Night light, Do not disturb, Mute and Dark mode toggles
+  plus Volume and Brightness sliders), then **All settings**: one card per
+  category with its pages as links (System, Devices, Network & Internet,
+  Personalisation, Desktop & Windows, Fusion Desk, Apps, Accounts, Time &
+  Language, Ease of Access, Privacy, Update & Security). **Hide page links**
+  (or Personalisation → *Page links on the home cards*) turns the cards
+  compact; the choice is saved;
 - inside a category, a navigation pane with **Home**, the search box, the
   category name and its own sub-pages (for example System › Display, Sound,
-  Notifications & actions, Power & battery, Storage, About);
+  Notifications & actions, Power & battery, Storage, About). Desktop &
+  Windows lists Multitasking, Ubuntu Dock, Desktop icons, Windows, Fonts,
+  Themes, Mouse, keyboard and sound, and Startup apps, each on its own page;
+- **Fusion Desk** as its own category: Overview (install it from GitHub when
+  missing, turn it on or off, open its own settings window) and Panel, Panel
+  items, Taskbar, Start menu, Widgets, Glass & effects and Desktop pages with
+  about 110 of its settings;
 - a 32 px title bar, accent-coloured line icons, denser 54 px rows and an
   **On / Off** label beside every switch;
-- a modern touch: soft 4 px corners, borderless tinted cards and rounded
-  hover highlights instead of the hard 1 px boxes of the original.
+- a modern touch: soft corners, tinted icon badges, cards that grow with the
+  window and stay centred when maximised.
+
+Both designs have a **Win 10 | Win 11** switch and a light/dark button at
+the top right of the title bar. The Windows 11 System page has the same Quick
+settings, and its Desktop & windows page ends with the Fusion Desk groups.
 
 Switch in **Personalisation → Interface**, start the separate **Settings
 (Windows 10)** launcher entry, or force it for one run:
@@ -228,6 +242,7 @@ falls back to `pkexec systemctl reboot` and then
 | --- | --- |
 | `WIN11_SETTINGS_UI=win11\|win10` | Start with that interface (does not change the saved choice) |
 | `WIN11_SETTINGS_UPDATES=1` | Print every pending apt, snap and Flatpak update and exit |
+| `WIN11_SETTINGS_HOME_LINKS=0\|1` | Hide or show the page links on the Windows 10 home cards for one run |
 | `WIN11_SETTINGS_MODE=dark\|light` | Force a mode instead of following Ubuntu |
 | `WIN11_SETTINGS_VIEW=<page>` | Open a page at start (e.g. `apps`, `display`, `privacy`) |
 | `WIN11_SETTINGS_APPS_TAB=myapps\|updates\|library\|allapps` | Open a specific Apps-page tab |
