@@ -10,6 +10,7 @@ import json
 import os
 import re
 import threading
+import stat
 import urllib.parse
 
 from gi.repository import Gio, GLib
@@ -733,6 +734,11 @@ def tree_size(path, cancel=None):
     return size, files, folders
 
 
+def _base(path):
+    """Basename that survives a trailing slash ("a/" -> "a")."""
+    return os.path.basename(path.rstrip("/")) or path
+
+
 def _isdir(path):
     return os.path.isdir(path) and not os.path.islink(path)
 
@@ -788,11 +794,12 @@ def _transfer(job, src, dest_dir, move, name=None):
             merge = True
         else:
             if _isdir(dst):
-                _remove_tree(dst, job.cancellable)
-            else:
-                overwrite = True
-    if _isdir(src) and is_inside(dst, src):
-        raise GLib.Error("Can't put a folder inside itself: " + os.path.basename(src))
+                return _replace_folder(job, src, dest_dir, move, name, dst)
+            overwrite = True
+    # realpath: dest_dir may be (or pass through) a symlink back into src
+    if _isdir(src) and (is_inside(dst, src)
+                        or is_inside(os.path.realpath(dst), os.path.realpath(src))):
+        raise GLib.Error("Can't put a folder inside itself: " + _base(src))
 
     if move and not merge:
         try:
@@ -830,6 +837,26 @@ def _transfer(job, src, dest_dir, move, name=None):
     return dst
 
 
+def _replace_folder(job, src, dest_dir, move, name, dst):
+    """Replace the folder dst by src: the folder is set aside under a hidden name and
+    only removed once src is in place; if the copy fails it is put back."""
+    aside = os.path.join(dest_dir, ".%s.hb-replace-%s" % (name, os.urandom(4).hex()))
+    os.rename(dst, aside)
+    try:
+        out = _transfer(job, src, dest_dir, move, name)
+    except BaseException:
+        try:
+            if os.path.lexists(dst) and not _isdir(dst):
+                os.unlink(dst)  # a half-copied file
+            if not os.path.lexists(dst):
+                os.rename(aside, dst)
+        except OSError:
+            pass
+        raise
+    _remove_tree(aside, job.cancellable)
+    return out
+
+
 def transfer(job, sources, dest_dir, move=False):
     """Copy (or move) sources into dest_dir. Runs synchronously.
 
@@ -839,8 +866,9 @@ def transfer(job, sources, dest_dir, move=False):
     job.total = sum(tree_size(s)[0] for s in sources)
     for src in sources:
         try:
-            if _isdir(src) and is_inside(dest_dir, src):
-                raise GLib.Error("Can't put a folder inside itself: " + os.path.basename(src))
+            if _isdir(src) and (is_inside(dest_dir, src) or is_inside(
+                    os.path.realpath(dest_dir), os.path.realpath(src))):
+                raise GLib.Error("Can't put a folder inside itself: " + _base(src))
             out = _transfer(job, src, dest_dir, move)
             if out:
                 job.copied.append(out)
@@ -849,7 +877,7 @@ def transfer(job, sources, dest_dir, move=False):
         except (GLib.Error, OSError) as e:
             if job.cancelled:
                 break
-            job.errors.append("%s: %s" % (os.path.basename(src), getattr(e, "message", None) or e))
+            job.errors.append("%s: %s" % (_base(src), getattr(e, "message", None) or e))
     return job
 
 
@@ -1192,13 +1220,27 @@ def compress_zip(job, paths, dest_zip):
                 if is_dir:
                     zf.writestr(zipfile.ZipInfo.from_file(full, arc + "/"), b"")
                     continue
+                # O_NONBLOCK so a FIFO (or a link to one) can't block open();
+                # anything that isn't a regular file is skipped and reported
                 try:
-                    zinfo = zipfile.ZipInfo.from_file(full, arc)
+                    sfd = os.open(full, os.O_RDONLY | os.O_NONBLOCK)
                 except OSError as e:
                     job.errors.append("%s: %s" % (arc, e.strerror or e))
                     continue
+                try:
+                    if not stat.S_ISREG(os.fstat(sfd).st_mode):
+                        os.close(sfd)
+                        job.skipped += 1
+                        job.errors.append("%s: skipped (not a regular file)" % arc)
+                        continue
+                    os.set_blocking(sfd, True)
+                    zinfo = zipfile.ZipInfo.from_file(full, arc)
+                except OSError as e:
+                    os.close(sfd)
+                    job.errors.append("%s: %s" % (arc, e.strerror or e))
+                    continue
                 zinfo.compress_type = zipfile.ZIP_DEFLATED
-                with open(full, "rb") as src, zf.open(zinfo, "w") as dst:
+                with os.fdopen(sfd, "rb") as src, zf.open(zinfo, "w") as dst:
                     while True:
                         job.check()
                         chunk = src.read(1 << 20)

@@ -276,6 +276,22 @@ def _stem(path):
     return b
 
 
+def _inline_code(interp, a):
+    """True when argument a makes interp run code given on the command line
+    (python -c / -Bc, bash -c / -lc, node -e, perl -e / -ne, ruby -e)."""
+    if interp.startswith("python"):
+        return re.match(r"-[bBdEiIOPqRsSuv]*c", a) is not None
+    if interp in ("bash", "sh", "dash"):
+        return re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", a) is not None
+    if interp in ("node", "bun"):
+        return a in ("-e", "--eval", "-p", "--print")
+    if interp == "perl":
+        return re.fullmatch(r"-[a-zA-Z]*[eE]", a) is not None
+    if interp == "ruby":
+        return a == "-e"
+    return False
+
+
 def _script(interp, args):
     """The script or program an interpreter runs, from its arguments."""
     skip = False
@@ -287,8 +303,8 @@ def _script(interp, args):
             return args[i + 1]
         if interp == "java" and a == "-jar" and i + 1 < len(args):
             return _stem(args[i + 1])
-        if interp in ("bash", "sh", "dash") and a == "-c":
-            return None
+        if _inline_code(interp, a):
+            return None  # "-c code" / "-lc code": the code is no script name
         if a in ("-cp", "-classpath", "--class-path", "-p", "--module-path", "-X", "-W", "-r",
                  "--require"):
             skip = True
@@ -586,6 +602,12 @@ class Item:
         return self.own and not self.in_use and not self.sockets
 
 
+def shown(text):
+    """A path or name made safe for labels and printing: bytes that are not UTF-8
+    (kept by Python as surrogate escapes) become U+FFFD instead of crashing."""
+    return os.fsencode(text).decode("utf-8", "replace")
+
+
 def measure(path):
     """(bytes on disk, newest mtime, sockets) without following symlinks."""
     try:
@@ -647,8 +669,13 @@ def describe(path, uid=UID):
     return ""
 
 
+# Display server files that live in /tmp: never "unused" even when no process shows them.
+DISPLAY_FILES = re.compile(r"\.X\d+-lock|\.(X11|ICE|XIM|font|Test)-unix")
+
+
 def busy_markers(proc=PROC):
-    """Working folders and argument words of your processes, to spot folders in use."""
+    """Paths in use by readable processes (working folders, open files, mapped files)
+    and their argument words, to spot items in use."""
     cwds, words = set(), set()
     try:
         names = os.listdir(proc)
@@ -663,6 +690,21 @@ def busy_markers(proc=PROC):
             continue
         for a in _read(f"{proc}/{name}/cmdline").split("\0"):
             words.update(UUID.findall(a))
+        try:
+            fds = os.listdir(f"{proc}/{name}/fd")
+        except OSError:
+            fds = []
+        for fd in fds:
+            try:
+                target = os.readlink(f"{proc}/{name}/fd/{fd}")
+            except OSError:
+                continue
+            if target.startswith("/"):
+                cwds.add(target.removesuffix(" (deleted)"))
+        for line in _read(f"{proc}/{name}/maps").splitlines():
+            parts = line.split(None, 5)
+            if len(parts) == 6 and parts[5].startswith("/"):
+                cwds.add(parts[5].removesuffix(" (deleted)"))
     return cwds, words
 
 
@@ -692,7 +734,8 @@ def list_items(folder=None, markers=None, roots=None):
                 it.is_dir, it.own = False, False
             it.note = describe(e.path)
             it.in_use = any(c == e.path or c.startswith(e.path + "/") for c in cwds) or \
-                bool(UUID.fullmatch(it.name) and it.name in words)
+                bool(UUID.fullmatch(it.name) and it.name in words) or \
+                bool(DISPLAY_FILES.fullmatch(it.name))
             items.append(it)
     items.sort(key=lambda i: -i.size)
     return items
@@ -946,13 +989,22 @@ def swap_status(proc=PROC, sys_root="/sys"):
     }
 
 
+def _file_gb(size):
+    """Swap file size in GB as the form holds it: whole GB as an int, anything else
+    to 0.01 GB, so a 1.4 GB file is not mistaken for the 1 GB a user may pick."""
+    if not size:
+        return 0
+    gb = max(0.01, round(size / (1 << 30), 2))
+    return int(gb) if gb == int(gb) else gb
+
+
 def swap_form(st):
     """The form values that match the system as it is now."""
     return {
         "tools": None,  # None, "install", "reinstall" or "remove"
         "zram": st["zram_percent"] if st["zram_on"] else 0,
         "algo": st["algo"],
-        "file": max(1, round(st["file_size"] / (1 << 30))) if st["file_size"] else 0,
+        "file": _file_gb(st["file_size"]),
         "zswap": bool(st["zswap"]),
         "swappiness": st["swappiness"],
         "cache_pressure": st["cache_pressure"],
@@ -1104,7 +1156,8 @@ def report(as_json=False, out=None):
     if items:
         w("\nFiles in RAM")
         for i in items[:15]:
-            w(f"  {fmt_size(i.size):>9}  {i.path}" + (f"  [{i.note}]" if i.note else ""))
+            w(f"  {fmt_size(i.size):>9}  {shown(i.path)}" +
+              (f"  [{shown(i.note)}]" if i.note else ""))
     tips = snap.tips()
     if tips:
         w("\nSuggestions")

@@ -274,6 +274,24 @@ def test_replace_folder_merges(tmp_path):
     assert read(str(d / "a.txt")) == b"A2"
 
 
+def test_replace_folder_by_file_keeps_folder_when_copy_fails(tmp_path, monkeypatch):
+    touch(str(tmp_path / "s" / "x"), b"new")
+    touch(str(tmp_path / "d" / "x" / "keep.txt"), b"precious")
+
+    def broken(job_, src, dst, overwrite):
+        touch(dst, b"half")
+        raise fc.GLib.Error("disk full")
+    orig = fc._copy_file
+    monkeypatch.setattr(fc, "_copy_file", broken)
+    j = fc.transfer(job(fc.REPLACE), [str(tmp_path / "s" / "x")], str(tmp_path / "d"))
+    assert j.errors and os.listdir(tmp_path / "d") == ["x"]
+    assert read(str(tmp_path / "d" / "x" / "keep.txt")) == b"precious"
+    monkeypatch.setattr(fc, "_copy_file", orig)
+    j = fc.transfer(job(fc.REPLACE), [str(tmp_path / "s" / "x")], str(tmp_path / "d"))
+    assert not j.errors and os.listdir(tmp_path / "d") == ["x"]  # works, no leftovers
+    assert read(str(tmp_path / "d" / "x")) == b"new"
+
+
 def test_cancel_from_conflict_dialog(tmp_path):
     touch(str(tmp_path / "s" / "f.txt"), b"new")
     touch(str(tmp_path / "s" / "g.txt"), b"g")
@@ -1067,3 +1085,43 @@ def test_trash_unsupported_drive_is_offered_for_delete(tmp_path):
     j = fc.trash_paths(fc.Job(), [str(tmp_path / "a.txt"), str(tmp_path / "b.txt")], trash=trash)
     assert j.no_trash == [str(tmp_path / "a.txt")]
     assert len(j.errors) == 1 and j.errors[0].startswith("b.txt")
+
+
+def test_copy_into_symlink_to_itself_refused(tmp_path):
+    touch(str(tmp_path / "src" / "a.txt"), b"a")
+    os.symlink(str(tmp_path / "src"), str(tmp_path / "link"))
+    j = fc.transfer(fc.Job(), [str(tmp_path / "src")], str(tmp_path / "link"))
+    assert j.errors and "itself" in j.errors[0]
+    assert sorted(os.listdir(tmp_path / "src")) == ["a.txt"]
+    # a symlink to a child folder is caught too
+    os.mkdir(str(tmp_path / "src" / "sub"))
+    os.symlink(str(tmp_path / "src" / "sub"), str(tmp_path / "sublink"))
+    j = fc.transfer(fc.Job(), [str(tmp_path / "src")], str(tmp_path / "sublink"))
+    assert j.errors and "itself" in j.errors[0]
+    assert os.listdir(tmp_path / "src" / "sub") == []
+
+
+def test_inside_itself_message_names_folder_with_trailing_slash(tmp_path):
+    touch(str(tmp_path / "a" / "b" / "f"), b"")
+    j = fc.transfer(fc.Job(), [str(tmp_path / "a") + "/"], str(tmp_path / "a" / "b"), move=True)
+    assert j.errors and j.errors[0] == "a: Can't put a folder inside itself: a"
+
+
+def test_compress_skips_fifo_and_link_to_fifo(tmp_path):
+    import threading
+    import zipfile
+    d = tmp_path / "dir"
+    touch(str(d / "ok.txt"), b"ok")
+    os.mkfifo(str(d / "pipe"))
+    os.symlink(str(d / "pipe"), str(d / "pipelink"))
+    z = str(tmp_path / "out.zip")
+    job = fc.Job()
+    t = threading.Thread(target=lambda: fc.compress_zip(job, [str(d)], z), daemon=True)
+    t.start()
+    t.join(5)
+    assert not t.is_alive(), "compress hung on a FIFO"
+    assert job.copied == [z] and job.skipped == 2
+    assert sum("not a regular file" in e for e in job.errors) == 2
+    with zipfile.ZipFile(z) as zf:
+        assert zf.read("dir/ok.txt") == b"ok"
+        assert "dir/pipe" not in zf.namelist()

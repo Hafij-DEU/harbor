@@ -572,3 +572,31 @@ def test_settings_persistence(tmp_path):
     with open(path, "w") as f:
         f.write("{broken")
     assert ts.Settings(path)["interval"] == "Normal"
+
+
+def test_parse_status_ignores_spoofed_name_line():
+    text = "Name:\tRssAnon:9999999 VmRSS:8888888\n" + status_text(1000, anon_kb=2000, shmem_kb=100)
+    s = tp.parse_status(text)
+    assert s["private"] == 2100 * 1024
+    assert s["vm_rss"] == 5000 * 1024
+
+
+def test_guarded_term_checks_start_time_before_kill():
+    argv = tp.guarded_term_argv([(1234, 5678)])
+    assert argv[:3] == ["pkexec", "/bin/sh", "-c"] and argv[-1] == "1234:5678"
+    shell = argv[1:]  # the same script, run without pkexec
+    p = subprocess.Popen(["sleep", "30"])
+    try:
+        time.sleep(0.1)
+        start = tp.read_start(p.pid)
+        # wrong start time (a reused PID): left alone
+        assert subprocess.run(shell[:-1] + ["%d:%d" % (p.pid, start + 1)]).returncode == 0
+        time.sleep(0.1)
+        assert p.poll() is None
+        # matching start time: ended
+        subprocess.run(shell[:-1] + ["%d:%d" % (p.pid, start)], check=True)
+        assert p.wait(5) == -signal.SIGTERM
+    finally:
+        if p.poll() is None:
+            p.kill()
+            p.wait()

@@ -59,25 +59,60 @@ def plan(names, find="", replace="", regex=False, match_case=False, pattern="",
             stem = re.sub(r"#+", lambda m: str(num).zfill(len(m.group(0))),
                           pattern.replace("*", "\0")).replace("\0", stem)
         new = _case(stem, case) + ext
-        out.append((new, fc.validate_name(new)))
-    # duplicates among the new names, or clashes with files that stay
+        err = fc.validate_name(new)
+        if not err and ext and not stem:
+            # "photo.jpg" -> ".jpg" would turn it into a hidden file
+            err = "The name can't be only an extension"
+        out.append((new, err))
+    # duplicates among the new names, or clashes with files that stay; compared
+    # case-blind because the folder may be on a case-insensitive drive (FAT, NTFS)
     count = {}
     for new, _e in out:
-        count[new] = count.get(new, 0) + 1
-    renamed = set(names)
+        count[new.casefold()] = count.get(new.casefold(), 0) + 1
+    renamed = {n.casefold() for n in names}
+    taken_cf = {t.casefold() for t in taken}
     final = []
     for (new, err), old in zip(out, names):
-        if not err and count[new] > 1:
+        cf = new.casefold()
+        if not err and count[cf] > 1:
             err = "Two items would get this name"
-        elif not err and new != old and new in taken and new not in renamed:
+        elif not err and new != old and cf in taken_cf and cf not in renamed:
             err = "An item with this name is already here"
         final.append((new, err))
     return final
 
 
+def _roll_back(folder, temps, n_done):
+    """Undo a half-done apply(): the first n_done items go back to their temporary
+    names, then every temporary name back to its old name. An old name someone took
+    in the meantime gets a visible "name (restored)" instead. Returns error lines."""
+    errors = []
+    for tmp, old, new in temps[:n_done]:
+        try:
+            Gio.File.new_for_path(os.path.join(folder, new)).set_display_name(tmp, None)
+        except GLib.Error as e:
+            errors.append("%s: left as %s (%s)" % (old, new, e.message))
+    for tmp, old, _new in temps:
+        if not os.path.lexists(os.path.join(folder, tmp)):
+            continue
+        name = old
+        if os.path.lexists(os.path.join(folder, old)):
+            stem, ext = fc.split_ext(old)
+            name = fc.unique_name("%s (restored)%s" % (stem, ext),
+                                  lambda c: os.path.lexists(os.path.join(folder, c)))
+        try:
+            Gio.File.new_for_path(os.path.join(folder, tmp)).set_display_name(name, None)
+            if name != old:
+                errors.append("%s: its name is taken now, restored as %s" % (old, name))
+        except GLib.Error as e:
+            errors.append("%s: left as %s (%s)" % (old, tmp, e.message))
+    return errors
+
+
 def apply(folder, pairs):
     """Rename [(old, new)] inside folder. Returns [(new_path, old_name)] done
-    (for undo) and raises nothing: a failed item is reported in errors."""
+    (for undo) and raises nothing: a failed item is reported in errors. If a
+    rename fails halfway, all of them are rolled back (see _roll_back)."""
     pairs = [(o, n) for o, n in pairs if o != n]
     temps, done, errors = [], [], []
     for old, new in pairs:
@@ -96,10 +131,8 @@ def apply(folder, pairs):
             done.append((os.path.join(folder, new), old))
         except GLib.Error as e:
             errors.append("%s: %s" % (old, e.message))
-            try:
-                src.set_display_name(old, None)
-            except GLib.Error:
-                pass
+            errors.append("Nothing was renamed")
+            return [], errors + _roll_back(folder, temps, len(done))
     return done, errors
 
 

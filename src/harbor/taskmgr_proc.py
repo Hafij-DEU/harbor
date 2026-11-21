@@ -114,9 +114,16 @@ def parse_stat(data):
 
 
 def _kb_field(data, key):
-    i = data.find(key)
-    if i < 0:
-        return 0
+    # only at the start of a line: a process named "RssAnon:9999999" puts that
+    # text on its Name: line and must not fake a memory value
+    key = key.lstrip(b"\n")
+    if data.startswith(key):
+        i = 0
+    else:
+        i = data.find(b"\n" + key)
+        if i < 0:
+            return 0
+        i += 1
     j = data.find(b"\n", i + len(key))
     try:
         return int(data[i + len(key):j if j > 0 else None].split()[0])
@@ -705,6 +712,24 @@ def read_start(pid, root="/proc"):
 def same_process(pid, start, root="/proc"):
     """PID-reuse guard: is pid still the process that started at start?"""
     return start is not None and read_start(pid, root) == start
+
+
+# Runs as root after the pkexec password prompt: signals each "pid:start" only if
+# /proc/pid/stat still shows that start time (field 22), so a PID reused while the
+# prompt was open is left alone. ${s##*) } drops "pid (comm) " even if comm has ") ".
+_GUARDED_KILL_SH = (
+    'r=0; for a do p=${a%%:*}; t=${a#*:}; '
+    'case $p in ""|*[!0-9]*) continue;; esac; '
+    's=$(cat /proc/"$p"/stat 2>/dev/null) || continue; s=${s##*) }; '
+    'st=$(printf "%s\\n" "$s" | cut -d" " -f20); '
+    '[ "$st" = "$t" ] || continue; kill -TERM "$p" || r=1; done; exit $r')
+
+
+def guarded_term_argv(procs):
+    """pkexec argv that sends SIGTERM to each (pid, start) only if it is still
+    the same process when the (root) shell runs, after the password prompt."""
+    return (["pkexec", "/bin/sh", "-c", _GUARDED_KILL_SH, "harbor-kill"]
+            + ["%d:%d" % (pid, start) for pid, start in procs])
 
 
 def _dry(entry, dry_run):

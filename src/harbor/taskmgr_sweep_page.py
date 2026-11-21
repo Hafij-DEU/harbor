@@ -546,7 +546,6 @@ class SweepPage(Page):
         now = time.time()
         sig = [(i.path, i.size >> 10, i.in_use, i.own, int(now - i.mtime) // 60) for i in shown]
         if sig != self._files_sig:
-            self._files_sig = sig
             clear(self.files_box)
             for it in shown:
                 self.files_box.append(self._file_row(it, now))
@@ -554,6 +553,7 @@ class SweepPage(Page):
                 self.files_box.append(row("object-select-symbolic", "Nothing to show",
                                           "No files over %s in RAM folders" %
                                           ms.fmt_size(ms.SMALL_ITEM)))
+            self._files_sig = sig  # only once the rows are built, so a failure retries
         small = len(items) - len(big)
         rest = len(big) - len(shown)
         notes = []
@@ -569,14 +569,14 @@ class SweepPage(Page):
         return False
 
     def _file_row(self, it, now):
-        parts = [os.path.dirname(it.path)]
+        parts = [ms.shown(os.path.dirname(it.path))]
         if it.note:
-            parts.append(it.note)
+            parts.append(ms.shown(it.note))
         if it.mtime:
             parts.append("changed %s ago" % ms.fmt_age(now - it.mtime))
         if not it.own:
             parts.append("not yours")
-        r = row("folder-symbolic" if it.is_dir else "text-x-generic-symbolic", it.name,
+        r = row("folder-symbolic" if it.is_dir else "text-x-generic-symbolic", ms.shown(it.name),
                 "  ·  ".join(parts))
         if it.in_use:
             r.suffix.append(label("In use", "hb-tm-pill", valign=Gtk.Align.CENTER))
@@ -599,13 +599,14 @@ class SweepPage(Page):
         if why:
             self.win.notify_toast(why)
             return
-        body = f"{it.name} ({ms.fmt_size(it.size)}) at {it.path} will be deleted for good."
+        body = (f"{ms.shown(it.name)} ({ms.fmt_size(it.size)}) at {ms.shown(it.path)} will be "
+                "deleted for good.")
         if it.in_use:
             body += "\n\nA running program seems to use it. Removing it may break that program."
         elif it.sockets:
             body += (f"\n\nIt holds {plural(it.sockets, 'socket')}: programs talk through "
                      "these, and may stop working.")
-        confirm(self.win, f"Remove {it.name}?", body, "Remove", lambda: self._remove([it]))
+        confirm(self.win, f"Remove {ms.shown(it.name)}?", body, "Remove", lambda: self._remove([it]))
 
     def confirm_remove_unused(self):
         items = self.items
@@ -620,7 +621,7 @@ class SweepPage(Page):
             scroll_to_widget(self.scroller, self.files_anchor)
             return
         mem = sum(i.size for i in unused)
-        names = ", ".join(i.name for i in unused[:4])
+        names = ", ".join(ms.shown(i.name) for i in unused[:4])
         if len(unused) > 4:
             names += " and %d more" % (len(unused) - 4)
         body = (f"{plural(len(unused), 'item')} using about {ms.fmt_size(mem)} will be deleted "
@@ -642,10 +643,11 @@ class SweepPage(Page):
                 it = items[0]
                 try:
                     left = ms.remove(it.path)
-                    msg = f"Removed {it.name}, {ms.fmt_size(it.size)} freed" if not left else \
-                        f"Removed most of {it.name}; {left} items could not be deleted"
+                    name = ms.shown(it.name)
+                    msg = f"Removed {name}, {ms.fmt_size(it.size)} freed" if not left else \
+                        f"Removed most of {name}; {left} items could not be deleted"
                 except OSError as e:
-                    msg = f"Could not remove {it.name}: {e.strerror or e}"
+                    msg = f"Could not remove {ms.shown(it.name)}: {ms.shown(str(e.strerror or e))}"
             GLib.idle_add(done, msg)
 
         def done(msg):
@@ -777,7 +779,9 @@ class MemoryOptimization:
             self.zram_spin.set_quiet(f["zram"])
             self.algo_dd.set_selected(ms.ALGOS.index(f["algo"]))
             # No swap file yet: 0 keeps "no change" until the value moves.
-            self.file_spin.get_adjustment().set_lower(1 if f["file"] else 0)
+            self.file_spin.get_adjustment().set_lower(min(1, f["file"]) if f["file"] else 0)
+            # a file that isn't whole GB shows its real size (1.4), not "1"
+            self.file_spin.set_digits(0 if f["file"] == int(f["file"]) else 2)
             self.file_spin.set_quiet(f["file"])
             self.zswap_switch.set_quiet(f["zswap"])
             self.swappiness_spin.set_quiet(f["swappiness"])
@@ -790,6 +794,8 @@ class MemoryOptimization:
     def _changed(self, key, value):
         if self.syncing or self.form is None:
             return
+        if key == "file":
+            self.file_spin.set_digits(0)
         self.form[key] = value
         self._update()
 

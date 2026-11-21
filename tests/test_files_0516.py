@@ -43,6 +43,42 @@ def test_apply_swaps_and_undo(tmp_path):
     assert not [p for p in os.listdir(tmp_path) if p.startswith(".hb-rename-")]
 
 
+def test_apply_failure_rolls_back_without_hidden_leftovers(tmp_path):
+    for n in ("a", "c"):
+        (tmp_path / n).write_text(n)
+    (tmp_path / "X").write_text("external")  # appeared after the preview
+    done, errors = fr.apply(str(tmp_path), [("c", "a"), ("a", "X")])
+    assert done == [] and errors
+    assert sorted(os.listdir(tmp_path)) == ["X", "a", "c"]
+    assert (tmp_path / "a").read_text() == "a" and (tmp_path / "c").read_text() == "c"
+    # an old name taken meanwhile: kept visible as "name (restored)", reported
+    (tmp_path / "b").write_text("b")
+    orig = fr.Gio.File.set_display_name
+
+    def taker(self, name, c):
+        out = orig(self, name, c)
+        if name == "z":  # someone creates "b" while the rename runs
+            (tmp_path / "b").write_text("new b")
+        return out
+    fr.Gio.File.set_display_name = taker
+    try:
+        done, errors = fr.apply(str(tmp_path), [("b", "z"), ("c", "X")])
+    finally:
+        fr.Gio.File.set_display_name = orig
+    names = sorted(os.listdir(tmp_path))
+    assert not [p for p in names if p.startswith(".hb-rename-")]
+    assert "b (restored)" in names and (tmp_path / "b (restored)").read_text() == "b"
+    assert any("restored as b (restored)" in e for e in errors)
+
+
+def test_plan_collisions_are_case_blind():
+    out = fr.plan(["A.txt", "a.TXT"], case="lowercase")
+    assert all(e == "Two items would get this name" for _, e in out)
+    out = fr.plan(["x.txt"], find="x", replace="readme", taken={"README.txt"})
+    assert out[0][1] == "An item with this name is already here"
+    assert fr.plan(["a.txt"], case="UPPERCASE") == [("A.txt", None)]  # case-only change ok
+
+
 def test_dir_size(tmp_path):
     (tmp_path / "d" / "e").mkdir(parents=True)
     (tmp_path / "d" / "x").write_bytes(b"1" * 100)
@@ -100,3 +136,12 @@ def test_drive_id_and_rename_dialog_imports():
     class E:
         message = "GDBus.Error:org.freedesktop.UDisks2.Error.Failed: Busy"
     assert _msg(E()) == "Busy"
+
+
+def test_rename_plan_flags_empty_stem():
+    from harbor import files_rename as fr
+    out = fr.plan(["photo.jpg", "a.txt"], find="photo", replace="")
+    assert out[0][0] == ".jpg" and out[0][1]
+    assert out[1] == ("a.txt", None)
+    # a dotfile keeps working
+    assert fr.plan([".bashrc"], find="x", replace="y") == [(".bashrc", None)]

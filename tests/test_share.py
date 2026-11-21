@@ -105,6 +105,17 @@ def test_guard_unlocks_after_timeout():
     assert g.check("123456") == "ok"
 
 
+def test_guard_lockout_is_per_client():
+    t = [0.0]
+    g = fs.Guard("123456", now=lambda: t[0])
+    for _ in range(fs.LOCK_FAILS):
+        assert g.check("000000", "10.0.0.9") == "bad"
+    assert g.check("123456", "10.0.0.9") == "locked"   # the guesser stays locked
+    assert g.check("123456", "10.0.0.2") == "ok"       # the owner still gets in
+    t[0] += fs.LOCK_SECONDS + 1
+    assert g.check("123456", "10.0.0.9") == "ok"
+
+
 def test_serves_and_confines(share):
     srv, _ = share
     h = cookie(srv)
@@ -171,6 +182,30 @@ def test_dav(share):
     assert r.status == 201 and (tmp / "Inbox" / "New").is_dir()
     r, _ = req(srv, "DELETE", "/dav/Music/song.txt", headers=dav(srv))
     assert r.status == 403 and (tmp / "Music" / "song.txt").exists()
+
+
+def test_dav_delete_symlink_never_trashes_share_root(share, monkeypatch):
+    from gi.repository import Gio
+    srv, tmp = share
+    inbox = tmp / "Inbox"
+    (inbox / "f.txt").write_text("x")
+    os.symlink(".", inbox / "self")
+    trashed = []
+
+    class Fake:
+        def __init__(self, p):
+            self.p = p
+
+        def trash(self, _c):
+            trashed.append(self.p)
+    monkeypatch.setattr(Gio.File, "new_for_path", staticmethod(Fake))
+    r, _ = req(srv, "DELETE", "/dav/Inbox/self", headers=dav(srv))
+    assert r.status == 204 and trashed == [str(inbox / "self")]  # the link, not the root
+    r, _ = req(srv, "DELETE", "/dav/Inbox/self/f.txt", headers=dav(srv))
+    assert r.status == 204 and trashed[-1] == str(inbox / "f.txt")
+    r, _ = req(srv, "DELETE", "/dav/Inbox/self/self", headers=dav(srv))
+    assert trashed[-1] == str(inbox / "self")  # still only ever the link
+    assert str(inbox) not in trashed
 
 
 def test_helpers():

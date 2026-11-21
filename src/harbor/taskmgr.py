@@ -727,7 +727,7 @@ class TaskWindow(HarborWindow):
                 GLib.timeout_add(3000, self._kill_stragglers, sent)
             still = [p for p in others if tp.same_process(p.pid, p.start)]
             if still:
-                run_cmd(["pkexec", "kill", "-TERM"] + [str(p.pid) for p in still],
+                run_cmd(tp.guarded_term_argv([(p.pid, p.start) for p in still]),
                         lambda ok, _o, err: None if ok else self.notify_toast(
                             "Could not end the process: %s" % (err.strip() or "denied")))
             n = len(sent) + len(still)

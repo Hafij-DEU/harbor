@@ -136,27 +136,29 @@ def human_size(n):
 
 
 class Guard:
-    """PIN check with a shared lockout after LOCK_FAILS wrong tries."""
+    """PIN check with a lockout after LOCK_FAILS wrong tries, kept per client address
+    so one device guessing PINs can't lock everyone else (the owner) out."""
 
     def __init__(self, secret, now=time.monotonic):
         self.secret = secret
         self.now = now
-        self.fails = 0
-        self.locked_until = 0.0
+        self.fails = {}          # client -> wrong tries since the last lock
+        self.locked_until = {}   # client -> monotonic time
         self.lock = threading.Lock()
 
-    def check(self, given):
+    def check(self, given, client=None):
         """"ok", "bad" or "locked"."""
         with self.lock:
-            if self.now() < self.locked_until:
+            if self.now() < self.locked_until.get(client, 0.0):
                 return "locked"
+            self.locked_until.pop(client, None)
             if hmac.compare_digest(str(given or "").encode(), self.secret.encode()):
-                self.fails = 0
+                self.fails.pop(client, None)
                 return "ok"
-            self.fails += 1
-            if self.fails >= LOCK_FAILS:
-                self.fails = 0
-                self.locked_until = self.now() + LOCK_SECONDS
+            self.fails[client] = self.fails.get(client, 0) + 1
+            if self.fails[client] >= LOCK_FAILS:
+                del self.fails[client]
+                self.locked_until[client] = self.now() + LOCK_SECONDS
             return "bad"
 
 
@@ -400,14 +402,14 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, UnicodeDecodeError):
                 user = pw = ""
             if hmac.compare_digest(user.encode(), DAV_USER.encode()):
-                r = self.share.guard.check(pw)
+                r = self.share.guard.check(pw, self.client_address[0])
                 if r == "ok":
                     return True
                 if r == "locked":
                     self._send(429, "Too many wrong PINs. Try again in 5 minutes.", close=True)
                     return False
             else:
-                self.share.guard.check(None)
+                self.share.guard.check(None, self.client_address[0])
         self._send(401, "PIN needed", extra=(("WWW-Authenticate",
                                               'Basic realm="Harbor", charset="UTF-8"'),),
                    close=True)
@@ -469,7 +471,7 @@ class Handler(BaseHTTPRequestHandler):
             if n is None or n > 200:
                 return self._send(413, "Too large", close=True)
             pin = parse_qs(self.rfile.read(n).decode("utf-8", "replace")).get("pin", [""])[0]
-            r = self.share.guard.check(pin.strip())
+            r = self.share.guard.check(pin.strip(), self.client_address[0])
             if r == "ok":
                 return self._send(303, "", extra=(("Location", "/"), (
                     "Set-Cookie", "%s=%s; Path=/; HttpOnly; SameSite=Strict"
@@ -686,6 +688,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, "Not found", close=True)
         if not self.share.upload[name]:
             return self._send(403, "This folder is read-only", close=True)
+        # Trash the entry itself, not what a symlink points to (a link "self -> ."
+        # must never take the shared folder with it).
+        root = self.share.roots[name]
+        parent = os.path.realpath(os.path.join(root, *parts[1:-1]))
+        path = os.path.join(parent, parts[-1])
+        if not is_inside(parent, root) or is_inside(root, path) or \
+                is_inside(root, os.path.realpath(path)) and not os.path.islink(path):
+            return self._send(403, "Refused", close=True)
         from gi.repository import Gio, GLib
         try:
             Gio.File.new_for_path(path).trash(None)

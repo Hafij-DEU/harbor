@@ -330,6 +330,32 @@ def test_remove_unused_skips_busy(ram_root):
     assert not (ram_root / "dir").exists() and not (ram_root / "small").exists()
 
 
+def test_open_mapped_and_display_files_count_as_in_use(ram_root):
+    import mmap
+    root = os.path.realpath(ram_root)
+    roots = [root]
+    (ram_root / "openf").write_bytes(b"o" * 10)
+    (ram_root / "maps").mkdir()
+    (ram_root / "maps" / "lib.so").write_bytes(b"m" * 4096)
+    (ram_root / ".X0-lock").write_text("1234")
+    (ram_root / ".X11-unix").mkdir()
+    with open(ram_root / "openf") as held, open(ram_root / "maps" / "lib.so", "rb") as so:
+        mapped = mmap.mmap(so.fileno(), 0, access=mmap.ACCESS_READ)
+        so.close()  # only the mapping keeps it in use
+        try:
+            items = ms.list_items(roots=roots, markers=ms.busy_markers())
+            by = {i.name: i for i in items}
+            for name in ("openf", "maps", ".X0-lock", ".X11-unix"):
+                assert by[name].in_use and not by[name].unused, name
+            assert by["dir"].unused and by["small"].unused  # truly unused still go
+            ms.remove_unused(items, roots=roots, dry_run=False)
+        finally:
+            mapped.close()
+        assert held.read() == "o" * 10
+    assert (ram_root / "maps" / "lib.so").exists() and (ram_root / ".X0-lock").exists()
+    assert not (ram_root / "dir").exists() and not (ram_root / "small").exists()
+
+
 def test_describe():
     uid = ms.UID
     assert ms.describe(f"/tmp/claude-{uid}") == "Claude Code temp files"
@@ -661,3 +687,55 @@ def test_meshdrop_helpers_fold_into_one_app(tmp_path):
         it = bg.get_item(i)
         bg_pids |= {p.pid for p in getattr(it, "procs", [])} or {getattr(it, "pid", None)}
     assert {200, 300} <= bg_pids
+
+
+def test_non_utf8_file_names_show_and_rows_retry(tmp_path):
+    import types
+    gi = pytest.importorskip("gi")
+    gi.require_version("Gtk", "4.0")
+    from gi.repository import Gtk
+    if not Gtk.init_check():
+        pytest.skip("no display")
+    from harbor import taskmgr_sweep_page as sp
+    root = tmp_path / "shm"
+    root.mkdir()
+    with open(os.path.join(os.fsencode(root), b"caf\xe9.bin"), "wb") as f:
+        f.write(b"x" * (ms.SMALL_ITEM + 4096))
+    [it] = ms.list_items(roots=[str(root)], markers=(set(), set()))
+    assert ms.shown(it.name) == "caf�.bin"
+    out = __import__("io").StringIO()
+    print(ms.shown(it.path), file=out)  # no UnicodeEncodeError
+    Gtk.Label(label=ms.shown(it.name))
+    page = types.SimpleNamespace(
+        snap=None, items=None, files_scanning=False, show_all_files=False, _files_sig=None,
+        files_info=Gtk.Label(), files_note=Gtk.Label(), files_box=Gtk.Box(),
+        remove_all_btn=Gtk.Button(), show_all_btn=Gtk.Button(), confirm_remove=lambda i: None)
+    page._file_row = types.MethodType(sp.SweepPage._file_row, page)
+    real_mounts = ms.ram_mounts
+    ms.ram_mounts = lambda *a, **k: []
+    try:
+        broken = page._file_row
+        page._file_row = lambda *a: (_ for _ in ()).throw(RuntimeError("boom"))
+        with pytest.raises(RuntimeError):
+            sp.SweepPage._apply_files(page, [it])
+        assert page._files_sig is None  # a failed build is retried next time
+        page._file_row = broken
+        sp.SweepPage._apply_files(page, [it])
+    finally:
+        ms.ram_mounts = real_mounts
+    assert page._files_sig and page.files_box.get_first_child() is not None
+
+
+def test_labels_inline_code_is_not_a_script():
+    assert ms.label(proc(1, 0, "/usr/bin/python3",
+                         ["python3", "-c", "import time; time.sleep(9)"]))[0] == "python3"
+    assert ms.label(proc(1, 0, "/usr/bin/bash", ["bash", "-lc", "make all"]))[0] == "bash"
+    assert ms.label(proc(1, 0, "/usr/bin/python3", ["python3", "-u", "/x/tool.py"]))[0] == \
+        "python:tool"
+
+
+def test_swap_file_not_whole_gb():
+    st = swap_state(file_size=int(1.4 * (1 << 30)))
+    form = ms.swap_form(st)
+    assert form["file"] == 1.4 and ms.plan_changes(st, form) == []
+    assert ms.plan_changes(st, dict(form, file=1)) == ["file=1"]
