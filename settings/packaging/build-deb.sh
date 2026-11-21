@@ -27,9 +27,20 @@ mkdir -p \
     "$STAGE/DEBIAN" \
     "$STAGE/usr/local/bin" \
     "$STAGE/usr/share/applications" \
-    "$STAGE/usr/share/icons/hicolor/scalable/apps"
+    "$STAGE/usr/share/icons/hicolor/scalable/apps" \
+    "$STAGE/usr/local/lib/win11-settings" \
+    "$STAGE/usr/lib/systemd/system" \
+    "$STAGE/usr/share/polkit-1/actions"
 
 install -m 0755 target/release/win11-settings "$STAGE/usr/local/bin/win11-settings"
+# Keyboard Manager: remapping service, rule-saving helper, polkit action.
+install -m 0755 target/release/harbor-keymapd "$STAGE/usr/local/lib/win11-settings/harbor-keymapd"
+install -m 0755 packaging/keymap/harbor-keymap-apply \
+    "$STAGE/usr/local/lib/win11-settings/harbor-keymap-apply"
+install -m 0644 packaging/keymap/harbor-keymapd.service \
+    "$STAGE/usr/lib/systemd/system/harbor-keymapd.service"
+install -m 0644 packaging/keymap/io.github.hafij_deu.Harbor.Keymap.policy \
+    "$STAGE/usr/share/polkit-1/actions/io.github.hafij_deu.Harbor.Keymap.policy"
 install -m 0644 win11-settings.desktop \
     "$STAGE/usr/share/applications/win11-settings.desktop"
 install -m 0644 assets/win11-settings.svg \
@@ -59,8 +70,22 @@ fi
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
     gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
 fi
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload || true
+    # New engine version: restart it when Keyboard Manager is in use.
+    systemctl try-restart harbor-keymapd.service || true
+fi
 EOF
 chmod 0755 "$STAGE/DEBIAN/postinst"
+
+cat > "$STAGE/DEBIAN/prerm" <<'EOF'
+#!/bin/sh
+set -e
+if [ "$1" = remove ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl disable --now harbor-keymapd.service || true
+fi
+EOF
+chmod 0755 "$STAGE/DEBIAN/prerm"
 
 cat > "$STAGE/DEBIAN/postrm" <<'EOF'
 #!/bin/sh

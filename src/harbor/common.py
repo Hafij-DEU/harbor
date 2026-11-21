@@ -451,8 +451,13 @@ def glass_css(spec, dark, see_through=None):
         return ", ".join(parts) or "none"
 
     wk = (0.4 if dark else 1.0) * k_full
+    # Shared Harbor classes plus the cards, panes and bars Files and Task
+    # Manager paint with their own classes, so every glass option shows there.
     neutral = (".hb-card, .hb-tile, button.hb-plain, .hb-surface, list.hb-nav > row:selected, "
-               "entry.hb-search, searchentry.hb-search")
+               "entry.hb-search, searchentry.hb-search, "
+               "flowbox.hbf-cards > flowboxchild, .hbf-pane, .hbf-cmdbar, .hbf-ribbon, "
+               ".hbf-address, .hbf-titlebar tabbar tab:selected, "
+               ".hb-tm-pane, .hb-tm-mem-card, .hb-tm-sweep-hero, .hb-tm-sweep-tile")
     css = (f"{neutral} {{ background-image: {layers(wk)}; box-shadow: {shadows()}; }}\n"
            f"button.hb-accent, .hb-badge {{ background-image: {layers(wk * 0.7)}; "
            f"box-shadow: {shadows()}; }}\n")

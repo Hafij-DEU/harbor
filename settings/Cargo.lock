@@ -3171,12 +3171,14 @@ dependencies = [
 
 [[package]]
 name = "win11-settings"
-version = "0.5.22"
+version = "0.5.28"
 dependencies = [
  "eframe",
  "image",
+ "libc",
  "serde",
  "serde_json",
+ "winit",
 ]
 
 [[package]]

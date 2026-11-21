@@ -29,6 +29,10 @@ fn title_height(design: crate::theme::Design) -> f32 {
         TITLE_H
     }
 }
+/// Clear margin around the window body for its shadow (not maximized).
+pub const FRAME_MARGIN: f32 = 14.0;
+/// Corner radius of the window body, as Harbor Files (GTK) windows.
+const FRAME_RADIUS: u8 = 12;
 pub const SIDEBAR_W: f32 = 300.0;
 /// Keep Settings comfortably readable even when Ubuntu's text scale is 100%.
 pub const APP_ZOOM: f32 = 1.15;
@@ -654,6 +658,12 @@ pub struct App {
     pub glass_edit: system::GlassScope,
     /// The window was created see-through (glass opacity below 100).
     pub glass_window: bool,
+    /// Keyboard Manager: rules being edited, the saved rules, and a save running.
+    pub keymap_edit: Option<crate::keymap::Keymap>,
+    pub keymap_saved: Option<crate::keymap::Keymap>,
+    pub keymap_rx: Option<Receiver<Result<(), String>>>,
+    /// Corner radius of the window body this frame (0 when maximized).
+    pub frame_r: u8,
     /// Pointer position, for "Light follows pointer".
     pub pointer: Option<Pos2>,
     /// A scope changed while a slider was dragged; saved on release.
@@ -859,6 +869,10 @@ impl App {
             glass_scopes: system::GlassScope::ALL.map(system::scope_glass),
             glass_edit: system::GlassScope::Harbor,
             glass_window: system::glass_window(),
+            frame_r: 0,
+            keymap_edit: None,
+            keymap_saved: None,
+            keymap_rx: None,
             pointer: None,
             glass_dirty: None,
             last_mode: mode,
@@ -2606,7 +2620,17 @@ The network will not reconnect automatically."
             let home = matches!(self.view, View::Home);
             if home {
                 let (top, _) = crate::widgets::home10_header(pal);
-                ui.painter().rect_filled(rect, 0, top);
+                let r = self.frame_r;
+                ui.painter().rect_filled(
+                    rect,
+                    egui::CornerRadius {
+                        nw: r,
+                        ne: r,
+                        sw: 0,
+                        se: 0,
+                    },
+                    top,
+                );
             }
             let tile = Rect::from_center_size(
                 Pos2::new(rect.left() + 20.0, rect.center().y),
@@ -4024,7 +4048,10 @@ The network will not reconnect automatically."
         if maximized || fullscreen {
             return;
         }
-        let direction = resize_direction(pos, ctx.viewport_rect(), title_height(self.design));
+        // The shadow margin around a see-through window is a resize handle too.
+        let margin = if self.glass_window { FRAME_MARGIN } else { 0.0 };
+        let body = ctx.viewport_rect().shrink(margin);
+        let direction = resize_direction(pos, body, title_height(self.design));
         if let Some(direction) = direction {
             ctx.send_viewport_cmd(ViewportCommand::BeginResize(direction));
         }
@@ -4066,8 +4093,41 @@ impl eframe::App for App {
         let pal = self.pal();
         self.handle_resize(&ctx);
 
-        let full = root.max_rect();
-        root.painter().rect_filled(full, 0, pal.bg);
+        // Like GTK windows (Harbor Files): rounded corners and a soft shadow
+        // in a clear margin; maximized and full-screen windows fill the screen.
+        let (maximized, fullscreen) = ctx.input(|i| {
+            let vp = i.viewport();
+            (
+                vp.maximized.unwrap_or(false),
+                vp.fullscreen.unwrap_or(false),
+            )
+        });
+        // Opaque windows get GNOME's own shadow (as Craft Suite does).
+        let framed = self.glass_window && !(maximized || fullscreen);
+        let outer = root.max_rect();
+        let full = if framed {
+            outer.shrink(FRAME_MARGIN)
+        } else {
+            outer
+        };
+        self.frame_r = if framed { FRAME_RADIUS } else { 0 };
+        if framed {
+            let steps = FRAME_MARGIN as usize - 2;
+            for i in 0..steps {
+                let t = i as f32;
+                let fade = 1.0 - t / steps as f32;
+                // Darker near the body and softer outwards, like the
+                // libadwaita window shadow Harbor Files gets.
+                let a = (0.24 * fade.powf(2.2) * 255.0) as u8;
+                root.painter().rect_stroke(
+                    full.translate(Vec2::new(0.0, 2.0)).expand(t + 0.5),
+                    FRAME_RADIUS.saturating_add(i as u8),
+                    Stroke::new(1.0, Color32::from_black_alpha(a)),
+                    StrokeKind::Middle,
+                );
+            }
+        }
+        root.painter().rect_filled(full, self.frame_r, pal.bg);
         widgets::glow_backdrop(root.painter(), full, &pal);
 
         let title_h = title_height(self.design);
@@ -4096,26 +4156,34 @@ impl eframe::App for App {
             self.content(root, &pal, content_rect);
         }
 
+        if framed {
+            root.painter().rect_stroke(
+                full,
+                FRAME_RADIUS,
+                Stroke::new(1.0, pal.divider),
+                StrokeKind::Inside,
+            );
+        }
+
         self.dialogs(&ctx, &pal);
         self.toast(&ctx, &pal);
         self.maybe_screenshot(&ctx);
     }
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        let pal = self.pal();
-        [
-            pal.bg.r() as f32 / 255.0,
-            pal.bg.g() as f32 / 255.0,
-            pal.bg.b() as f32 / 255.0,
-            // Liquid glass: the window itself is clear; the page fill sets
-            // how much of the desktop shows through.
-            if self.glass_window && self.glass().see_through() {
-                0.0
-            } else {
-                1.0
-            },
-        ]
+        // The window is always clear: the body fill sets how much of the
+        // desktop shows through, and the margin holds the shadow. Clear to
+        // black, since the compositor reads premultiplied alpha and any
+        // colour here would be added over the desktop as a light haze.
+        if self.glass_window {
+            [0.0, 0.0, 0.0, 0.0]
+        } else {
+            let pal = self.pal();
+            let c = |v: u8| v as f32 / 255.0;
+            [c(pal.bg.r()), c(pal.bg.g()), c(pal.bg.b()), 1.0]
+        }
     }
+
 }
 
 /// Small square checkbox used by the Free Up Space dialog.

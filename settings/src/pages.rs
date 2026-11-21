@@ -12,6 +12,8 @@ use crate::icons::Icon;
 use crate::system::{self, Mount};
 use crate::theme::{regular, semibold, with_alpha, Palette};
 use crate::widgets::{self, Right, ROW_PAD};
+use std::sync::mpsc;
+use std::time::Duration;
 
 // ---------------------------------------------------------------- helpers
 
@@ -2140,6 +2142,8 @@ pub fn keyboard(app: &mut App, ui: &mut Ui) {
     }
 
     spacer(ui, 16.0);
+    keymap_section(app, ui, &pal);
+    spacer(ui, 20.0);
     widgets::section_label(ui, &pal, "Input sources");
     // Cycle layout with Super+Space / Super+Shift+Space, like GNOME.
     let mut remove: Option<String> = None;
@@ -6333,8 +6337,10 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
                     View::Detail(Page::System, Detail::Storage),
                 ),
             ];
-            let item_w = 230.0 * s;
-            let room = x1 - (name_x + name_w.max(230.0 * s) + 30.0 * s);
+            // Status items a little smaller than the profile.
+            let k = s * 0.88;
+            let item_w = 230.0 * k;
+            let room = x1 - (name_x + name_w.max(230.0 * k) + 30.0 * k);
             let cols = if room >= item_w * 2.0 {
                 2
             } else if room >= item_w {
@@ -6342,53 +6348,47 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
             } else {
                 0
             };
-            let item_h = 54.0 * s;
+            let item_h = 54.0 * k;
             let shown = (cols * 2).min(status.len());
             let rows_shown = if cols == 0 { 0 } else { shown.div_ceil(cols) };
             let block_h =
-                rows_shown as f32 * item_h + (rows_shown as f32 - 1.0).max(0.0) * 10.0 * s;
+                rows_shown as f32 * item_h + (rows_shown as f32 - 1.0).max(0.0) * 10.0 * k;
             let top = band.center().y - block_h / 2.0;
             for (i, (title, line, icon, view)) in status.into_iter().take(shown).enumerate() {
                 let (row, col) = (i / cols.max(1), i % cols.max(1));
                 let cell = Rect::from_min_size(
                     Pos2::new(
                         x1 - (cols - col) as f32 * item_w,
-                        top + row as f32 * (item_h + 10.0 * s),
+                        top + row as f32 * (item_h + 10.0 * k),
                     ),
-                    Vec2::new(item_w - 8.0 * s, item_h),
+                    Vec2::new(item_w - 8.0 * k, item_h),
                 );
                 let resp = ui
                     .interact(cell, Id::new(("home-status", i)), Sense::click())
                     .on_hover_cursor(CursorIcon::PointingHand);
-                if widgets::glassy(pal) {
-                    ui.painter().add(widgets::glass_slab(
-                        pal,
-                        cell,
-                        pal.corner(8).max(8),
-                        resp.hovered(),
-                    ));
-                } else if resp.hovered() {
+                // Plain items on the band: a fill only while hovered.
+                if resp.hovered() {
                     ui.painter().rect_filled(cell, pal.corner(4), pal.hover);
                 }
                 let glyph = Rect::from_center_size(
-                    Pos2::new(cell.left() + 22.0 * s, cell.center().y),
-                    Vec2::splat(28.0 * s),
+                    Pos2::new(cell.left() + 22.0 * k, cell.center().y),
+                    Vec2::splat(28.0 * k),
                 );
                 crate::icons::paint(ui.painter(), icon, glyph, pal.text);
                 let painter = ui.painter().with_clip_rect(cell);
-                let tx = cell.left() + 50.0 * s;
+                let tx = cell.left() + 50.0 * k;
                 painter.text(
-                    Pos2::new(tx, cell.center().y - 9.0 * s),
+                    Pos2::new(tx, cell.center().y - 9.0 * k),
                     Align2::LEFT_CENTER,
                     title,
-                    regular(14.5 * s),
+                    regular(14.5 * k),
                     pal.text,
                 );
                 painter.text(
-                    Pos2::new(tx, cell.center().y + 10.0 * s),
+                    Pos2::new(tx, cell.center().y + 10.0 * k),
                     Align2::LEFT_CENTER,
                     &line,
-                    regular(12.0 * s),
+                    regular(12.0 * k),
                     pal.text_faint,
                 );
                 if resp.clicked() {
@@ -6443,21 +6443,23 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
             }
             ui.add_space(8.0 * s);
 
+            // Categories a little smaller than the profile and search.
+            let k = s * 0.88;
             // --- every category: big icon, title, description -------------
             let show_links = app.home_links;
-            let gap_x = 24.0 * s;
-            let gap_y = if show_links { 26.0 * s } else { 30.0 * s };
-            let min_w = 250.0 * s;
+            let gap_x = 24.0 * k;
+            let gap_y = if show_links { 26.0 * k } else { 30.0 * k };
+            let min_w = 250.0 * k;
             let cols = (((col_w + gap_x) / (min_w + gap_x)).floor() as usize).clamp(1, 3);
             let cw = (col_w - gap_x * (cols as f32 - 1.0)) / cols as f32;
-            let icon_sz = 34.0 * s;
-            let text_x = 16.0 * s + icon_sz + 16.0 * s;
-            let text_w = cw - text_x - 12.0 * s;
-            let link_h = 23.0 * s;
+            let icon_sz = 34.0 * k;
+            let text_x = 16.0 * k + icon_sz + 16.0 * k;
+            let text_w = cw - text_x - 12.0 * k;
+            let link_h = 23.0 * k;
             let max_links = 4usize;
-            let head_h = 74.0 * s;
+            let head_h = 74.0 * k;
             let ch = if show_links {
-                head_h + link_h * max_links as f32 + 6.0 * s
+                head_h + link_h * max_links as f32 + 6.0 * k
             } else {
                 head_h
             };
@@ -6486,7 +6488,7 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
                 if widgets::glassy(pal) {
                     ui.painter().add(widgets::glass_slab(
                         pal,
-                        cell.expand2(Vec2::new(0.0, 4.0 * s)),
+                        cell.expand2(Vec2::new(0.0, 4.0 * k)),
                         pal.corner(8).max(8),
                         resp.hovered(),
                     ));
@@ -6494,26 +6496,26 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
                     ui.painter().rect_filled(head, pal.corner(4), pal.hover);
                 }
                 let glyph = Rect::from_min_size(
-                    Pos2::new(cell.left() + 16.0 * s, head.top() + 12.0 * s),
+                    Pos2::new(cell.left() + 16.0 * k, head.top() + 12.0 * k),
                     Vec2::splat(icon_sz),
                 );
                 crate::icons::paint(ui.painter(), cat.icon(), glyph, pal.accent);
                 let painter = ui.painter().with_clip_rect(cell);
                 let tx = cell.left() + text_x;
                 painter.text(
-                    Pos2::new(tx, head.top() + 12.0 * s),
+                    Pos2::new(tx, head.top() + 12.0 * k),
                     Align2::LEFT_TOP,
                     cat.title(),
-                    regular(15.5 * s),
+                    regular(15.5 * k),
                     pal.text,
                 );
                 let desc = painter.layout(
                     cat.subtitle().to_owned(),
-                    regular(12.5 * s),
+                    regular(12.5 * k),
                     pal.text_faint,
                     text_w,
                 );
-                painter.galley(Pos2::new(tx, head.top() + 36.0 * s), desc, pal.text_faint);
+                painter.galley(Pos2::new(tx, head.top() + 36.0 * k), desc, pal.text_faint);
                 if resp.clicked() {
                     go = Some(cat.items()[0].2);
                 }
@@ -6533,7 +6535,7 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
                     links.push((format!("{} more…", items.len() - shown), items[shown].2));
                 }
                 for (j, (label, view)) in links.into_iter().enumerate() {
-                    let galley = painter.layout_no_wrap(label, regular(13.0 * s), pal.accent);
+                    let galley = painter.layout_no_wrap(label, regular(13.0 * k), pal.accent);
                     let pos = Pos2::new(
                         tx,
                         head.bottom() + j as f32 * link_h + (link_h - galley.size().y) / 2.0,
@@ -6896,4 +6898,198 @@ fn segment(ui: &mut Ui, pal: &Palette, label: &str, selected: bool) -> bool {
         if selected { pal.on_accent } else { pal.text },
     );
     resp.on_hover_cursor(CursorIcon::PointingHand).clicked()
+}
+
+/// Keyboard Manager (like PowerToys): remap keys and shortcuts on every
+/// keyboard with Harbor's own engine (`harbor-keymapd`).
+fn keymap_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
+    use crate::keymap::{Combo, Keymap, Kind, Rule, MODS};
+    if app.keymap_saved.is_none() {
+        let saved = Keymap::load();
+        app.keymap_edit = Some(saved.clone());
+        app.keymap_saved = Some(saved);
+    }
+    if let Some(rx) = &app.keymap_rx {
+        match rx.try_recv() {
+            Ok(Ok(())) => {
+                app.keymap_rx = None;
+                app.keymap_saved = app.keymap_edit.clone();
+                app.notify("Keyboard Manager rules saved");
+            }
+            Ok(Err(err)) => {
+                app.keymap_rx = None;
+                app.notify_error(&err);
+            }
+            Err(mpsc::TryRecvError::Empty) => {
+                ui.ctx().request_repaint_after(Duration::from_millis(200))
+            }
+            Err(mpsc::TryRecvError::Disconnected) => app.keymap_rx = None,
+        }
+    }
+    let saving = app.keymap_rx.is_some();
+    let mut map = app.keymap_edit.clone().unwrap_or_default();
+    let mut apply = false;
+
+    // One key (with modifiers when `mods`) as toggle pills plus a key list.
+    fn combo_editor(
+        ui: &mut Ui,
+        pal: &Palette,
+        id: (usize, u8),
+        combo: &mut Combo,
+        mods: bool,
+        disabled: bool,
+    ) {
+        if mods {
+            for (bit, _, _) in MODS {
+                let label = match bit {
+                    1 => "Ctrl",
+                    2 => "Alt",
+                    4 => "Shift",
+                    _ => "Super",
+                };
+                if segment(ui, pal, label, combo.mods & bit != 0) {
+                    combo.mods ^= bit;
+                }
+            }
+        }
+        egui::ComboBox::from_id_salt(("keymap-key", id.0, id.1))
+            .selected_text(crate::keymap::label(combo.key))
+            .width(150.0)
+            .height(320.0)
+            .show_ui(ui, |ui| {
+                for (_, code, label) in crate::keymap::KEYS {
+                    if *code == 0 && !disabled {
+                        continue;
+                    }
+                    ui.selectable_value(&mut combo.key, *code, *label);
+                }
+            });
+    }
+
+    widgets::section_label(ui, pal, "Keyboard Manager");
+    widgets::card(ui, pal, |ui| {
+        let running = system::keymap_running();
+        let sub = if !map.enabled {
+            "Off: every key types as usual".to_owned()
+        } else if map.rules.is_empty() {
+            "Add a remap below".to_owned()
+        } else if running {
+            format!("On: {} remap(s) on every keyboard", map.rules.len())
+        } else {
+            "Not running yet: select Apply".to_owned()
+        };
+        widgets::row(
+            ui,
+            pal,
+            pal.accent,
+            Icon::Keyboard,
+            "Remap keys and shortcuts",
+            &sub,
+            Right::Switch(&mut map.enabled),
+        );
+        let mut remove = None;
+        for (kind, title, sub) in [
+            (
+                Kind::Key,
+                "Remap a key",
+                "One key types another key or a shortcut",
+            ),
+            (
+                Kind::Shortcut,
+                "Remap a shortcut",
+                "A shortcut types another shortcut or key",
+            ),
+        ] {
+            widgets::divider(ui, pal);
+            ui.add_space(8.0);
+            ui.label(egui::RichText::new(title).size(14.5).color(pal.text));
+            ui.label(egui::RichText::new(sub).size(12.0).color(pal.text_faint));
+            ui.add_space(6.0);
+            for (i, rule) in map.rules.iter_mut().enumerate() {
+                if rule.kind != kind {
+                    continue;
+                }
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    combo_editor(
+                        ui,
+                        pal,
+                        (i, 0),
+                        &mut rule.from,
+                        kind == Kind::Shortcut,
+                        false,
+                    );
+                    ui.label(
+                        egui::RichText::new("  →  ")
+                            .size(15.0)
+                            .color(pal.text_muted),
+                    );
+                    combo_editor(ui, pal, (i, 1), &mut rule.to, true, true);
+                    if ui
+                        .link(egui::RichText::new("Remove").color(pal.accent))
+                        .clicked()
+                    {
+                        remove = Some(i);
+                    }
+                });
+                ui.add_space(4.0);
+            }
+            let add = if kind == Kind::Key {
+                "+ Add a key remap"
+            } else {
+                "+ Add a shortcut remap"
+            };
+            if ui
+                .link(egui::RichText::new(add).color(pal.accent))
+                .clicked()
+            {
+                let from = if kind == Kind::Key {
+                    Combo { mods: 0, key: 58 } // Caps Lock
+                } else {
+                    Combo {
+                        mods: crate::keymap::MOD_CTRL | crate::keymap::MOD_ALT,
+                        key: 20,
+                    }
+                };
+                map.rules.push(Rule {
+                    kind,
+                    from,
+                    to: Combo { mods: 0, key: 1 },
+                });
+            }
+            ui.add_space(6.0);
+        }
+        if let Some(i) = remove {
+            map.rules.remove(i);
+        }
+        widgets::divider(ui, pal);
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            let changed = app.keymap_saved.as_ref() != Some(&map);
+            let label = if saving { "Saving…" } else { "Apply" };
+            let resp = widgets::button(ui, pal, pal.accent, label, None);
+            if resp.clicked() && !saving && (changed || !running) {
+                apply = true;
+            }
+            ui.label(
+                egui::RichText::new(if changed {
+                    "Unsaved changes"
+                } else {
+                    "Works on every keyboard, also at the login screen"
+                })
+                .size(12.0)
+                .color(pal.text_faint),
+            );
+        });
+        ui.add_space(6.0);
+    });
+    if apply {
+        let text = map.text();
+        let (tx, rx) = mpsc::channel();
+        app.keymap_rx = Some(rx);
+        std::thread::spawn(move || {
+            let _ = tx.send(system::apply_keymap(&text));
+        });
+    }
+    app.keymap_edit = Some(map);
 }

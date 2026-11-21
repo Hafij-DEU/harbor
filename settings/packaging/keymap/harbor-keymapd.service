@@ -1,0 +1,11 @@
+[Unit]
+Description=Harbor Keyboard Manager (key and shortcut remapping)
+Documentation=man:systemd.service(5)
+
+[Service]
+ExecStart=/usr/local/lib/win11-settings/harbor-keymapd
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target

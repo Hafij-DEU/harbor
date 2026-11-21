@@ -6,6 +6,8 @@ mod icons;
 mod inventory;
 mod jobs;
 mod jobview;
+#[allow(dead_code)] // the engine uses the rest
+mod keymap;
 mod pages;
 mod system;
 mod theme;
@@ -553,7 +555,13 @@ fn main() -> eframe::Result<()> {
             .and_then(|v| v.parse::<f32>().ok())
             .unwrap_or(default)
     };
-    let options = eframe::NativeOptions {
+    // See-through glass needs a clear window with its own shadow margin.
+    // Otherwise the window is opaque and, like Craft Suite, runs through
+    // XWayland so GNOME draws its shadow (WIN11_SETTINGS_WAYLAND=1 keeps
+    // native Wayland).
+    let see_through = system::glass_window();
+    #[allow(unused_mut)]
+    let mut options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Settings")
             .with_inner_size([
@@ -564,10 +572,20 @@ fn main() -> eframe::Result<()> {
             .with_decorations(false)
             .with_resizable(true)
             .with_app_id("win11-settings")
-            .with_transparent(system::glass_window()),
+            .with_transparent(see_through),
         renderer: eframe::Renderer::Glow,
         ..Default::default()
     };
+    #[cfg(target_os = "linux")]
+    if !see_through
+        && std::env::var_os("DISPLAY").is_some()
+        && std::env::var_os("WIN11_SETTINGS_WAYLAND").is_none()
+    {
+        options.event_loop_builder = Some(Box::new(|b| {
+            use winit::platform::x11::EventLoopBuilderExtX11;
+            b.with_x11();
+        }));
+    }
 
     eframe::run_native(
         "Settings",

@@ -3685,7 +3685,14 @@ pub fn set_user_photo(path: &str) -> Result<(), String> {
 
 /// Read a picture and cut a centred square of `size` pixels for the avatar.
 pub fn load_photo(path: &Path, size: u32) -> Option<(usize, Vec<u8>)> {
-    let img = image::open(path).ok()?;
+    // AccountsService stores the picture without an extension: detect the
+    // format from the contents.
+    let img = image::ImageReader::open(path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?
+        .decode()
+        .ok()?;
     let side = img.width().min(img.height());
     let x = (img.width() - side) / 2;
     let y = (img.height() - side) / 2;
@@ -3977,4 +3984,44 @@ pub fn launch_desktop(path: &str) -> bool {
         .stderr(Stdio::null())
         .spawn()
         .is_ok()
+}
+
+/// Save Keyboard Manager rules through the packaged helper (polkit lets the
+/// active user run it without a password) and restart the remapping service.
+pub fn apply_keymap(text: &str) -> Result<(), String> {
+    let helper = "/usr/local/lib/win11-settings/harbor-keymap-apply";
+    if !Path::new(helper).exists() {
+        return Err("Keyboard Manager is not installed; reinstall Harbor Settings".to_owned());
+    }
+    let mut child = Command::new("pkexec")
+        .arg(helper)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        stdin
+            .write_all(text.as_bytes())
+            .map_err(|e| e.to_string())?;
+    }
+    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(clean_error(
+            &String::from_utf8_lossy(&out.stderr),
+            "Could not save the Keyboard Manager rules",
+        ))
+    }
+}
+
+/// Whether the remapping service is running.
+pub fn keymap_running() -> bool {
+    Command::new("systemctl")
+        .args(["is-active", "--quiet", "harbor-keymapd.service"])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
