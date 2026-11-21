@@ -5,11 +5,14 @@
 //! enabled true
 //! key CAPSLOCK ESC
 //! shortcut CTRL+ALT+T SUPER+E
+//! key 102ND LEFTSHIFT on internal
+//! key F1 DISABLED on 046d:c31c
 //! ```
 //!
 //! A `key` rule turns one key into another key or a shortcut; a `shortcut`
 //! rule turns a shortcut into another key or shortcut. Names are the Linux
-//! key names without `KEY_`.
+//! key names without `KEY_`. `on internal` limits a rule to the laptop's
+//! built-in keyboard, `on vvvv:pppp` to one keyboard (USB vendor:product).
 
 pub const CONFIG: &str = "/etc/harbor/keymap.conf";
 
@@ -240,11 +243,76 @@ pub enum Kind {
     Shortcut,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Rule {
     pub kind: Kind,
     pub from: Combo,
     pub to: Combo,
+    /// Only this keyboard: "internal" or "vvvv:pppp"; None = every keyboard.
+    pub on: Option<String>,
+}
+
+/// The laptop's built-in keyboard sits on the i8042 bus.
+pub const BUS_I8042: u16 = 0x11;
+
+/// Whether a rule for `on` applies to a keyboard with this id and bus.
+pub fn device_matches(on: &Option<String>, id: &str, bus: u16) -> bool {
+    match on.as_deref() {
+        None => true,
+        Some("internal") => bus == BUS_I8042,
+        Some(want) => want == id,
+    }
+}
+
+fn valid_device(text: &str) -> bool {
+    text == "internal"
+        || (text.len() == 9
+            && text.as_bytes()[4] == b':'
+            && text
+                .chars()
+                .enumerate()
+                .all(|(i, c)| i == 4 || matches!(c, '0'..='9' | 'a'..='f')))
+}
+
+/// A keyboard plugged in now.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Keyboard {
+    pub name: String,
+    /// "vvvv:pppp"
+    pub id: String,
+    pub bus: u16,
+}
+
+/// Keyboards listed in /proc/bus/input/devices: kbd handler and key repeat
+/// (power buttons and mice have no repeat). Harbor's own output is left out.
+pub fn keyboards() -> Vec<Keyboard> {
+    let text = std::fs::read_to_string("/proc/bus/input/devices").unwrap_or_default();
+    let mut out: Vec<Keyboard> = Vec::new();
+    for block in text.split("\n\n") {
+        let (mut name, mut id, mut bus, mut kbd, mut rep) = (String::new(), String::new(), 0, false, false);
+        for line in block.lines() {
+            if let Some(rest) = line.strip_prefix("I: ") {
+                let field = |key: &str| {
+                    rest.split_whitespace()
+                        .find_map(|w| w.strip_prefix(key))
+                        .unwrap_or("0000")
+                        .to_ascii_lowercase()
+                };
+                bus = u16::from_str_radix(&field("Bus="), 16).unwrap_or(0);
+                id = format!("{}:{}", field("Vendor="), field("Product="));
+            } else if let Some(rest) = line.strip_prefix("N: Name=") {
+                name = rest.trim_matches('"').to_owned();
+            } else if let Some(rest) = line.strip_prefix("H: Handlers=") {
+                kbd = rest.split_whitespace().any(|w| w == "kbd");
+            } else if let Some(rest) = line.strip_prefix("B: EV=") {
+                rep = u64::from_str_radix(rest.trim(), 16).is_ok_and(|ev| ev & (1 << 0x14) != 0);
+            }
+        }
+        if kbd && rep && name != "Harbor keymap" && !out.iter().any(|k| k.id == id) {
+            out.push(Keyboard { name, id, bus });
+        }
+    }
+    out
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -269,7 +337,12 @@ impl Keymap {
             let words: Vec<&str> = line.split_whitespace().collect();
             match words.as_slice() {
                 ["enabled", v] => map.enabled = *v == "true",
-                [kind @ ("key" | "shortcut"), from, to] => {
+                [kind @ ("key" | "shortcut"), from, to, rest @ ..] => {
+                    let on = match rest {
+                        [] => None,
+                        ["on", dev] if valid_device(dev) => Some((*dev).to_owned()),
+                        _ => continue,
+                    };
                     let (Some(from), Some(to)) = (Combo::parse(from), Combo::parse(to)) else {
                         continue;
                     };
@@ -282,7 +355,7 @@ impl Keymap {
                     if kind == Kind::Key && from.mods != 0 || from.key == 0 {
                         continue;
                     }
-                    map.rules.push(Rule { kind, from, to });
+                    map.rules.push(Rule { kind, from, to, on });
                 }
                 _ => {}
             }
@@ -298,7 +371,11 @@ impl Keymap {
             } else {
                 "shortcut"
             };
-            out.push_str(&format!("{kind} {} {}\n", r.from.text(), r.to.text()));
+            out.push_str(&format!("{kind} {} {}", r.from.text(), r.to.text()));
+            if let Some(on) = &r.on {
+                out.push_str(&format!(" on {on}"));
+            }
+            out.push('\n');
         }
         out
     }
@@ -316,9 +393,13 @@ mod tests {
 
     #[test]
     fn round_trip_and_bad_lines() {
-        let text = "enabled true\nkey CAPSLOCK ESC\nshortcut CTRL+ALT+T SUPER+E\nkey CTRL+A B\nkey NOPE ESC\nkey F1 DISABLED\n";
+        let text = "enabled true\nkey CAPSLOCK ESC\nshortcut CTRL+ALT+T SUPER+E\nkey CTRL+A B\nkey NOPE ESC\nkey F1 DISABLED\nkey 102ND LEFTSHIFT on internal\nkey F2 F3 on 046d:c31c\nkey F4 F5 on nowhere\n";
         let map = Keymap::parse(text);
-        assert_eq!(map.rules.len(), 3);
+        assert_eq!(map.rules.len(), 5);
+        assert_eq!(map.rules[3].on.as_deref(), Some("internal"));
+        assert!(device_matches(&map.rules[3].on, "0001:0001", BUS_I8042));
+        assert!(!device_matches(&map.rules[4].on, "0001:0001", BUS_I8042));
+        assert!(device_matches(&map.rules[4].on, "046d:c31c", 3));
         assert_eq!(map.rules[1].from.mods, MOD_CTRL | MOD_ALT);
         assert_eq!(map.rules[1].to.label(), "Super + E");
         assert_eq!(Keymap::parse(&map.text()), map);

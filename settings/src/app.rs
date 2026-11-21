@@ -4045,9 +4045,8 @@ The network will not reconnect automatically."
         if maximized || fullscreen {
             return;
         }
-        // The shadow margin around a see-through window is a resize handle too.
-        let margin = if self.glass_window { FRAME_MARGIN } else { 0.0 };
-        let body = ctx.viewport_rect().shrink(margin);
+        // The shadow margin around the window body is a resize handle too.
+        let body = ctx.viewport_rect().shrink(FRAME_MARGIN);
         let direction = resize_direction(pos, body, title_height(self.design));
         if let Some(direction) = direction {
             ctx.send_viewport_cmd(ViewportCommand::BeginResize(direction));
@@ -4099,8 +4098,7 @@ impl eframe::App for App {
                 vp.fullscreen.unwrap_or(false),
             )
         });
-        // Opaque windows get GNOME's own shadow (as Craft Suite does).
-        let framed = self.glass_window && !(maximized || fullscreen);
+        let framed = !(maximized || fullscreen);
         let outer = root.max_rect();
         let full = if framed {
             outer.shrink(FRAME_MARGIN)
@@ -4109,17 +4107,22 @@ impl eframe::App for App {
         };
         self.frame_r = if framed { FRAME_RADIUS } else { 0 };
         if framed {
-            let steps = FRAME_MARGIN as usize - 2;
+            // GNOME's window shadow: a soft Gaussian a little below the
+            // window, darkest at the edge (as Craft Suite and GTK get).
+            let focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
+            let (peak, sigma, drop) = if focused {
+                (0.30, 5.0, 3.0)
+            } else {
+                (0.18, 3.5, 2.0)
+            };
+            let steps = FRAME_MARGIN as usize;
             for i in 0..steps {
                 let t = i as f32;
-                let fade = 1.0 - t / steps as f32;
-                // Darker near the body and softer outwards, like the
-                // libadwaita window shadow Harbor Files gets.
-                let a = (0.24 * fade.powf(2.2) * 255.0) as u8;
+                let a = peak * (-(t * t) / (2.0 * sigma * sigma)).exp();
                 root.painter().rect_stroke(
-                    full.translate(Vec2::new(0.0, 2.0)).expand(t + 0.5),
+                    full.translate(Vec2::new(0.0, drop)).expand(t + 0.5),
                     FRAME_RADIUS.saturating_add(i as u8),
-                    Stroke::new(1.0, Color32::from_black_alpha(a)),
+                    Stroke::new(1.0, Color32::from_black_alpha((a * 255.0) as u8)),
                     StrokeKind::Middle,
                 );
             }
@@ -4172,13 +4175,7 @@ impl eframe::App for App {
         // desktop shows through, and the margin holds the shadow. Clear to
         // black, since the compositor reads premultiplied alpha and any
         // colour here would be added over the desktop as a light haze.
-        if self.glass_window {
-            [0.0, 0.0, 0.0, 0.0]
-        } else {
-            let pal = self.pal();
-            let c = |v: u8| v as f32 / 255.0;
-            [c(pal.bg.r()), c(pal.bg.g()), c(pal.bg.b()), 1.0]
-        }
+        [0.0, 0.0, 0.0, 0.0]
     }
 
 }

@@ -7089,6 +7089,47 @@ fn keymap_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
         }
     }
 
+    // Which keyboard a rule works on: every keyboard, the laptop's own or
+    // one plugged-in keyboard (listed by name, kept by vendor:product).
+    fn keyboard_picker(
+        ui: &mut Ui,
+        i: usize,
+        on: &mut Option<String>,
+        boards: &[crate::keymap::Keyboard],
+    ) {
+        let text = match on.as_deref() {
+            None => "Every keyboard".to_owned(),
+            Some("internal") => "Laptop keyboard".to_owned(),
+            Some(id) => boards
+                .iter()
+                .find(|k| k.id == id)
+                .map_or_else(|| format!("Keyboard {id} (unplugged)"), |k| k.name.clone()),
+        };
+        egui::ComboBox::from_id_salt(("keymap-board", i))
+            .selected_text(text)
+            .width(190.0)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(on, None, "Every keyboard");
+                if boards.iter().any(|k| k.bus == crate::keymap::BUS_I8042) {
+                    ui.selectable_value(on, Some("internal".to_owned()), "Laptop keyboard");
+                }
+                for k in boards.iter().filter(|k| k.bus != crate::keymap::BUS_I8042) {
+                    ui.selectable_value(on, Some(k.id.clone()), &k.name);
+                }
+            });
+    }
+
+    // Plugged-in keyboards, read again every few seconds.
+    static BOARDS: std::sync::Mutex<Option<(std::time::Instant, Vec<crate::keymap::Keyboard>)>> =
+        std::sync::Mutex::new(None);
+    let boards = {
+        let mut cache = BOARDS.lock().unwrap_or_else(|e| e.into_inner());
+        if cache.as_ref().is_none_or(|(at, _)| at.elapsed() > Duration::from_secs(3)) {
+            *cache = Some((std::time::Instant::now(), crate::keymap::keyboards()));
+        }
+        cache.as_ref().map(|(_, b)| b.clone()).unwrap_or_default()
+    };
+
     widgets::section_label(ui, pal, "Keyboard Manager");
     widgets::card(ui, pal, |ui| {
         let running = system::keymap_running();
@@ -7115,7 +7156,7 @@ fn keymap_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
             (
                 Kind::Key,
                 "Remap a key",
-                "One key types another key or a shortcut, or does nothing. Select Type and press the key.",
+                "One key types another key or a shortcut, or does nothing, on every keyboard or just one. Select Type and press the key.",
             ),
             (
                 Kind::Shortcut,
@@ -7149,6 +7190,7 @@ fn keymap_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
                             .color(pal.text_muted),
                     );
                     combo_editor(ui, pal, (i, 1), &mut rule.to, true, true, &mut app.keymap_capture);
+                    keyboard_picker(ui, i, &mut rule.on, &boards);
                     if ui
                         .link(egui::RichText::new("Remove").color(pal.accent))
                         .clicked()
@@ -7179,6 +7221,7 @@ fn keymap_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
                     kind,
                     from,
                     to: Combo { mods: 0, key: 1 },
+                    on: None,
                 });
             }
             ui.add_space(6.0);

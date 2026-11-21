@@ -9,7 +9,7 @@
 #[allow(dead_code)]
 mod keymap;
 
-use keymap::{mod_bit, Combo, Keymap, Kind, MODS};
+use keymap::{device_matches, mod_bit, Combo, Keymap, Kind, MODS};
 use std::collections::{HashMap, HashSet};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -30,6 +30,7 @@ const fn ioc(dir: u64, ty: u8, nr: u8, size: usize) -> u64 {
 }
 const KEY_BYTES: usize = 96; // KEY_MAX 0x2ff
 const EVIOCGNAME: u64 = ioc(READ, b'E', 0x06, 256);
+const EVIOCGID: u64 = ioc(READ, b'E', 0x02, 8);
 const EVIOCGKEY: u64 = ioc(READ, b'E', 0x18, KEY_BYTES);
 const EVIOCGBIT_KEY: u64 = ioc(READ, b'E', 0x20 + EV_KEY as u8, KEY_BYTES);
 const EVIOCGRAB: u64 = ioc(WRITE, b'E', 0x90, 4);
@@ -49,7 +50,8 @@ struct UinputSetup {
 }
 
 enum Msg {
-    Key(u16, i32),
+    /// code, value, index into the keyboards list
+    Key(u16, i32, usize),
     Gone(PathBuf),
 }
 
@@ -84,6 +86,13 @@ fn keyboard_name(f: &File) -> Option<String> {
     Some(String::from_utf8_lossy(&name[..end]).into_owned())
 }
 
+/// A keyboard's "vvvv:pppp" id and bus.
+fn keyboard_id(f: &File) -> (String, u16) {
+    let mut id = [0u16; 4]; // bus, vendor, product, version
+    unsafe { libc::ioctl(f.as_raw_fd(), EVIOCGID as _, id.as_mut_ptr()) };
+    (format!("{:04x}:{:04x}", id[1], id[2]), id[0])
+}
+
 /// Whether a key is down right now (taking the keyboard over mid-press
 /// would leave that key stuck for the desktop).
 fn any_key_down(f: &File) -> bool {
@@ -93,7 +102,7 @@ fn any_key_down(f: &File) -> bool {
 }
 
 /// Take any keyboard not taken yet; each gets a reading thread.
-fn scan(tx: &mpsc::Sender<Msg>, known: &mut HashSet<PathBuf>) {
+fn scan(tx: &mpsc::Sender<Msg>, known: &mut HashSet<PathBuf>, devices: &mut Vec<(String, u16)>) {
     let Ok(dir) = std::fs::read_dir("/dev/input") else {
         return;
     };
@@ -122,6 +131,8 @@ fn scan(tx: &mpsc::Sender<Msg>, known: &mut HashSet<PathBuf>) {
             continue; // a key is down: try again on the next scan
         }
         known.insert(path.clone());
+        let dev = devices.len();
+        devices.push(keyboard_id(&f));
         let tx = tx.clone();
         std::thread::spawn(move || {
             let mut buf = [0u8; 24 * 64];
@@ -137,7 +148,7 @@ fn scan(tx: &mpsc::Sender<Msg>, known: &mut HashSet<PathBuf>) {
                     let kind = u16::from_ne_bytes([ev[16], ev[17]]);
                     let code = u16::from_ne_bytes([ev[18], ev[19]]);
                     let value = i32::from_ne_bytes([ev[20], ev[21], ev[22], ev[23]]);
-                    if kind == EV_KEY && tx.send(Msg::Key(code, value)).is_err() {
+                    if kind == EV_KEY && tx.send(Msg::Key(code, value, dev)).is_err() {
                         return;
                     }
                 }
@@ -187,8 +198,9 @@ struct Active {
 
 struct Engine {
     out: File,
-    keys: HashMap<u16, Combo>,
-    shortcuts: Vec<(Combo, Combo)>,
+    /// Rules for one keyboard come before rules for every keyboard.
+    keys: Vec<(u16, Option<String>, Combo)>,
+    shortcuts: Vec<(Combo, Option<String>, Combo)>,
     down: HashSet<u16>,
     active: HashMap<u16, Active>,
 }
@@ -230,7 +242,7 @@ impl Engine {
         added
     }
 
-    fn key(&mut self, code: u16, value: i32) {
+    fn key(&mut self, code: u16, value: i32, id: &str, bus: u16) {
         match value {
             1 => {
                 let mods = self.mods();
@@ -238,8 +250,10 @@ impl Engine {
                     .then(|| {
                         self.shortcuts
                             .iter()
-                            .find(|(from, _)| from.key == code && from.mods == mods)
-                            .map(|(_, to)| *to)
+                            .find(|(from, on, _)| {
+                                from.key == code && from.mods == mods && device_matches(on, id, bus)
+                            })
+                            .map(|(_, _, to)| *to)
                     })
                     .flatten();
                 if let Some(to) = hit {
@@ -261,7 +275,12 @@ impl Engine {
                             lifted,
                         },
                     );
-                } else if let Some(&to) = self.keys.get(&code) {
+                } else if let Some(to) = self
+                    .keys
+                    .iter()
+                    .find(|(from, on, _)| *from == code && device_matches(on, id, bus))
+                    .map(|(_, _, to)| *to)
+                {
                     let added_mods = self.press(to);
                     self.active.insert(
                         code,
@@ -327,28 +346,32 @@ fn main() {
     };
     let mut engine = Engine {
         out,
-        keys: HashMap::new(),
+        keys: Vec::new(),
         shortcuts: Vec::new(),
         down: HashSet::new(),
         active: HashMap::new(),
     };
-    for r in &map.rules {
+    let mut rules = map.rules.clone();
+    rules.sort_by_key(|r| r.on.is_none()); // one-keyboard rules first
+    for r in rules {
         match r.kind {
-            Kind::Key => {
-                engine.keys.insert(r.from.key, r.to);
-            }
-            Kind::Shortcut => engine.shortcuts.push((r.from, r.to)),
+            Kind::Key => engine.keys.push((r.from.key, r.on, r.to)),
+            Kind::Shortcut => engine.shortcuts.push((r.from, r.on, r.to)),
         }
     }
     // Let the new virtual keyboard settle before keys arrive.
     std::thread::sleep(Duration::from_millis(300));
     let (tx, rx) = mpsc::channel();
     let mut known = HashSet::new();
-    scan(&tx, &mut known);
+    let mut devices = Vec::new();
+    scan(&tx, &mut known, &mut devices);
     let mut last = Instant::now();
     loop {
         match rx.recv_timeout(Duration::from_secs(2)) {
-            Ok(Msg::Key(code, value)) => engine.key(code, value),
+            Ok(Msg::Key(code, value, dev)) => {
+                let (id, bus) = devices[dev].clone();
+                engine.key(code, value, &id, bus)
+            }
             Ok(Msg::Gone(path)) => {
                 known.remove(&path);
             }
@@ -360,7 +383,7 @@ fn main() {
             if changed() && engine.down.is_empty() {
                 return; // systemd starts us again with the new rules
             }
-            scan(&tx, &mut known); // keyboards plugged in later
+            scan(&tx, &mut known, &mut devices); // keyboards plugged in later
         }
     }
 }

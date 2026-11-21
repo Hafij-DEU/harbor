@@ -6,7 +6,7 @@ set -eu
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
 head -c 65536 > "$tmp"
-if grep -qvE '^(enabled (true|false)|(key|shortcut) [A-Z0-9_+]+ [A-Z0-9_+]+)$' "$tmp"; then
+if grep -qvE '^(enabled (true|false)|(key|shortcut) [A-Z0-9_+]+ [A-Z0-9_+]+( on (internal|[0-9a-f]{4}:[0-9a-f]{4}))?)$' "$tmp"; then
     echo "These are not Keyboard Manager rules" >&2
     exit 2
 fi

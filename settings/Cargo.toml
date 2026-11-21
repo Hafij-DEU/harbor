@@ -1,13 +1,12 @@
 [package]
 name = "win11-settings"
-version = "0.5.30"
+version = "0.5.32"
 edition = "2021"
 description = "A Windows 11 style Settings app for Ubuntu, written in Rust"
 license = "MIT"
 
 [dependencies]
 libc = "0.2"
-winit = { version = "0.30", default-features = false, features = ["x11"] }
 # glow (OpenGL) only: the default wgpu renderer pulls in wgpu, naga and a
 # Vulkan setup. Fonts: Selawik is bundled; system DejaVu is the fallback.
 eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "glow", "wayland", "x11"] }
