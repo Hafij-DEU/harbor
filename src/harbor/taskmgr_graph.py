@@ -25,6 +25,31 @@ def accent_rgba():
     return _rgba(0.21, 0.52, 0.89)
 
 
+# Colourful look: one colour per kind of device, like Windows Task Manager.
+KIND_COLORS = {
+    "cpu": (0.23, 0.51, 0.96),     # blue
+    "memory": (0.66, 0.33, 0.97),  # purple
+    "swap": (0.93, 0.29, 0.60),    # pink
+    "disk": (0.13, 0.77, 0.37),    # green
+    "net": (0.98, 0.55, 0.09),     # orange
+    "gpu": (0.02, 0.71, 0.83),     # cyan
+}
+STATE = {"colorful": True}
+
+
+def color_for(widget):
+    """The graph colour: the device kind's colour in the colourful look
+    (the nearest ancestor with `hb_kind`), else the accent colour."""
+    if STATE["colorful"]:
+        w = widget
+        while w is not None:
+            kind = getattr(w, "hb_kind", None)
+            if kind in KIND_COLORS:
+                return _rgba(*KIND_COLORS[kind])
+            w = w.get_parent()
+    return accent_rgba()
+
+
 def _with_alpha(c, a):
     return _rgba(c.red, c.green, c.blue, a)
 
@@ -78,7 +103,7 @@ class Graph(Gtk.Widget):
         if w <= 2 or h <= 2:
             return
         fg = self.get_color()
-        acc = accent_rgba()
+        acc = color_for(self)
         snap.append_color(_with_alpha(acc, 0.04), _rect(0, 0, w, h))
         if self.grid:
             gc = _with_alpha(fg, 0.07)
@@ -140,7 +165,7 @@ class CompositionBar(Gtk.Widget):
         h = self.get_height()
         if w <= 2:
             return
-        acc = accent_rgba()
+        acc = color_for(self)
         used, cached = self.parts
         uw = round(w * min(1.0, used))
         cw = round(w * min(1.0 - min(1.0, used), cached))

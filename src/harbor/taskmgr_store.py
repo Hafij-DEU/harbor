@@ -45,6 +45,8 @@ DEFAULTS = {
     "notify_at": 90,
     # glass quick choice, kept in step with ~/.config/harbor/glass-taskmgr
     "glass": "harbor",
+    # "colorful" (a colour per page and device) or "normal" (accent only)
+    "colors": "colorful",
 }
 
 

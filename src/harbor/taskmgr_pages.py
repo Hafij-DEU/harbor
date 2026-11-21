@@ -121,8 +121,9 @@ class Device:
         rb = Gtk.Box(spacing=12)
         rb.append(self.spark)
         rb.append(texts)
-        self.row = Gtk.ListBoxRow(child=rb)
+        self.row = Gtk.ListBoxRow(child=rb, css_classes=["hb-tm-dev-" + self.kind])
         self.row.key = key
+        self.row.hb_kind = self.kind
         self.view = None
 
     # --- detail view scaffolding
@@ -151,8 +152,10 @@ class Device:
         v.append(self.stats.box)
         self.build_stats(self.stats)
         self.build_after(v)
-        sc = Gtk.ScrolledWindow(child=v, vexpand=True, hexpand=True)
+        sc = Gtk.ScrolledWindow(child=v, vexpand=True, hexpand=True,
+                                css_classes=["hb-tm-view-" + self.kind])
         sc.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        sc.hb_kind = self.kind
         self.view = sc
         g = Gtk.GestureClick(button=3)
         g.connect("pressed", lambda _g, _n, x, y: self.page.popup_menu(menu, v, x, y))
@@ -1514,6 +1517,11 @@ class SettingsPage(Page):
                  suffix=switch(bool(st["group_by_type"]), self._group)),
             Card("App theme", "Follows the system light or dark style",
                  icon="display-brightness-symbolic"),
+            Card("Colours", "Colourful: a colour for each page and device; Normal: the accent colour only",
+                 icon="applications-graphics-symbolic",
+                 suffix=dropdown(["Colourful", "Normal"],
+                                 0 if st["colors"] != "normal" else 1,
+                                 lambda i: self._set_colors("colorful" if i == 0 else "normal"))),
             Card("Glass effect", "Style, opacity, rim and glare: Harbor Settings > Personalisation",
                  icon="weather-clear-night-symbolic", suffix=self._glass_dropdown(st)),
         ))
@@ -1572,6 +1580,10 @@ class SettingsPage(Page):
         if now - self._opt_t >= 5:
             self._opt_t = now
             self.optimization.on_tick()
+
+    def _set_colors(self, value):
+        self._set("colors", value)
+        self.win.apply_colors()
 
     def _notify(self, on):
         self.app.settings["notify_memory"] = on

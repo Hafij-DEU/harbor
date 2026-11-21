@@ -503,6 +503,9 @@ class TaskWindow(HarborWindow):
         self.navcol.append(self.nav)
         self.navcol.append(Gtk.Box(vexpand=True))
         self.nav2 = NavList([("settings", "Settings", "emblem-system-symbolic")])
+        for nav in (self.nav, self.nav2):
+            for key, row in nav.rows.items():
+                row.add_css_class("hb-tm-nav-" + key)
         self.nav2.set_margin_bottom(10)
         self.nav2.connect("selected", lambda _n, key: self.show_page(key))
         self.navcol.append(self.nav2)
@@ -529,6 +532,7 @@ class TaskWindow(HarborWindow):
         self._install_shortcuts()
         self.nav_collapsed = False
         self.set_nav_collapsed(bool(app.settings["nav_collapsed"]), save=False)
+        self.apply_colors()
         start = app.settings["start_page"]
         self.show_page(start if start in PAGE_KEYS else "processes")
 
@@ -552,6 +556,17 @@ class TaskWindow(HarborWindow):
         page.on_search(self.search.get_text())
         page.on_show(sub or None)
         return True
+
+    def apply_colors(self):
+        """Colourful (a colour per page and device) or Normal (accent only)."""
+        from . import taskmgr_graph
+        on = self.app.settings["colors"] != "normal"
+        taskmgr_graph.STATE["colorful"] = on
+        if on:
+            self.add_css_class("hb-tm-colorful")
+        else:
+            self.remove_css_class("hb-tm-colorful")
+        self.queue_draw()
 
     def set_nav_collapsed(self, on, save=True):
         self.nav_collapsed = on

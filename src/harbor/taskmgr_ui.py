@@ -11,6 +11,68 @@ from .common import heat_class, label  # noqa: E402
 DEFAULT_ICON = "application-x-executable-symbolic"
 
 CSS = """
+/* Colourful look (Settings > Colours) */
+.hb-tm-colorful .hb-tm-nav-processes image { color: #3b82f6; }
+.hb-tm-colorful .hb-tm-nav-processes:selected .hb-nav-pill { background: #3b82f6; }
+.hb-tm-colorful .hb-tm-nav-processes:selected { background: alpha(#3b82f6, 0.14); }
+.hb-tm-colorful .hb-tm-nav-performance image { color: #22c55e; }
+.hb-tm-colorful .hb-tm-nav-performance:selected .hb-nav-pill { background: #22c55e; }
+.hb-tm-colorful .hb-tm-nav-performance:selected { background: alpha(#22c55e, 0.14); }
+.hb-tm-colorful .hb-tm-nav-sweep image { color: #a855f7; }
+.hb-tm-colorful .hb-tm-nav-sweep:selected .hb-nav-pill { background: #a855f7; }
+.hb-tm-colorful .hb-tm-nav-sweep:selected { background: alpha(#a855f7, 0.14); }
+.hb-tm-colorful .hb-tm-nav-history image { color: #f59e0b; }
+.hb-tm-colorful .hb-tm-nav-history:selected .hb-nav-pill { background: #f59e0b; }
+.hb-tm-colorful .hb-tm-nav-history:selected { background: alpha(#f59e0b, 0.14); }
+.hb-tm-colorful .hb-tm-nav-startup image { color: #ef4444; }
+.hb-tm-colorful .hb-tm-nav-startup:selected .hb-nav-pill { background: #ef4444; }
+.hb-tm-colorful .hb-tm-nav-startup:selected { background: alpha(#ef4444, 0.14); }
+.hb-tm-colorful .hb-tm-nav-users image { color: #ec4899; }
+.hb-tm-colorful .hb-tm-nav-users:selected .hb-nav-pill { background: #ec4899; }
+.hb-tm-colorful .hb-tm-nav-users:selected { background: alpha(#ec4899, 0.14); }
+.hb-tm-colorful .hb-tm-nav-details image { color: #06b6d4; }
+.hb-tm-colorful .hb-tm-nav-details:selected .hb-nav-pill { background: #06b6d4; }
+.hb-tm-colorful .hb-tm-nav-details:selected { background: alpha(#06b6d4, 0.14); }
+.hb-tm-colorful .hb-tm-nav-services image { color: #6366f1; }
+.hb-tm-colorful .hb-tm-nav-services:selected .hb-nav-pill { background: #6366f1; }
+.hb-tm-colorful .hb-tm-nav-services:selected { background: alpha(#6366f1, 0.14); }
+.hb-tm-colorful .hb-tm-nav-settings image { color: #64748b; }
+.hb-tm-colorful .hb-tm-nav-settings:selected .hb-nav-pill { background: #64748b; }
+.hb-tm-colorful .hb-tm-nav-settings:selected { background: alpha(#64748b, 0.14); }
+.hb-tm-colorful .hb-tm-devlist > row.hb-tm-dev-cpu:selected { background: alpha(#3b82f6, 0.16); box-shadow: inset 3px 0 #3b82f6; }
+.hb-tm-colorful .hb-tm-view-cpu .hb-tm-perf-title, .hb-tm-colorful .hb-tm-view-cpu .hb-tm-stat-value { color: #3b82f6; }
+.hb-tm-colorful .hb-tm-view-cpu .hb-tm-legend-solid { background: alpha(#3b82f6, 0.6); }
+.hb-tm-colorful .hb-tm-view-cpu .hb-tm-legend-cached { background: alpha(#3b82f6, 0.2); }
+.hb-tm-colorful .hb-tm-view-cpu .hb-tm-legend-free { border-color: alpha(#3b82f6, 0.6); }
+.hb-tm-colorful .hb-tm-devlist > row.hb-tm-dev-memory:selected { background: alpha(#a855f7, 0.16); box-shadow: inset 3px 0 #a855f7; }
+.hb-tm-colorful .hb-tm-view-memory .hb-tm-perf-title, .hb-tm-colorful .hb-tm-view-memory .hb-tm-stat-value { color: #a855f7; }
+.hb-tm-colorful .hb-tm-view-memory .hb-tm-legend-solid { background: alpha(#a855f7, 0.6); }
+.hb-tm-colorful .hb-tm-view-memory .hb-tm-legend-cached { background: alpha(#a855f7, 0.2); }
+.hb-tm-colorful .hb-tm-view-memory .hb-tm-legend-free { border-color: alpha(#a855f7, 0.6); }
+.hb-tm-colorful .hb-tm-devlist > row.hb-tm-dev-swap:selected { background: alpha(#ec4899, 0.16); box-shadow: inset 3px 0 #ec4899; }
+.hb-tm-colorful .hb-tm-view-swap .hb-tm-perf-title, .hb-tm-colorful .hb-tm-view-swap .hb-tm-stat-value { color: #ec4899; }
+.hb-tm-colorful .hb-tm-view-swap .hb-tm-legend-solid { background: alpha(#ec4899, 0.6); }
+.hb-tm-colorful .hb-tm-view-swap .hb-tm-legend-cached { background: alpha(#ec4899, 0.2); }
+.hb-tm-colorful .hb-tm-view-swap .hb-tm-legend-free { border-color: alpha(#ec4899, 0.6); }
+.hb-tm-colorful .hb-tm-devlist > row.hb-tm-dev-disk:selected { background: alpha(#22c55e, 0.16); box-shadow: inset 3px 0 #22c55e; }
+.hb-tm-colorful .hb-tm-view-disk .hb-tm-perf-title, .hb-tm-colorful .hb-tm-view-disk .hb-tm-stat-value { color: #22c55e; }
+.hb-tm-colorful .hb-tm-view-disk .hb-tm-legend-solid { background: alpha(#22c55e, 0.6); }
+.hb-tm-colorful .hb-tm-view-disk .hb-tm-legend-cached { background: alpha(#22c55e, 0.2); }
+.hb-tm-colorful .hb-tm-view-disk .hb-tm-legend-free { border-color: alpha(#22c55e, 0.6); }
+.hb-tm-colorful .hb-tm-devlist > row.hb-tm-dev-net:selected { background: alpha(#f97316, 0.16); box-shadow: inset 3px 0 #f97316; }
+.hb-tm-colorful .hb-tm-view-net .hb-tm-perf-title, .hb-tm-colorful .hb-tm-view-net .hb-tm-stat-value { color: #f97316; }
+.hb-tm-colorful .hb-tm-view-net .hb-tm-legend-solid { background: alpha(#f97316, 0.6); }
+.hb-tm-colorful .hb-tm-view-net .hb-tm-legend-cached { background: alpha(#f97316, 0.2); }
+.hb-tm-colorful .hb-tm-view-net .hb-tm-legend-free { border-color: alpha(#f97316, 0.6); }
+.hb-tm-colorful .hb-tm-devlist > row.hb-tm-dev-gpu:selected { background: alpha(#06b6d4, 0.16); box-shadow: inset 3px 0 #06b6d4; }
+.hb-tm-colorful .hb-tm-view-gpu .hb-tm-perf-title, .hb-tm-colorful .hb-tm-view-gpu .hb-tm-stat-value { color: #06b6d4; }
+.hb-tm-colorful .hb-tm-view-gpu .hb-tm-legend-solid { background: alpha(#06b6d4, 0.6); }
+.hb-tm-colorful .hb-tm-view-gpu .hb-tm-legend-cached { background: alpha(#06b6d4, 0.2); }
+.hb-tm-colorful .hb-tm-view-gpu .hb-tm-legend-free { border-color: alpha(#06b6d4, 0.6); }
+.hb-tm-colorful .hb-heat1 { background: rgba(250, 204, 21, 0.22); }
+.hb-tm-colorful .hb-heat2 { background: rgba(249, 115, 22, 0.32); }
+.hb-tm-colorful .hb-heat3 { background: rgba(239, 68, 68, 0.40); }
+.hb-tm-colorful .hb-tm-page-title { color: var(--accent-color); }
 .hb-tm-navcol { background: $window; }
 .hb-tm-page-title { font-size: 22px; font-weight: 600; }
 .hb-tm-page-head { min-height: 40px; }
