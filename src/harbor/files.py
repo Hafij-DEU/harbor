@@ -571,6 +571,14 @@ class FilesWindow(HarborWindow):
             locations = [(loc, None) for loc in s.get("last_tabs")[:20] if isinstance(loc, str)]
         for loc, sel in (locations or [(fc.start_location(s), None)]):
             self.open_arg(loc, sel, new_tab=True)
+        # Start with focus in the file list, like Explorer. Otherwise GTK focuses
+        # the sidebar on first show, and a sidebar with no row lit (any folder
+        # without its own row, e.g. one opened from a desktop icon) selects its
+        # first row, Home, and navigates away from the folder.
+        first = self.tab()
+        if first is not None and first.stack.get_visible_child_name() == "view":
+            v = first.view
+            self.set_focus(v.cv if v.view == "details" else v.grid)
         self.connect("close-request", self._on_close_request)
         self.update_actions()
 

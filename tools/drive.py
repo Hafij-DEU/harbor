@@ -31,6 +31,8 @@ a = p.parse_args()
 W, H = (int(v) for v in a.size.split("x"))
 
 mod = importlib.import_module("harbor." + a.app)
+if os.environ.get("HB_PRE"):   # HB_PRE=file.py: run before the app starts (debug patches)
+    exec(open(os.environ["HB_PRE"]).read(), {"__name__": "hb_pre"})
 application = mod.App()
 state = {"rc": 1}
 ENV = {}
@@ -121,5 +123,6 @@ def start():
 
 
 GLib.timeout_add(900, start)
-application.run([sys.argv[0]])
+# HB_ARGS: launch arguments, one per line (e.g. a folder path, like a desktop click).
+application.run([sys.argv[0]] + [x for x in os.environ.get("HB_ARGS", "").split("\n") if x])
 sys.exit(state["rc"])
