@@ -6930,40 +6930,163 @@ fn keymap_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
     let mut map = app.keymap_edit.clone().unwrap_or_default();
     let mut apply = false;
 
-    // One key (with modifiers when `mods`) as toggle pills plus a key list.
+    // The Linux key code for a key egui reports (Caps Lock, Menu and media
+    // keys never reach the app: pick those from the list).
+    fn egui_code(key: egui::Key) -> Option<u16> {
+        use egui::Key as K;
+        let name = match key {
+            K::Escape => "ESC",
+            K::Tab => "TAB",
+            K::Backspace => "BACKSPACE",
+            K::Enter => "ENTER",
+            K::Space => "SPACE",
+            K::Insert => "INSERT",
+            K::Delete => "DELETE",
+            K::Home => "HOME",
+            K::End => "END",
+            K::PageUp => "PAGEUP",
+            K::PageDown => "PAGEDOWN",
+            K::ArrowUp => "UP",
+            K::ArrowDown => "DOWN",
+            K::ArrowLeft => "LEFT",
+            K::ArrowRight => "RIGHT",
+            K::Comma => "COMMA",
+            K::Backslash => "BACKSLASH",
+            K::Slash => "SLASH",
+            K::OpenBracket => "LEFTBRACE",
+            K::CloseBracket => "RIGHTBRACE",
+            K::Backtick => "GRAVE",
+            K::Minus => "MINUS",
+            K::Period => "DOT",
+            K::Equals => "EQUAL",
+            K::Semicolon => "SEMICOLON",
+            K::Quote => "APOSTROPHE",
+            K::ShiftLeft => "LEFTSHIFT",
+            K::ShiftRight => "RIGHTSHIFT",
+            K::ControlLeft => "LEFTCTRL",
+            K::ControlRight => "RIGHTCTRL",
+            K::AltLeft => "LEFTALT",
+            K::AltRight => "RIGHTALT",
+            K::SuperLeft => "LEFTMETA",
+            K::SuperRight => "RIGHTMETA",
+            K::IntlBackslash => "102ND",
+            other => {
+                let n = other.name();
+                let n = n.strip_prefix("Num").filter(|d| d.len() == 1).unwrap_or(n);
+                return crate::keymap::code(&n.to_ascii_uppercase());
+            }
+        };
+        crate::keymap::code(name)
+    }
+
+    // One key (with modifiers when `mods`): a Type button that records the
+    // next key press, modifier pills and a key list. The target side also
+    // has a Disable switch.
+    #[allow(clippy::too_many_arguments)]
     fn combo_editor(
         ui: &mut Ui,
         pal: &Palette,
         id: (usize, u8),
         combo: &mut Combo,
         mods: bool,
-        disabled: bool,
+        can_disable: bool,
+        capture: &mut Option<(usize, u8)>,
     ) {
-        if mods {
-            for (bit, _, _) in MODS {
-                let label = match bit {
-                    1 => "Ctrl",
-                    2 => "Alt",
-                    4 => "Shift",
-                    _ => "Super",
+        let capturing = *capture == Some(id);
+        if capturing {
+            let (events, held_super) = ui.input(|i| {
+                (
+                    i.events.clone(),
+                    i.keys_down.contains(&egui::Key::SuperLeft)
+                        || i.keys_down.contains(&egui::Key::SuperRight),
+                )
+            });
+            for event in events {
+                let egui::Event::Key {
+                    key,
+                    physical_key,
+                    pressed: true,
+                    repeat: false,
+                    modifiers,
+                    ..
+                } = event
+                else {
+                    continue;
                 };
-                if segment(ui, pal, label, combo.mods & bit != 0) {
-                    combo.mods ^= bit;
+                let Some(code) = egui_code(physical_key.unwrap_or(key)) else {
+                    continue;
+                };
+                // A shortcut waits for its main key; a single key takes
+                // modifiers too (Right Alt, Left Super...).
+                if mods && crate::keymap::mod_bit(code) != 0 {
+                    continue;
+                }
+                let mut bits = 0;
+                if mods {
+                    if modifiers.ctrl {
+                        bits |= crate::keymap::MOD_CTRL;
+                    }
+                    if modifiers.alt {
+                        bits |= crate::keymap::MOD_ALT;
+                    }
+                    if modifiers.shift {
+                        bits |= crate::keymap::MOD_SHIFT;
+                    }
+                    if held_super {
+                        bits |= crate::keymap::MOD_SUPER;
+                    }
+                }
+                *combo = Combo { mods: bits, key: code };
+                *capture = None;
+                break;
+            }
+            ui.ctx().request_repaint();
+        }
+        let disabled = can_disable && combo.key == 0;
+        if !disabled {
+            let label = if *capture == Some(id) {
+                "Press a key…"
+            } else {
+                "Type"
+            };
+            if segment(ui, pal, label, *capture == Some(id)) {
+                *capture = if *capture == Some(id) { None } else { Some(id) };
+            }
+            if mods {
+                for (bit, _, _) in MODS {
+                    let label = match bit {
+                        1 => "Ctrl",
+                        2 => "Alt",
+                        4 => "Shift",
+                        _ => "Super",
+                    };
+                    if segment(ui, pal, label, combo.mods & bit != 0) {
+                        combo.mods ^= bit;
+                    }
                 }
             }
-        }
-        egui::ComboBox::from_id_salt(("keymap-key", id.0, id.1))
-            .selected_text(crate::keymap::label(combo.key))
-            .width(150.0)
-            .height(320.0)
-            .show_ui(ui, |ui| {
-                for (_, code, label) in crate::keymap::KEYS {
-                    if *code == 0 && !disabled {
-                        continue;
+            egui::ComboBox::from_id_salt(("keymap-key", id.0, id.1))
+                .selected_text(crate::keymap::label(combo.key))
+                .width(150.0)
+                .height(320.0)
+                .show_ui(ui, |ui| {
+                    for (_, code, label) in crate::keymap::KEYS {
+                        if *code != 0 {
+                            ui.selectable_value(&mut combo.key, *code, *label);
+                        }
                     }
-                    ui.selectable_value(&mut combo.key, *code, *label);
-                }
-            });
+                });
+        }
+        if can_disable && segment(ui, pal, "Disable", disabled) {
+            *combo = if disabled {
+                Combo { mods: 0, key: 1 }
+            } else {
+                Combo { mods: 0, key: 0 }
+            };
+            if *capture == Some(id) {
+                *capture = None;
+            }
+        }
     }
 
     widgets::section_label(ui, pal, "Keyboard Manager");
@@ -6992,7 +7115,7 @@ fn keymap_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
             (
                 Kind::Key,
                 "Remap a key",
-                "One key types another key or a shortcut",
+                "One key types another key or a shortcut, or does nothing. Select Type and press the key.",
             ),
             (
                 Kind::Shortcut,
@@ -7018,13 +7141,14 @@ fn keymap_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
                         &mut rule.from,
                         kind == Kind::Shortcut,
                         false,
+                        &mut app.keymap_capture,
                     );
                     ui.label(
                         egui::RichText::new("  →  ")
                             .size(15.0)
                             .color(pal.text_muted),
                     );
-                    combo_editor(ui, pal, (i, 1), &mut rule.to, true, true);
+                    combo_editor(ui, pal, (i, 1), &mut rule.to, true, true, &mut app.keymap_capture);
                     if ui
                         .link(egui::RichText::new("Remove").color(pal.accent))
                         .clicked()
@@ -7061,6 +7185,7 @@ fn keymap_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
         }
         if let Some(i) = remove {
             map.rules.remove(i);
+            app.keymap_capture = None;
         }
         widgets::divider(ui, pal);
         ui.add_space(8.0);

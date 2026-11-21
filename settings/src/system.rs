@@ -3375,10 +3375,14 @@ pub fn effective_glass() -> crate::theme::Glass {
     resolve_glass(GlassScope::Settings)
 }
 
-/// Whether the Settings window opens see-through: the glass asks for it
-/// and Fusion Desk blurs what is behind.
+/// Whether the Settings window opens see-through. By default it is solid,
+/// like Craft Suite, so GNOME draws its border and shadow and the cards
+/// carry the glass. `WIN11_SETTINGS_SEE_THROUGH=1` opens it see-through
+/// when the glass asks for it and Fusion Desk blurs what is behind.
 pub fn glass_window() -> bool {
-    effective_glass().see_through() && crate::desktop::fusion_blurs_windows()
+    std::env::var("WIN11_SETTINGS_SEE_THROUGH").is_ok_and(|v| v != "0")
+        && effective_glass().see_through()
+        && crate::desktop::fusion_blurs_windows()
 }
 
 /// Whether the Windows 10 home cards list their pages. On unless turned off;

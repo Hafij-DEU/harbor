@@ -662,6 +662,8 @@ pub struct App {
     pub keymap_edit: Option<crate::keymap::Keymap>,
     pub keymap_saved: Option<crate::keymap::Keymap>,
     pub keymap_rx: Option<Receiver<Result<(), String>>>,
+    /// The Keyboard Manager key box waiting for a key press: (rule, side).
+    pub keymap_capture: Option<(usize, u8)>,
     /// Corner radius of the window body this frame (0 when maximized).
     pub frame_r: u8,
     /// Pointer position, for "Light follows pointer".
@@ -873,6 +875,7 @@ impl App {
             keymap_edit: None,
             keymap_saved: None,
             keymap_rx: None,
+            keymap_capture: None,
             pointer: None,
             glass_dirty: None,
             last_mode: mode,
@@ -2008,13 +2011,6 @@ The network will not reconnect automatically."
         if !system::save_scope_glass(scope, glass) {
             self.notify_error("Fusion Desk did not take the glass settings; update Fusion Desk");
         }
-        if self.glass().see_through() && !self.glass_window {
-            if crate::desktop::fusion_blurs_windows() {
-                self.notify("Reopen Settings to see the desktop through the window");
-            } else {
-                self.notify("Turn on Fusion Desk › Blur behind Harbor apps to see the desktop through the window");
-            }
-        }
     }
 
     /// Read the global glass again (Fusion Desk may have changed it).
@@ -2559,8 +2555,9 @@ The network will not reconnect automatically."
     }
 
     fn handle_shortcuts(&mut self, ctx: &Context) {
-        // The welcome guide handles its own keys (Esc closes it).
-        if self.welcome.is_some() {
+        // The welcome guide handles its own keys (Esc closes it), and a
+        // Keyboard Manager key box takes the next key press itself.
+        if self.welcome.is_some() || self.keymap_capture.is_some() {
             return;
         }
         let (escape, find) = ctx.input(|i| {
