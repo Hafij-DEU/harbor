@@ -64,6 +64,8 @@ class UsbLink(
 
     private val streams = ConcurrentHashMap<Int, Stream>()
     private val ids = AtomicInteger(1)
+    /** Tells the PC this is a new app session, so it drops streams from an old one. */
+    private val session = java.security.SecureRandom().nextInt(Int.MAX_VALUE - 1) + 1
     private var listener: ServerSocket? = null
     @Volatile var alive = false; private set
 
@@ -74,7 +76,7 @@ class UsbLink(
         thread(name = "usb-hello", isDaemon = true) {
             repeat(30) {
                 if (!alive || listener != null) return@thread
-                try { send(HELLO, 0) } catch (_: Exception) { stop(); return@thread }
+                try { send(HELLO, session) } catch (_: Exception) { stop(); return@thread }
                 Thread.sleep(2000)
             }
         }
@@ -89,26 +91,32 @@ class UsbLink(
     }
 
     private fun reader() {
+        var why = "closed"
         try {
-            val d = DataInputStream(BufferedInputStream(inp, 16384))
-            while (alive) {
-                val kind = d.readUnsignedByte()
-                val id = d.readInt()
-                val len = d.readInt()
-                if (len < 0 || len > MAX_PAYLOAD) break
-                val payload = ByteArray(len).also { d.readFully(it) }
-                when (kind) {
+            // Always read whole 16 KB blocks: Android's accessory driver drops the
+            // rest of a USB transfer when a read asks for less.
+            val buf = ByteArray(READ_SIZE)
+            val parser = FrameParser()
+            loop@ while (alive) {
+                val n = inp.read(buf, 0, buf.size)
+                if (n < 0) break
+                for ((kind, id, payload) in parser.feed(buf, n)) {
+                    val len = payload.size
+                    when (kind) {
                     HELLO -> hello(payload)
                     DATA -> streams[id]?.inbox?.put(payload)
                     CLOSE -> streams[id]?.inbox?.put(EMPTY_CLOSE)
                     ACK -> streams[id]?.let { s ->
                         if (len == 4) synchronized(s.lock) { s.credit += ByteBuffer.wrap(payload).int.toLong() and 0xffffffffL; s.lock.notifyAll() }
                     }
-                    BYE -> break
+                    BYE -> { why = "PC said bye"; break@loop }
+                    }
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            why = e.javaClass.simpleName + ": " + e.message
         }
+        android.util.Log.i("HarborUsb", "link ended: $why")
         val was = alive
         stop()
         if (was) onEnd()
@@ -199,7 +207,33 @@ class UsbLink(
         streams.clear()
     }
 
+    /** Turns 16 KB reads back into (kind, id, payload) frames. */
+    class FrameParser {
+        private var data = ByteArray(64 * 1024)
+        private var size = 0
+
+        fun feed(b: ByteArray, n: Int): List<Triple<Int, Int, ByteArray>> {
+            if (size + n > data.size) data = data.copyOf(maxOf(data.size * 2, size + n))
+            System.arraycopy(b, 0, data, size, n); size += n
+            val out = ArrayList<Triple<Int, Int, ByteArray>>()
+            var pos = 0
+            while (size - pos >= 9) {
+                val bb = ByteBuffer.wrap(data, pos, 9)
+                val kind = bb.get().toInt() and 0xff
+                val id = bb.int
+                val len = bb.int
+                if (len < 0 || len > MAX_PAYLOAD) throw java.io.IOException("bad frame")
+                if (size - pos < 9 + len) break
+                if (kind != NOP) out += Triple(kind, id, data.copyOfRange(pos + 9, pos + 9 + len))
+                pos += 9 + len
+            }
+            if (pos > 0) { System.arraycopy(data, pos, data, 0, size - pos); size -= pos }
+            return out
+        }
+    }
+
     companion object {
+        const val READ_SIZE = 16384
         const val HELLO = 1; const val OPEN = 2; const val DATA = 3; const val CLOSE = 4
         const val ACK = 5; const val BYE = 6; const val NOP = 0
         const val MAX_PAYLOAD = 64 * 1024
@@ -220,19 +254,20 @@ class UsbLinkService : Service() {
     private var pfd: ParcelFileDescriptor? = null
     private var link: UsbLink? = null
     private val detached = object : BroadcastReceiver() {
-        override fun onReceive(c: Context, i: Intent) { finish() }
+        override fun onReceive(c: Context, i: Intent) { android.util.Log.i("HarborUsb", "accessory detached"); finish() }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { link?.stop(bye = true); finish(); return START_NOT_STICKY }
-        startForeground(3, notification("Connecting to the PC over USB…"), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        val text = state.value?.let { "Connected to ${it.name} over USB" } ?: "Connecting to the PC over USB…"
+        startForeground(3, notification(text), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         if (link?.alive == true) return START_NOT_STICKY
         val um = getSystemService(UsbManager::class.java)
         val acc = ourAccessory(um)
         val fd = acc?.takeIf { um.hasPermission(it) }?.let { runCatching { um.openAccessory(it) }.getOrNull() }
-        if (fd == null) { finish(); return START_NOT_STICKY }
+        if (fd == null) { android.util.Log.i("HarborUsb", "no accessory to open"); finish(); return START_NOT_STICKY }
         pfd = fd
         val f = IntentFilter(UsbManager.ACTION_USB_ACCESSORY_DETACHED)
         if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(detached, f, RECEIVER_NOT_EXPORTED) else registerReceiver(detached, f)
@@ -249,7 +284,7 @@ class UsbLinkService : Service() {
 
     private fun finish() {
         state.value = null
-        link?.stop(); link = null
+        link?.stop(bye = true); link = null
         runCatching { unregisterReceiver(detached) }
         runCatching { pfd?.close() }; pfd = null
         stopForeground(STOP_FOREGROUND_REMOVE)

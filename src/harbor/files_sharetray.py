@@ -236,6 +236,7 @@ class UsbPhones:
         self.mode = mode if mode in ("off", "ask", "auto", "only") else "ask"
         self.links = {}          # accessory sysname -> PhoneLink
         self.pending = 0.0       # until when a new accessory device is ours
+        self.ended = 0.0         # when a link last ended (Disconnect on the phone)
         try:
             with open(_usb_store(), encoding="utf-8") as f:
                 self.known = set(json.load(f).get("serials", []))
@@ -282,6 +283,8 @@ class UsbPhones:
         return "\n".join(errs) or None
 
     def _wanted(self, d):
+        if time.monotonic() - self.ended < 30:   # just disconnected: don't grab it back
+            return False
         return self.mode in ("auto", "only") or (self.mode == "ask" and d["serial"] in self.known)
 
     def _auto(self):
@@ -325,6 +328,7 @@ class UsbPhones:
         self.links[d["sysname"]] = link
 
     def _ended(self, name):
+        self.ended = time.monotonic()
         link = self.links.pop(name, None)
         if link:
             link.stop(reset=True)

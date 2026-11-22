@@ -145,9 +145,15 @@ def start_share(folders, port, upload_max_mb, minutes, usb="ask"):
 
 
 class ShareDialog(Adw.Dialog):
-    def __init__(self, win, add_paths=()):
-        super().__init__(title="Share over Wi-Fi", content_width=520, content_height=680)
+    def __init__(self, win, add_paths=(), usb=False):
+        super().__init__(title="Share over USB cable" if usb else "Share over Wi-Fi",
+                         content_width=520, content_height=680)
         self.win = win
+        # usb: opened from Share over USB cable; sharing then sends the PC to
+        # the phone on the cable as soon as it starts
+        self.usb_first = usb
+        if usb and win.app.settings.get("share_usb") == "off":
+            win.app.settings.set("share_usb", "ask")
         self.app = win.app
         self.settings = win.app.settings
         # add_paths (right-click > Share over Wi-Fi) is a one-off share of just those
@@ -444,6 +450,10 @@ class ShareDialog(Adw.Dialog):
             self.win.notify_toast("Can't start sharing: %s" % err, timeout=6)
             return
         self.server = running_share()
+        if self.usb_first and self.server is not None:
+            err = self.server.usb_connect()
+            if err and "No phone found" not in err:
+                self.win.notify_toast(err, timeout=6)
         self.build()
 
     def stop(self):

@@ -127,7 +127,7 @@ UNGATED_ACTIONS = {
     "open-location-of", "properties-at", "terminal-at", "copy-path-at", "pin-at", "unpin",
     "open-location", "open-location-tab", "open-uri", "open-uri-location", "forget-recent",
     "empty-trash", "about", "new-tab", "undo", "sb-mount", "sb-eject", "sb-unmount", "drive-rename",
-    "copy-name", "add-network", "net-edit", "net-remove", "share-wifi", "scan-phone",
+    "copy-name", "add-network", "net-edit", "net-remove", "share-wifi", "share-usb", "scan-phone",
 }
 
 
@@ -1556,6 +1556,7 @@ class FilesWindow(HarborWindow):
         A("customize-folder", lambda: self.customize_folder())
         A("share-folder", lambda: self.share_wifi(True))
         A("share-wifi", lambda: self.share_wifi())
+        A("share-usb", lambda: self.share_usb())
         A("scan-phone", lambda: self.scan_phone())
         A("context-menu", lambda: self.menu_at_selection())
         A("context-menu-classic", lambda: self.menu_at_selection(classic=True))
@@ -1796,6 +1797,21 @@ class FilesWindow(HarborWindow):
             paths = [it.path for it in items if it.path]
         from .files_share_ui import ShareDialog
         self.wifi_power_first(lambda: ShareDialog(self, add_paths=paths).present(self))
+
+    def share_usb(self):
+        """Share over USB cable: with a share running, send it to the phone on
+        the cable now; otherwise open the share window set up for USB."""
+        from .files_share_ui import ShareDialog, running_share
+        rs = running_share()
+        if rs is None:
+            ShareDialog(self, usb=True).present(self)
+            return
+        if rs.usb == "off":
+            self.notify_toast("This share is Wi-Fi only. Stop it, choose Share over USB cable, "
+                              "then start again", timeout=6)
+            return
+        err = rs.usb_connect()
+        self.notify_toast(err or "Allow Harbor Files on the phone to open this PC", timeout=6)
 
     def wifi_power_first(self, then):
         """Before a phone share: while Wi-Fi power saving is on, warn and offer

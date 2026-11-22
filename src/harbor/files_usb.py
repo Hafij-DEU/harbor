@@ -10,8 +10,12 @@ How the cable link works:
   no extra library). The desktop's udev rules (uaccess) give the logged-in
   user the phone and the accessory device.
 * One bulk pipe each way carries frames: type(1) id(4) len(4) payload.
-  The phone sends an empty HELLO once it's listening; the PC answers with
-  HELLO ("key=value" lines) holding the PC name and the share PIN. The phone opens a
+  The phone sends an empty HELLO (id = its session) once it's listening, and
+  the PC answers with
+  HELLO ("key=value" lines) holding the PC name and the share PIN. A new
+  session drops the streams of the old one.
+* Writes go out in pieces of at most 16 KB, and the phone always reads 16 KB
+  blocks: Android's accessory driver loses the rest of a transfer otherwise. The phone opens a
   stream for each HTTP connection (OPEN); the PC connects it to the share
   server, and DATA / CLOSE pass both ways (CLOSE ends the whole stream, after
   the data sent before it). ACK frames hand back credit, so a
@@ -248,6 +252,12 @@ def pad(data):
     return data + frame(NOP, 0) if len(data) % 64 == 0 else data
 
 
+def chunks(data, size=READ_SIZE):
+    """USB writes of at most 16 KB: the phone reads 16 KB blocks. Every piece but
+    the last fills a block exactly; the last is never a multiple of 64 (pad)."""
+    return [data[i:i + size] for i in range(0, len(data), size)] or [data]
+
+
 class Parser:
     """Turns USB reads back into (kind, id, payload) frames."""
 
@@ -306,10 +316,12 @@ class Link:
         self.lock = threading.Lock()
         self.wlock = threading.Lock()
         self.alive = False
+        self.session = None
 
     def send(self, kind, sid, payload=b""):
         with self.wlock:
-            self._write(pad(frame(kind, sid, payload)))
+            for piece in chunks(pad(frame(kind, sid, payload))):
+                self._write(piece)
 
     def start(self):
         self.alive = True
@@ -362,6 +374,15 @@ class Link:
             self.alive = False
             return
         if kind == HELLO:
+            # The id is the phone app's session. A new one means Harbor on the
+            # phone restarted: its streams from before are gone, drop ours too.
+            if sid != self.session:
+                with self.lock:
+                    old = list(self.streams.values())
+                    self.streams.clear()
+                for s in old:
+                    self._drop(s)
+                self.session = sid
             self._safe_send(HELLO, 0, hello_bytes(self.hello))
             return
         with self.lock:

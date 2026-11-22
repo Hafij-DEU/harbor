@@ -167,6 +167,10 @@ def make():
                  '%s/>' % s(2.2), "")
     w["wifi"] = (TEAL, '<path d="M8 15.4a11.4 11.4 0 0 1 16 0M10.9 18.7a7.2 7.2 0 0 1 10.2 0" %s/>'
                  '<circle cx="16" cy="22.4" r="1.9" %s/>' % (s(2.3), F), "")
+    w["usb"] = (BLUE, '<path d="M16 9.5v13M16 19.5l-4.6-3.2v-2.6M16 17.6l4.6-2.8v-2.4" %s/>'
+                '<path d="M16 6.5l2.6 3.7h-5.2z" %s/><circle cx="11.4" cy="12.4" r="1.7" %s/>'
+                '<rect x="19" y="9.4" width="3.2" height="3.2" rx=".6" %s/>'
+                '<circle cx="16" cy="23.4" r="2.1" %s/>' % (s(2.1), F, F, F, F), "")
     w["zip"] = (AMBER, '<rect x="8" y="7.5" width="16" height="17" rx="2" %s/>' % F,
                 "".join('<rect x="%g" y="%g" width="2" height="1.6" fill="C"/>'
                         % (15 if i % 2 else 17, 7.5 + i * 1.6) for i in range(6))

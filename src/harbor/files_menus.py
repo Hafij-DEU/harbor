@@ -127,6 +127,8 @@ def share_menu():
         item("Share over Wi-Fi…", "win.share-wifi", icon="network-wireless-symbolic"),
         item("Share selected over Wi-Fi", "win.share-folder"),
         item("Scan phone QR…", "win.scan-phone")))
+    m.append_section(None, section(
+        item("Share over USB cable…", "win.share-usb", icon="drive-removable-media-usb-symbolic")))
     return m
 
 
@@ -143,6 +145,7 @@ def more_menu(pin_label="Pin to Quick access"):
                         item("Copy path", "win.copy-path")),
                 section(item("Add network location…", "win.add-network"),
                         item("Share over Wi-Fi…", "win.share-wifi"),
+                        item("Share over USB cable…", "win.share-usb"),
                         item("Scan phone QR…", "win.scan-phone")),
                 section(item("Undo", "win.undo")),
                 section(item("Properties", "win.properties"),

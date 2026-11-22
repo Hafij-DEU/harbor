@@ -65,6 +65,9 @@ RIBBON = (
             ("button", "Share selected", "win.share-folder", "harbor-rb-send", "small"),
             ("button", "Scan phone QR", "win.scan-phone", "harbor-rb-qr", "small"),
         )),
+        ("USB cable", (
+            ("button", "Share over USB cable", "win.share-usb", "harbor-rb-usb", "big"),
+        )),
     )),
     ("View", (
         ("Panes", (

@@ -263,3 +263,47 @@ print("ok")
     env = dict(os.environ, PYTHONPATH=os.path.join(os.path.dirname(__file__), "..", "src"))
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=60)
     assert r.stdout.strip().endswith("ok"), r.stderr[-800:]
+
+
+def test_big_frames_go_out_in_16k_pieces():
+    cable = Cable()
+    link = u.Link(cable.pc_read, cable.pc_write, lambda: None, {})
+    link.send(u.DATA, 1, b"x" * u.MAX_PAYLOAD)
+    assert max(cable.writes) <= u.READ_SIZE
+    assert all(n == u.READ_SIZE for n in cable.writes[:-1]) and cable.writes[-1] % 64
+    p = u.Parser()
+    got = []
+    while not cable.to_phone.empty():
+        got += p.feed(cable.to_phone.get())
+    assert got == [(u.DATA, 1, b"x" * u.MAX_PAYLOAD)]
+
+
+def test_new_phone_session_drops_old_streams():
+    def hold(c):
+        try:
+            while c.recv(100):
+                pass
+        except OSError:
+            pass
+    srv = _server(hold)
+    cable = Cable()
+    link = u.Link(cable.pc_read, cable.pc_write,
+                  lambda: socket.create_connection(srv.getsockname(), 5), {"name": "pc"})
+    link.start()
+    phone = FakePhone(cable)
+    phone.send(u.HELLO, 11)
+    phone.recv_until(lambda f: f[0] == u.HELLO)
+    phone.send(u.OPEN, 1)
+    end = time.time() + 5
+    while 1 not in link.streams and time.time() < end:
+        time.sleep(0.05)
+    phone.send(u.HELLO, 11)              # same session: keeps the stream
+    time.sleep(0.3)
+    assert 1 in link.streams
+    phone.send(u.HELLO, 22)              # app restarted
+    end = time.time() + 5
+    while link.streams and time.time() < end:
+        time.sleep(0.05)
+    assert not link.streams
+    link.stop()
+    srv.close()

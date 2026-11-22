@@ -18,6 +18,23 @@ class UsbLinkTest {
         for (n in 0..300) assertNotEquals(0, UsbLink.pad(ByteArray(n)).size % 64)
     }
 
+    @Test fun parserReassemblesAnySplit() {
+        val big = ByteArray(UsbLink.MAX_PAYLOAD) { (it % 251).toByte() }
+        val raw = UsbLink.pad(UsbLink.frame(UsbLink.DATA, 3, big)) + UsbLink.frame(UsbLink.CLOSE, 3)
+        for (step in listOf(1, 7, 512, 16384)) {
+            val p = UsbLink.FrameParser()
+            val got = ArrayList<Triple<Int, Int, ByteArray>>()
+            var i = 0
+            while (i < raw.size) {
+                val n = minOf(step, raw.size - i)
+                got += p.feed(raw.copyOfRange(i, i + n), n); i += n
+            }
+            assertEquals(2, got.size)
+            assertTrue(got[0].third.contentEquals(big))
+            assertEquals(UsbLink.CLOSE, got[1].first)
+        }
+    }
+
     /** A fake PC on the other end of two pipes: HELLO, then echo one request. */
     @Test fun helloThenRoundTripThroughLoopback() {
         val toPhone = PipedOutputStream(); val phoneIn = PipedInputStream(toPhone, 1 shl 20)

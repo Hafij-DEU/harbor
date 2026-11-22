@@ -187,6 +187,14 @@ def make():
         'stroke="%s"/><path d="M8.5 17a10.5 10.5 0 0 1 15 0" stroke="%s"/><path d="M12.8 21.4a4.6 '
         '4.6 0 0 1 6.4 0" stroke="%s"/></g><circle cx="16" cy="25.5" r="2.2" fill="%s"/>' % (
             "#8cc4fb", BLUE, BLUE_D, BLUE_D))
+    icons["usb"] = svg(
+        '<g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.6">'
+        '<path d="M16 7v19" stroke="%s"/><path d="M16 21l-6.5-4.5V13" stroke="%s"/>'
+        '<path d="M16 18.5l6.5-4V11" stroke="%s"/></g>'
+        '<path d="M16 2.5l3.6 5.2h-7.2z" fill="%s"/><circle cx="9.5" cy="11.5" r="2.4" fill="%s"/>'
+        '<rect x="20.3" y="7.6" width="4.4" height="4.4" rx="1" fill="%s"/>'
+        '<circle cx="16" cy="27" r="3" fill="%s"/>' % (
+            BLUE, "#8cc4fb", BLUE, BLUE_D, "#8cc4fb", BLUE, BLUE_D))
     icons["send"] = svg(
         '<path d="M3 15L29 4 22 28l-6-9z" fill="url(#s)"/><path d="M16 19l13-15-17 13z" '
         'fill="%s"/>' % BLUE_D, g("s", "#62a8f5", BLUE))
