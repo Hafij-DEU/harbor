@@ -149,21 +149,47 @@ class ServerService : Service() {
         fun start(ctx: Context) = ctx.startForegroundService(Intent(ctx, ServerService::class.java))
         fun stop(ctx: Context) = ctx.startService(Intent(ctx, ServerService::class.java).setAction(ACTION_STOP))
 
+        /**
+         * The phone's address on the Wi-Fi network, the one the PC can reach.
+         * A VPN (e.g. Proton VPN) also reports Wi-Fi as its transport, and its
+         * tunnel address (10.2.0.2 on tun0) is useless to the PC, so VPN
+         * networks and tunnel interfaces are skipped.
+         */
         fun wifiIp(ctx: Context): String? {
             val cm = ctx.getSystemService(ConnectivityManager::class.java)
+            val cands = ArrayList<IpCandidate>()
             @Suppress("DEPRECATION")
             for (n in cm.allNetworks) {
                 val caps = cm.getNetworkCapabilities(n) ?: continue
                 if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
                 val lp = cm.getLinkProperties(n) ?: continue
-                lp.linkAddresses.map { it.address }.firstOrNull { it is Inet4Address && !it.isLoopbackAddress }
-                    ?.let { return it.hostAddress }
+                cands += IpCandidate(lp.interfaceName ?: "", caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN),
+                    lp.linkAddresses.map { it.address })
             }
-            return null
+            chooseWifiIp(cands)?.let { return it }
+            // Fallback: the Wi-Fi interface itself (wlan0 and friends).
+            val ifs = runCatching { java.net.NetworkInterface.getNetworkInterfaces()?.toList() }.getOrNull().orEmpty()
+            return chooseWifiIp(ifs.filter { runCatching { it.isUp }.getOrDefault(false) && it.name.startsWith("wlan") }
+                .map { IpCandidate(it.name, false, it.inetAddresses.toList()) })
         }
     }
 
     private fun deviceName(): String =
         (try { Settings.Global.getString(contentResolver, "device_name") } catch (_: Exception) { null })
             ?.takeIf { it.isNotBlank() } ?: android.os.Build.MODEL ?: ""
+}
+
+/** One network's addresses, for [chooseWifiIp]. */
+internal data class IpCandidate(val iface: String, val vpn: Boolean, val addrs: List<java.net.InetAddress>)
+
+private val TUNNEL_IFACES = listOf("tun", "ppp", "ipsec", "wg", "tap", "rmnet", "ccmni")
+
+/** First usable IPv4 of a real Wi-Fi network: no VPN, tunnel, loopback or link-local address. */
+internal fun chooseWifiIp(cands: List<IpCandidate>): String? {
+    for (c in cands) {
+        if (c.vpn || TUNNEL_IFACES.any { c.iface.startsWith(it) }) continue
+        c.addrs.firstOrNull { it is Inet4Address && !it.isLoopbackAddress && !it.isLinkLocalAddress && !it.isAnyLocalAddress }
+            ?.let { return it.hostAddress }
+    }
+    return null
 }
