@@ -44,8 +44,7 @@ class ServerService : Service() {
         prefs = Prefs(this)
         val ip = wifiIp(this)
         if (ip == null) {
-            error.value = "Connect to Wi-Fi first. The phone is only shared on Wi-Fi."
-            stopSelf(); return START_NOT_STICKY
+            fail("Connect to Wi-Fi first. The phone is only shared on Wi-Fi."); return START_NOT_STICKY
         }
         val pin = (100000 + SecureRandom().nextInt(900000)).toString()
         val s = FtpServer(File(PHONE_ROOT), pin, prefs.ftpPort, { prefs.readOnly }, { lastActivity = System.currentTimeMillis() },
@@ -53,8 +52,7 @@ class ServerService : Service() {
         try {
             s.start()
         } catch (e: Exception) {
-            error.value = "Port ${prefs.ftpPort} is busy. Pick another port in Settings."
-            stopSelf(); return START_NOT_STICKY
+            fail("Port ${prefs.ftpPort} is busy. Pick another port in Settings."); return START_NOT_STICKY
         }
         ftp = s
         lastActivity = System.currentTimeMillis()
@@ -82,9 +80,33 @@ class ServerService : Service() {
         }
     }
 
-    private fun notification(i: ServerInfo): Notification {
+    /**
+     * Started with startForegroundService, so Android needs startForeground
+     * even when sharing can't start, or it kills the app. Shows the error,
+     * then drops the notification and stops at once.
+     */
+    private fun fail(msg: String) {
+        error.value = msg
+        runCatching {
+            ensureChannel()
+            val n = Notification.Builder(this, CHANNEL)
+                .setSmallIcon(android.R.drawable.stat_sys_upload)
+                .setContentTitle("Phone sharing didn't start")
+                .setContentText(msg)
+                .build()
+            startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        }
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+        stopSelf()
+    }
+
+    private fun ensureChannel() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Phone sharing", NotificationManager.IMPORTANCE_LOW))
+    }
+
+    private fun notification(i: ServerInfo): Notification {
+        ensureChannel()
         val stop = PendingIntent.getService(
             this, 0, Intent(this, ServerService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE
         )

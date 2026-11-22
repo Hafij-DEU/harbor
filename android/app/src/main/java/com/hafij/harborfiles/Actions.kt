@@ -21,7 +21,7 @@ private fun uriFor(ctx: Context, f: File): Uri = FileProvider.getUriForFile(ctx,
 private fun localCopy(ctx: Context, fs: Fs, e: Entry): File {
     if (fs.isLocal) return File(e.path)
     val dir = File(ctx.cacheDir, "remote/${fs.key}").apply { mkdirs() }
-    val f = File(dir, e.name)
+    val f = File(dir, safeName(e.name))
     fs.read(e.path) { i -> f.outputStream().use { i.copyTo(it) } }
     return f
 }

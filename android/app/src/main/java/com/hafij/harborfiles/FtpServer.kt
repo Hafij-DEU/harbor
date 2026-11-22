@@ -1,9 +1,7 @@
 package com.hafij.harborfiles
 
-import java.io.BufferedReader
 import java.io.File
 import java.io.IOException
-import java.io.InputStreamReader
 import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.io.Writer
@@ -24,7 +22,7 @@ import kotlin.concurrent.thread
 /**
  * Small FTP server for sharing the phone over Wi-Fi.
  *  - any user name, password = the PIN shown on the phone
- *  - 5 wrong PINs lock everyone out for 5 minutes
+ *  - 5 wrong PINs lock that device (IP address) out for 5 minutes
  *  - every path is jailed inside [root]
  *  - the PIN is never logged
  */
@@ -41,8 +39,9 @@ class FtpServer(
     private var server: ServerSocket? = null
     private val sessions = Collections.synchronizedSet(HashSet<Socket>())
     private val rootPath: String = root.canonicalPath
-    @Volatile private var fails = 0
-    @Volatile private var lockedUntil = 0L
+    /** Wrong-PIN count and lock time per client IP, so one bad device can't lock out the rest. */
+    private class Lock(var fails: Int = 0, var lockedUntil: Long = 0L)
+    private val locks = HashMap<String, Lock>()
 
     val boundPort: Int get() = server?.localPort ?: -1
     val activeSessions: Int get() = sessions.size
@@ -55,9 +54,18 @@ class FtpServer(
         thread(name = "ftp-accept", isDaemon = true) {
             while (!ss.isClosed) {
                 val s = try { ss.accept() } catch (_: IOException) { break }
+                if (sessions.size >= MAX_SESSIONS) {
+                    runCatching {
+                        s.getOutputStream().write("421 Too many connections, try again later\r\n".toByteArray())
+                        s.close()
+                    }
+                    continue
+                }
                 sessions += s
                 thread(name = "ftp-session", isDaemon = true) {
-                    try { Session(s).run() } catch (_: Exception) {
+                    // Throwable, not just Exception: nothing a client sends may
+                    // take the whole app down (e.g. an OutOfMemoryError).
+                    try { Session(s).run() } catch (_: Throwable) {
                     } finally { sessions -= s; runCatching { s.close() } }
                 }
             }
@@ -70,14 +78,16 @@ class FtpServer(
         synchronized(sessions) { sessions.forEach { runCatching { it.close() } }; sessions.clear() }
     }
 
-    private fun checkPin(given: String): String {
+    internal fun checkPin(given: String, client: String = ""): String { synchronized(locks) {
         val now = System.currentTimeMillis()
-        if (now < lockedUntil) return "locked"
-        if (MessageDigest.isEqual(given.toByteArray(), pin.toByteArray())) { fails = 0; return "ok" }
-        fails++
-        if (fails >= 5) { fails = 0; lockedUntil = now + 5 * 60_000L; return "locked" }
+        locks.entries.removeAll { it.value.fails == 0 && it.value.lockedUntil <= now }
+        val l = locks.getOrPut(client) { Lock() }
+        if (now < l.lockedUntil) return "locked"
+        if (MessageDigest.isEqual(given.toByteArray(), pin.toByteArray())) { l.fails = 0; return "ok" }
+        l.fails++
+        if (l.fails >= 5) { l.fails = 0; l.lockedUntil = now + 5 * 60_000L; return "locked" }
         return "bad"
-    }
+    } }
 
     /** Virtual "/a/b" (relative to cwd) to a real file inside the root, or null. */
     internal fun resolve(cwd: String, arg: String): Pair<String, File>? {
@@ -96,7 +106,7 @@ class FtpServer(
     }
 
     private inner class Session(val sock: Socket) {
-        val inp = BufferedReader(InputStreamReader(sock.getInputStream(), Charsets.UTF_8))
+        val inp = LineReader(java.io.BufferedInputStream(sock.getInputStream()))
         val out: Writer = OutputStreamWriter(sock.getOutputStream(), Charsets.UTF_8)
         var authed = false
         var cwd = "/"
@@ -132,7 +142,7 @@ class FtpServer(
         fun handle(cmd: String, arg: String): Boolean {
             when (cmd) {
                 "USER" -> reply(331, "PIN please")
-                "PASS" -> when (checkPin(arg.trim())) {
+                "PASS" -> when (checkPin(arg.trim(), sock.inetAddress?.hostAddress ?: "")) {
                     "ok" -> { authed = true; reply(230, "Welcome") }
                     "locked" -> reply(421, "Too many wrong PINs. Try again in 5 minutes.")
                     else -> reply(530, "Wrong PIN")
@@ -217,8 +227,11 @@ class FtpServer(
                     if (readOnly()) { reply(550, "The phone is shared read-only"); return true }
                     val f = resolve(cwd, arg)?.second
                     if (f == null || f.isDirectory) { reply(553, "Bad file name"); return true }
-                    val append = cmd == "APPE" || rest > 0; rest = 0
-                    receiveData(f, append)
+                    // APPE appends; REST n + STOR writes from byte n (resume).
+                    val append = cmd == "APPE"
+                    val offset = if (append) 0L else rest
+                    rest = 0
+                    receiveData(f, append, offset)
                 }
                 "DELE", "RMD", "XRMD", "MKD", "XMKD", "RNFR", "RNTO" -> {
                     if (readOnly()) { reply(550, "The phone is shared read-only"); return true }
@@ -266,13 +279,22 @@ class FtpServer(
             reply(226, "Done")
         }
 
-        fun receiveData(f: File, append: Boolean) {
+        fun receiveData(f: File, append: Boolean, offset: Long = 0L) {
             reply(150, "Ready for data")
             val d = openData() ?: run { reply(425, "No data connection"); return }
             try {
                 f.parentFile?.mkdirs()
                 d.getInputStream().use { i ->
-                    java.io.FileOutputStream(f, append).use { o -> i.copyTo(o, 256 * 1024); onActivity() }
+                    if (offset > 0) {
+                        java.io.RandomAccessFile(f, "rw").use { raf ->
+                            raf.seek(offset)
+                            val buf = ByteArray(256 * 1024)
+                            while (true) { val n = i.read(buf); if (n < 0) break; raf.write(buf, 0, n) }
+                            onActivity()
+                        }
+                    } else {
+                        java.io.FileOutputStream(f, append).use { o -> i.copyTo(o, 256 * 1024); onActivity() }
+                    }
                 }
             } catch (e: IOException) {
                 reply(426, "Transfer aborted"); return
@@ -282,6 +304,11 @@ class FtpServer(
     }
 
     companion object {
+        /** Open control connections at once; more get "421" instead of a thread each. */
+        const val MAX_SESSIONS = 32
+        /** Longest command line accepted (FTP lines are short); longer drops the client. */
+        const val MAX_LINE = 8192
+
         // Thread-safe formatters made once (sessions run on many threads),
         // not a new SimpleDateFormat for every listed file.
         private val stampFmt = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss", Locale.US)
@@ -331,3 +358,26 @@ class FtpServer(
 /** Name safe for one FTP reply line: no brackets or control chars, max 60. */
 internal fun cleanName(name: String): String =
     name.filter { it >= ' ' && it != '(' && it != ')' }.trim().take(60).trim()
+
+/**
+ * Reads FTP control lines as UTF-8 without the CR/LF, like
+ * BufferedReader.readLine (ends on LF, CR or CRLF), but gives up with null
+ * once a line passes [max] bytes, so a client that never sends a newline
+ * can't fill the memory. Null also at end of stream.
+ */
+internal class LineReader(private val inp: java.io.InputStream, private val max: Int = FtpServer.MAX_LINE) {
+    private var skipLf = false
+
+    fun readLine(): String? {
+        val buf = java.io.ByteArrayOutputStream(128)
+        while (true) {
+            val b = inp.read()
+            if (b < 0) return if (buf.size() == 0) null else buf.toString("UTF-8")
+            if (skipLf) { skipLf = false; if (b == '\n'.code) continue }
+            if (b == '\n'.code) return buf.toString("UTF-8")
+            if (b == '\r'.code) { skipLf = true; return buf.toString("UTF-8") }
+            if (buf.size() >= max) return null
+            buf.write(b)
+        }
+    }
+}

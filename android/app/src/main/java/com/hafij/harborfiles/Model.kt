@@ -96,15 +96,54 @@ fun uniqueName(name: String, taken: (String) -> Boolean): String {
     }
 }
 
+/**
+ * A name that came from a server, made safe to use as ONE file name here:
+ * "/" and NUL become "_", and "", "." and ".." (which would point at the
+ * folder itself or its parent) become "_". Every ordinary name is returned
+ * unchanged, so this only ever touches names no real file can have.
+ */
+fun safeName(name: String): String {
+    val n = name.replace('/', '_').replace('\u0000', '_')
+    return if (n.isEmpty() || n == "." || n == "..") "_" else n
+}
+
+/** True when [name] is a single path part: no "/", no NUL, not "", "." or "..". */
+fun isSingleName(name: String): Boolean =
+    name.isNotEmpty() && name != "." && name != ".." && '/' !in name && '\u0000' !in name
+
 object Transfer {
+    /**
+     * True when copying/moving [e] into [dstDir] would put a folder inside
+     * itself (dstDir is the folder or one of its subfolders), which would
+     * otherwise copy forever. Only checked when both sides are the same place.
+     */
+    fun intoItself(src: Fs, e: Entry, dst: Fs, dstDir: String): Boolean {
+        if (!e.isDir) return false
+        if (src.isLocal && dst.isLocal) {
+            val from = try { File(e.path).canonicalPath } catch (_: Exception) { File(e.path).absolutePath }
+            val to = try { File(dstDir).canonicalPath } catch (_: Exception) { File(dstDir).absolutePath }
+            return to == from || to.startsWith(from.trimEnd(File.separatorChar) + File.separator)
+        }
+        if (src.isLocal || dst.isLocal || src.key != dst.key) return false
+        val from = e.path.trimEnd('/')
+        val to = dstDir.trimEnd('/')
+        return to == from || to.startsWith("$from/")
+    }
+
     /** Copies [e] from [src] into [dstDir] on [dst], folders included. Returns the name used. */
     fun copy(src: Fs, e: Entry, dst: Fs, dstDir: String, progress: (String) -> Unit): String {
-        val name = if (dst.isLocal) uniqueName(e.name) { File(dstDir, it).exists() } else e.name
+        if (intoItself(src, e, dst, dstDir)) throw java.io.IOException("Can't copy ${e.name} into itself")
+        return copyTree(src, e, dst, dstDir, progress)
+    }
+
+    private fun copyTree(src: Fs, e: Entry, dst: Fs, dstDir: String, progress: (String) -> Unit): String {
+        val base = safeName(e.name)
+        val name = if (dst.isLocal) uniqueName(base) { File(dstDir, it).exists() } else base
         progress(e.name)
         if (e.isDir) {
             try { dst.mkdir(dstDir, name) } catch (_: Exception) { /* exists */ }
             val d = dst.join(dstDir, name)
-            for (c in src.list(e.path)) copy(src, c, dst, d, progress)
+            for (c in src.list(e.path)) copyTree(src, c, dst, d, progress)
         } else {
             src.read(e.path) { dst.write(dstDir, name, e.size, it) }
         }
@@ -115,8 +154,9 @@ object Transfer {
     fun move(src: Fs, e: Entry, dst: Fs, dstDir: String, progress: (String) -> Unit) {
         if (src.isLocal && dst.isLocal) {
             val from = File(e.path)
-            val to = File(dstDir, uniqueName(e.name) { File(dstDir, it).exists() })
             if (from.parentFile?.canonicalPath == File(dstDir).canonicalPath) return
+            if (intoItself(src, e, dst, dstDir)) throw java.io.IOException("Can't move ${e.name} into itself")
+            val to = File(dstDir, uniqueName(safeName(e.name)) { File(dstDir, it).exists() })
             progress(e.name)
             if (from.renameTo(to)) return
         }

@@ -71,6 +71,9 @@ class LocalFs(
     override fun <T> read(path: String, block: (InputStream) -> T): T = File(path).inputStream().use(block)
 
     override fun write(dir: String, name: String, size: Long, input: InputStream) {
+        // The name may come from a server: it must stay one file inside [dir]
+        // (the ".part" temp file too), never "../x" or "a/../../x".
+        if (!isSingleName(name)) throw IOException("Bad file name: $name")
         File(dir).mkdirs()
         val part = File(dir, ".$name.part")
         part.outputStream().use { input.copyTo(it, 256 * 1024) }
