@@ -87,6 +87,18 @@ class RemoteShare:
         self.port = st["port"]
         self.stops_at = st.get("stops_at")
         self.folders = st.get("folders")
+        self.usb = st.get("usb", "ask")
+        self.usb_links = st.get("usb_links", 0)
+
+    def usb_connect(self):
+        """Ask the share process to switch plugged-in phones; problem text or None."""
+        try:
+            r = self.conn.call_sync(BUS_NAME, OBJECT_PATH, BUS_NAME, "UsbConnect", None,
+                                    GLib.VariantType("(s)"), Gio.DBusCallFlags.NO_AUTO_START,
+                                    5000, None)
+            return r.unpack()[0] or None
+        except GLib.Error as e:
+            return e.message
 
     def stop(self):
         try:
@@ -204,8 +216,37 @@ class ShareDialog(Adw.Dialog):
         self.page.add(g)
         self._groups.append(g)
 
+    def _usb_rows(self, g):
+        s = self.server
+        row = Adw.ActionRow(
+            title="Phone on a USB cable",
+            subtitle="Plug the phone in, click Connect, then allow Harbor Files on the phone. "
+                     "No tethering or Wi-Fi needed. While connected, the phone's own files "
+                     "aren't shown over USB" + (
+                         "\nConnected: %d phone%s" % (s.usb_links, "" if s.usb_links == 1 else "s")
+                         if s.usb_links else ""))
+        row.add_prefix(Gtk.Image.new_from_icon_name("drive-removable-media-usb-symbolic"))
+        btn = Gtk.Button(label="Connect", valign=Gtk.Align.CENTER, css_classes=["suggested-action"])
+
+        def go(_b):
+            err = s.usb_connect()
+            self.win.notify_toast(err or "Allow Harbor Files on the phone to open this PC", timeout=6)
+        btn.connect("clicked", go)
+        row.add_suffix(btn)
+        g.add(row)
+
     def _status_group(self):
         s = self.server
+        if getattr(s, "usb", "ask") == "only":
+            g = Adw.PreferencesGroup(title="Sharing over USB cable only",
+                                     description="Not on Wi-Fi: only a phone on the cable can open it. "
+                                                 "The cable sends the PIN, nothing to type.")
+            self._usb_rows(g)
+            self.left = Gtk.Label(css_classes=["dim-label"])
+            g.add(self.left)
+            self._update_left()
+            self._tick = GLib.timeout_add_seconds(20, self._update_left)
+            return g, Adw.PreferencesGroup()
         g = Adw.PreferencesGroup(title="Open on your phone or another computer")
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         box.append(Gtk.Label(label="Scan with your phone: the camera app opens it in the "
@@ -233,6 +274,8 @@ class ShareDialog(Adw.Dialog):
                      "port %d proto tcp" % (s.port, s.host.rsplit(".", 1)[0] + ".0", s.port),
             subtitle_selectable=True)
         rows.add(hint)
+        if getattr(s, "usb", "ask") != "off":
+            self._usb_rows(rows)
         self._update_left()
         self._tick = GLib.timeout_add_seconds(20, self._update_left)
         return g, rows
@@ -345,6 +388,17 @@ class ShareDialog(Adw.Dialog):
                       lambda c, _p: self.settings.set("share_autostop",
                                                       keys[c.get_selected()]))
         g.add(combo)
+        usb_keys = ["ask", "auto", "only", "off"]
+        usb_labels = ["When I click Connect", "Every phone plugged in", "USB cable only", "Off"]
+        usb = Adw.ComboRow(title="Share over USB cable", model=Gtk.StringList.new(usb_labels),
+                           subtitle="Change it before you start sharing" if running
+                           else "“USB cable only” keeps it off Wi-Fi",
+                           sensitive=not running)
+        cur = self.settings.get("share_usb")
+        usb.set_selected(usb_keys.index(cur) if cur in usb_keys else 0)
+        usb.connect("notify::selected",
+                    lambda c, _p: self.settings.set("share_usb", usb_keys[c.get_selected()]))
+        g.add(usb)
         return g
 
     def _pick_folder(self, *_):

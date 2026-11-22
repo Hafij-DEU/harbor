@@ -343,6 +343,9 @@ class Sidebar(Gtk.Box):
         if self.settings.get("share_in_sidebar"):
             add("wifi-share", "Share over Wi-Fi", "network-wireless-symbolic", ("action", "share"),
                 tooltip="Share files with your phone, show the QR code or scan the phone's code")
+        if self.settings.get("usb_in_sidebar") and self.settings.get("share_usb") != "off":
+            add("usb-share", "Phone over USB cable", "drive-removable-media-usb-symbolic", ("action", "share"),
+                tooltip="Open this PC's shared folders on a phone plugged in with a cable")
         lst.add_separator()
         add("trash", "Trash", "user-trash-full-symbolic" if self.trash_full
             else "user-trash-symbolic", fc.TRASH_URI)

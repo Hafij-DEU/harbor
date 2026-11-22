@@ -75,6 +75,8 @@ SWITCHES = {
     "show_recent": ("Show recent files in Home", None),
     "share_in_sidebar": ("Share over Wi-Fi in the navigation pane",
                          "It is always in the Share button (and the ribbon's Share tab)"),
+    "usb_in_sidebar": ("Phone over USB cable in the navigation pane",
+                       "Opens the share window, where Connect sends this PC to a phone on the cable"),
     "open_archives_in_harbor": ("Open archives in Harbor",
                                 "Double-click lists a .zip / .7z / .tar here instead of the "
                                 "default app"),
@@ -307,13 +309,20 @@ class SettingsDialog(Adw.PreferencesDialog):
                            "Videos over 5 MB or music over 50 MB opened from the phone. Downloads are deleted when the player closes them",
                            [("ask", "Ask each time"), ("stream", "Stream"),
                             ("download", "Download first")]))
-        g3.add(self._combo("share_usb", "Share over USB cable",
-                           "Phones open this PC's shared folders through the cable, no tethering. "
-                           "While connected, the PC can't see the phone's own files over USB",
-                           [("ask", "When I choose it in the share window"),
-                            ("auto", "Every phone plugged in while sharing"),
-                            ("off", "Off")]))
         p.add(g3)
+        g4 = Adw.PreferencesGroup(
+            title="USB cable",
+            description="A phone with Harbor Files opens this PC's shared folders through the "
+                        "cable: no tethering, no Wi-Fi, no developer options. While connected, "
+                        "the PC can't see the phone's own files over USB.")
+        g4.add(self._combo("share_usb", "Share over USB cable",
+                           "Used the next time sharing starts",
+                           [("ask", "When I click Connect"),
+                            ("auto", "Every phone plugged in"),
+                            ("only", "USB cable only (not on Wi-Fi)"),
+                            ("off", "Off")]))
+        g4.add(self._switch("usb_in_sidebar"))
+        p.add(g4)
 
     def _build_preview(self):
         p = self._page("preview", "Preview", "view-paged-symbolic")

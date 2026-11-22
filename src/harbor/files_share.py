@@ -1,7 +1,8 @@
 """Harbor Files: share folders over Wi-Fi (web page + minimal WebDAV).
 
 Security rules (keep them when you change this file):
-  * listens on the LAN address only, never 0.0.0.0, and never starts by itself
+  * listens on the LAN address only (or 127.0.0.1 for "USB cable only", where
+    phones come in through files_usb), never 0.0.0.0, and never starts by itself
   * a 6-digit PIN opens a session; the session is a random 128-bit token in an
     HttpOnly SameSite=Strict cookie; every compare uses hmac.compare_digest
   * 5 wrong PINs lock everyone out for 5 minutes

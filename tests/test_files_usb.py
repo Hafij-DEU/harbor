@@ -228,3 +228,38 @@ def test_phone_close_ends_the_server_connection():
     assert closed.wait(5)
     link.stop()
     srv.close()
+
+
+def test_usb_only_share_listens_on_loopback(tmp_path):
+    from harbor.files_share import ShareServer
+    srv = ShareServer([{"path": str(tmp_path), "upload": False}], port=18765, host="127.0.0.1", minutes=0)
+    srv.start()
+    try:
+        assert srv.httpd.server_address[0] == "127.0.0.1"
+    finally:
+        srv.stop()
+
+
+def test_tray_runner_builds_menu_in_every_usb_mode():
+    """The tray is GTK 3, so it runs in its own interpreter."""
+    import subprocess
+    import sys
+    code = r"""
+from harbor import files_sharetray as t
+class S:
+    url = qr_text = "http://127.0.0.1:8765/"; pin = "123456"; port = 8765
+    host = "127.0.0.1"; running = True; stops_at = None
+    def status(self): return {}
+class C:
+    def register_object(self, *a): return 1
+t.AppIndicator = None; t.GUdev = None
+for mode in ("ask", "auto", "only", "off"):
+    r = t.Runner(S(), C(), mode)
+    labels = [label for label, _cb in r._menu_items()]
+    assert ("Open on phone over USB cable" in labels) == (mode != "off"), (mode, labels)
+    assert ("Copy address" in labels) == (mode != "only"), (mode, labels)
+print("ok")
+"""
+    env = dict(os.environ, PYTHONPATH=os.path.join(os.path.dirname(__file__), "..", "src"))
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=60)
+    assert r.stdout.strip().endswith("ok"), r.stderr[-800:]

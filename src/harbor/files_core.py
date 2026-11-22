@@ -323,7 +323,7 @@ class Settings:
                 # Share over Wi-Fi (never starts by itself)
                 "share_folders": [], "share_port": 8765, "share_autostop": 30,
                 "share_upload_max_mb": 4096, "share_usb": "ask", "share_iface": "", "share_tailscale": False,
-                "share_in_sidebar": False,
+                "share_in_sidebar": False, "usb_in_sidebar": True,
                 "icon_scope": "global",   # Customize folder: "global" or "harbor"
                 "remote_media": "ask",    # big phone video/music: "ask", "stream", "download"
                 # 0.5.16
@@ -418,7 +418,7 @@ class Settings:
         if self.data["share_autostop"] not in SHARE_AUTOSTOP:
             self.data["share_autostop"] = self.DEFAULTS["share_autostop"]
         self.data["share_upload_max_mb"] = min(max(1, self.data["share_upload_max_mb"]), 65536)
-        if self.data.get("share_usb") not in ("off", "ask", "auto"):
+        if self.data.get("share_usb") not in ("off", "ask", "auto", "only"):
             self.data["share_usb"] = "ask"
         if self.data["view"] not in ("details", "icons"):
             self.data["view"] = "details"

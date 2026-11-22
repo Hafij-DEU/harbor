@@ -7,7 +7,8 @@ shows a "Send by Wi-Fi" tray icon until the share stops (Stop, the auto-stop
 timer, or the tray menu). The process exits when the share stops.
 
 Session D-Bus name io.github.hafij_deu.Harbor.Share (no service file, so it
-is never started by D-Bus): Status() -> JSON, Stop().
+is never started by D-Bus): Status() -> JSON, Stop(), ShowQr(),
+UsbConnect() -> problem text ("" when phones were switched; see files_usb).
 The PIN is never logged; it only leaves this process over the user's own
 session bus and in the QR window.
 """
@@ -48,6 +49,7 @@ XML = """
     <method name="Status"><arg type="s" name="json" direction="out"/></method>
     <method name="Stop"/>
     <method name="ShowQr"/>
+    <method name="UsbConnect"><arg type="s" name="problem" direction="out"/></method>
   </interface>
 </node>
 """
@@ -91,6 +93,7 @@ class Runner:
         self.server = server
         self.conn = conn
         self.qr_win = None
+        self.usb = UsbPhones(server, usb)       # before the tray menu, which reads its mode
         node = Gio.DBusNodeInfo.new_for_xml(XML)
         conn.register_object(OBJECT_PATH, node.interfaces[0], self._call)
         self.indicator = None
@@ -102,30 +105,37 @@ class Runner:
             ind.set_menu(self._menu())
             ind.set_status(AppIndicator.IndicatorStatus.ACTIVE)
             self.indicator = ind
-        self.usb = UsbPhones(server, usb)
 
     def _call(self, conn, sender, path, iface, method, params, inv):
         if method == "Status":
-            inv.return_value(GLib.Variant("(s)", (json.dumps(self.server.status()),)))
+            st = dict(self.server.status(), usb=self.usb.mode, usb_links=len(self.usb.links))
+            inv.return_value(GLib.Variant("(s)", (json.dumps(st),)))
         elif method == "Stop":
             inv.return_value(None)
             GLib.idle_add(self.stop)
+        elif method == "UsbConnect":
+            inv.return_value(GLib.Variant("(s)", (self.usb.connect_all() or "",)))
         elif method == "ShowQr":
             inv.return_value(None)
             GLib.idle_add(lambda: self.show_qr() or False)
 
-    def _menu(self):
-        menu = Gtk.Menu()
-        head = Gtk.MenuItem(label="Send by Wi-Fi: " + self.server.url, sensitive=False)
-        menu.append(head)
-        menu.append(Gtk.SeparatorMenuItem())
-        items = [("Show QR & PIN", self.show_qr)]
+    def _menu_items(self):
+        only = self.usb.mode == "only"
+        items = [("Show share window" if only else "Show QR & PIN", self.show_qr)]
         if self.usb.mode != "off":
             items.append(("Open on phone over USB cable", self.usb_connect))
-        items += [("Copy address", self.copy_address),
-                  ("Open Harbor Files", self.open_files),
-                  ("Stop sharing", self.stop)]
-        for label, cb in items:
+        if not only:
+            items.append(("Copy address", self.copy_address))
+        return items + [("Open Harbor Files", self.open_files), ("Stop sharing", self.stop)]
+
+    def _menu(self):
+        menu = Gtk.Menu()
+        only = self.usb.mode == "only"
+        head = Gtk.MenuItem(label="Sharing over USB cable only" if only else "Send by Wi-Fi: " + self.server.url,
+                            sensitive=False)
+        menu.append(head)
+        menu.append(Gtk.SeparatorMenuItem())
+        for label, cb in self._menu_items():
             it = Gtk.MenuItem(label=label)
             it.connect("activate", lambda _i, cb=cb: cb())
             menu.append(it)
@@ -137,17 +147,23 @@ class Runner:
             self.qr_win.present()
             return
         s = self.server
-        w = Gtk.Window(title="Send by Wi-Fi", resizable=False)
+        w = Gtk.Window(title="Send by USB cable" if self.usb.mode == "only" else "Send by Wi-Fi",
+                       resizable=False)
         w.set_icon_name("network-wireless-symbolic")
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin=18)
-        box.add(Gtk.Label(label="Scan with your phone's camera or Harbor Files"))
-        box.add(Gtk.Image.new_from_pixbuf(qr_pixbuf(s.qr_text)))
-        url = Gtk.Label(selectable=True)
-        url.set_markup("<big>%s</big>" % GLib.markup_escape_text(s.url))
-        box.add(url)
-        pin = Gtk.Label(selectable=True)
-        pin.set_markup("<span size='xx-large' weight='bold'>PIN  %s</span>" % " ".join(s.pin))
-        box.add(pin)
+        if self.usb.mode == "only":
+            box.add(Gtk.Label(label="Sharing over USB cable only, not on Wi-Fi.\n"
+                                    "Plug the phone in and allow Harbor Files on it.\n"
+                                    "No PIN needed: the cable sends it.", justify=Gtk.Justification.CENTER))
+        else:
+            box.add(Gtk.Label(label="Scan with your phone's camera or Harbor Files"))
+            box.add(Gtk.Image.new_from_pixbuf(qr_pixbuf(s.qr_text)))
+            url = Gtk.Label(selectable=True)
+            url.set_markup("<big>%s</big>" % GLib.markup_escape_text(s.url))
+            box.add(url)
+            pin = Gtk.Label(selectable=True)
+            pin.set_markup("<span size='xx-large' weight='bold'>PIN  %s</span>" % " ".join(s.pin))
+            box.add(pin)
         left = Gtk.Label(label=time_left(s.stops_at))
         left.get_style_context().add_class("dim-label")
         box.add(left)
@@ -212,11 +228,12 @@ class UsbPhones:
               phone over USB cable", and by itself later if it was opened that
               way before (remembered by its USB serial number)
       "auto"  every Android phone plugged in while sharing is on switches
+      "only"  like "auto", and the share listens on 127.0.0.1 only (no Wi-Fi)
     """
 
     def __init__(self, server, mode="ask"):
         self.server = server
-        self.mode = mode if mode in ("off", "ask", "auto") else "ask"
+        self.mode = mode if mode in ("off", "ask", "auto", "only") else "ask"
         self.links = {}          # accessory sysname -> PhoneLink
         self.pending = 0.0       # until when a new accessory device is ours
         try:
@@ -265,7 +282,7 @@ class UsbPhones:
         return "\n".join(errs) or None
 
     def _wanted(self, d):
-        return self.mode == "auto" or (self.mode == "ask" and d["serial"] in self.known)
+        return self.mode in ("auto", "only") or (self.mode == "ask" and d["serial"] in self.known)
 
     def _auto(self):
         for d in fusb.usb_devices():
@@ -387,7 +404,10 @@ def main(argv=None):
     except GLib.Error as e:
         answer({"error": e.message})
         return 1
+    usb_mode = cfg.get("usb") or "ask"
+    # "USB cable only": listen inside this PC only; phones come in through the cable.
     server = ShareServer(folders, port=int(cfg.get("port") or 8765),
+                         host="127.0.0.1" if usb_mode == "only" else None,
                          upload_max_mb=int(cfg.get("upload_max_mb") or 4096),
                          minutes=int(cfg.get("minutes") or 0),
                          on_stop=lambda: GLib.idle_add(Gtk.main_quit))
@@ -396,7 +416,7 @@ def main(argv=None):
     except OSError as e:
         answer({"error": str(e)})
         return 1
-    runner = Runner(server, conn, cfg.get("usb") or "ask")
+    runner = Runner(server, conn, usb_mode)
     answer({"ok": True})
     if again:
         runner.show_qr()
