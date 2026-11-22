@@ -25,7 +25,9 @@ from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import quote, unquote, urlsplit
 
-STREAM_MIN = 50 * 1024 * 1024      # ask only for files at least this big
+VIDEO_MIN = 5 * 1024 * 1024        # ask for videos at least this big
+AUDIO_MIN = 50 * 1024 * 1024       # ...and music at least this big
+STREAM_MIN = VIDEO_MIN
 CHOICES = ("ask", "stream", "download")
 MAX_ITEMS = 32                     # links kept; older ones stop working
 CHUNK = 256 * 1024
@@ -61,8 +63,69 @@ def is_media(content_type):
 
 
 def wants_choice(content_type, size):
-    """Stream or download? Only asked for big video and audio files."""
-    return is_media(content_type) and (size or 0) >= STREAM_MIN
+    """Stream or download? Asked for videos over 5 MB and music over 50 MB."""
+    ct = content_type or ""
+    if ct.startswith("video/"):
+        return (size or 0) >= VIDEO_MIN
+    return ct.startswith("audio/") and (size or 0) >= AUDIO_MIN
+
+
+# ------------------------------------------------------------------ temporary copies
+
+def play_dir():
+    """Where "Download and play" copies live until the player closes them."""
+    from gi.repository import GLib
+    return os.path.join(GLib.get_user_cache_dir(), "harbor", "play")
+
+
+def open_by_anyone(path):
+    """True when any process we can see has `path` open (scans /proc/*/fd)."""
+    try:
+        real = os.path.realpath(path)
+        pids = [p for p in os.listdir("/proc") if p.isdigit()]
+    except OSError:
+        return False
+    for pid in pids:
+        fd_dir = "/proc/%s/fd" % pid
+        try:
+            fds = os.listdir(fd_dir)
+        except OSError:
+            continue            # other users' processes, or gone
+        for fd in fds:
+            try:
+                if os.readlink(os.path.join(fd_dir, fd)) == real:
+                    return True
+            except OSError:
+                pass
+    return False
+
+
+def remove_copy(path):
+    """Delete a temporary copy and its folder (only inside play_dir())."""
+    import shutil
+    root = os.path.realpath(play_dir())
+    folder = os.path.realpath(os.path.dirname(path))
+    if os.path.commonpath([root, folder]) != root or folder == root:
+        return False
+    shutil.rmtree(folder, ignore_errors=True)
+    return True
+
+
+def clean_play_dir():
+    """Remove leftover copies no player has open (Harbor start-up)."""
+    root = play_dir()
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return
+    for n in names:
+        d = os.path.join(root, n)
+        try:
+            files = [os.path.join(d, f) for f in os.listdir(d)]
+        except OSError:
+            continue
+        if not any(open_by_anyone(f) for f in files):
+            remove_copy(os.path.join(d, "x"))
 
 
 def ftp_path(uri):

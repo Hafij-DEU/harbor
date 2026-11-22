@@ -14,10 +14,43 @@ import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
-/** Videos and music at least this big ask "Stream or download?". */
-const val STREAM_MIN = 50L * 1024 * 1024
+/** Videos at least this big ask "Stream or download?"... */
+const val VIDEO_MIN = 5L * 1024 * 1024
+/** ...and music at least this big. */
+const val AUDIO_MIN = 50L * 1024 * 1024
 
 fun isMedia(mime: String?) = mime != null && (mime.startsWith("video/") || mime.startsWith("audio/"))
+
+fun wantsChoice(mime: String?, size: Long) = when {
+    mime == null -> false
+    mime.startsWith("video/") -> size >= VIDEO_MIN
+    mime.startsWith("audio/") -> size >= AUDIO_MIN
+    else -> false
+}
+
+/**
+ * "Download" copies of server videos and music, deleted as soon as the user
+ * comes back from the player (and any left over at start-up). A player that
+ * still has the file open (picture-in-picture) keeps playing: Android keeps a
+ * deleted file readable until it is closed.
+ */
+object PlayTemp {
+    private val files = HashMap<java.io.File, Long>()
+
+    fun dir(ctx: android.content.Context) = java.io.File(ctx.cacheDir, "play")
+
+    @Synchronized fun add(f: java.io.File) { files[f] = System.currentTimeMillis() }
+
+    /** Called when Harbor is back in front. */
+    @Synchronized fun cleanup() {
+        val now = System.currentTimeMillis()
+        files.entries.removeAll { (f, t) ->
+            if (now - t < 2_000) false else { f.parentFile?.deleteRecursively(); true }
+        }
+    }
+
+    fun cleanAll(ctx: android.content.Context) { dir(ctx).deleteRecursively() }
+}
 
 /** Where a server file can be read with HTTP Range requests (the PC's WebDAV share). */
 data class StreamSource(val url: String, val headers: Map<String, String>, val size: Long, val mime: String)
@@ -37,6 +70,9 @@ class StreamProxy(private val client: OkHttpClient = defaultClient()) {
     private val rnd = SecureRandom()
 
     val port: Int get() = server?.localPort ?: -1
+    /** Requests being served now, and when the player last read (for [StreamService]). */
+    val active = java.util.concurrent.atomic.AtomicInteger()
+    @Volatile var lastUse = 0L
 
     @Synchronized
     fun add(src: StreamSource, name: String): String {
@@ -51,7 +87,10 @@ class StreamProxy(private val client: OkHttpClient = defaultClient()) {
                 while (!s.isClosed) {
                     val c = try { s.accept() } catch (_: Exception) { break }
                     thread(name = "stream", isDaemon = true) {
-                        try { serve(c) } catch (_: Throwable) {} finally { runCatching { c.close() } }
+                        active.incrementAndGet(); lastUse = System.currentTimeMillis()
+                        try { serve(c) } catch (_: Throwable) {} finally {
+                            runCatching { c.close() }; active.decrementAndGet(); lastUse = System.currentTimeMillis()
+                        }
                     }
                 }
             }
@@ -93,7 +132,13 @@ class StreamProxy(private val client: OkHttpClient = defaultClient()) {
             resp.header("Content-Length")?.let { h += "Content-Length" to it }
             resp.header("Content-Range")?.let { h += "Content-Range" to it }
             writeHead(out, resp.code, if (resp.code == 206) "Partial Content" else if (resp.code == 416) "Range Not Satisfiable" else "OK", h)
-            resp.body?.byteStream()?.use { it.copyTo(out, 256 * 1024) }
+            resp.body?.byteStream()?.use { i ->
+                val buf = ByteArray(256 * 1024)
+                while (true) {
+                    val n = i.read(buf); if (n < 0) break
+                    out.write(buf, 0, n); lastUse = System.currentTimeMillis()
+                }
+            }
             out.flush()
         }
     }

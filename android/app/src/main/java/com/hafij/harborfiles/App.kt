@@ -138,7 +138,7 @@ class MainActivity : ComponentActivity() {
 
     private var askTab by mutableIntStateOf(-1)
 
-    override fun onResume() { super.onResume(); resumes++ }
+    override fun onResume() { super.onResume(); resumes++; PlayTemp.cleanup() }
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
@@ -151,6 +151,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val prefs = Prefs(this)
+        if (savedInstanceState == null) PlayTemp.cleanAll(this)     // played copies left from last time
         askTab = intent.getIntExtra(EXTRA_TAB, -1)
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         setContent {
@@ -244,7 +245,7 @@ private fun StreamAskDialog(a: AppState.StreamAsk) {
                 Text("This file is ${fmtSize(a.size)} and it's on the PC.")
                 Text("Stream: plays at once and you can skip around. Stay on the same Wi-Fi while it plays.",
                     Modifier.padding(top = 8.dp))
-                Text("Download: copies it to the phone first, then plays it.", Modifier.padding(top = 4.dp))
+                Text("Download: copies it to the phone first, then plays it. The copy is deleted when you come back.", Modifier.padding(top = 4.dp))
                 Row(Modifier.padding(top = 8.dp).clickable { remember = !remember }, verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.Checkbox(remember, { remember = it })
                     Text("Remember my choice")

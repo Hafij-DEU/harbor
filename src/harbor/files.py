@@ -1025,13 +1025,13 @@ class FilesWindow(HarborWindow):
             except GLib.Error:
                 size = 0
             if not fstream.wants_choice(content_type, size):
-                self._open_remote_copy(gfile, app)
+                self._open_remote_copy(gfile, app, temp=True)
                 return
             choice = self.settings.get("remote_media")
             if choice == "stream":
                 self._stream_phone(gfile, content_type, size, app)
             elif choice == "download":
-                self._open_remote_copy(gfile, app)
+                self._open_remote_copy(gfile, app, temp=True)
             else:
                 self._ask_stream(gfile, content_type, size, app)
         gfile.query_info_async("standard::size", Gio.FileQueryInfoFlags.NONE,
@@ -1045,7 +1045,7 @@ class FilesWindow(HarborWindow):
             body="This file is %s and it's on the phone.\n\n"
                  "Stream: plays at once and you can skip around. The phone has to stay "
                  "on the same Wi-Fi while it plays.\n"
-                 "Download and play: copies it to this PC first, then plays it."
+                 "Download and play: copies it to this PC first, then plays it. The copy is deleted when the player closes it."
                  % GLib.format_size(size))
         d.add_response("cancel", "Cancel")
         d.add_response("download", "Download and play")
@@ -1064,7 +1064,7 @@ class FilesWindow(HarborWindow):
             if resp == "stream":
                 self._stream_phone(gfile, content_type, size, app)
             else:
-                self._open_remote_copy(gfile, app)
+                self._open_remote_copy(gfile, app, temp=True)
         d.connect("response", answered)
         d.present(self)
 
@@ -1073,13 +1073,13 @@ class FilesWindow(HarborWindow):
         if app is None or not app.supports_uris():
             self.notify_toast("%s can't play from a link, so the file is downloaded first"
                               % (app.get_display_name() if app else "No player"), timeout=5)
-            self._open_remote_copy(gfile, app)
+            self._open_remote_copy(gfile, app, temp=True)
             return
         uri = gfile.get_uri()
         host, port = fsb.phone_share_addr(uri)
         path = fstream.ftp_path(uri)
         if path is None:
-            self._open_remote_copy(gfile, app)
+            self._open_remote_copy(gfile, app, temp=True)
             return
         user = "harbor"
 
@@ -1131,25 +1131,67 @@ class FilesWindow(HarborWindow):
         d.connect("response", answered)
         d.present(self)
 
-    def _open_remote_copy(self, gfile, app):
+    def _open_remote_copy(self, gfile, app, temp=False):
+        """Copy a network file to the cache and open the copy.
+
+        temp=True ("Download and play" for phone media): the copy goes to
+        ~/.cache/harbor/play and is deleted as soon as no program has it open
+        any more (checked every 3 s), so played videos don't pile up."""
         import hashlib
         name = gfile.get_basename() or "file"
         key = hashlib.sha1(gfile.get_uri().encode()).hexdigest()[:16]
-        folder = os.path.join(GLib.get_user_cache_dir(), "harbor", "remote", key)
+        base = fstream.play_dir() if temp else os.path.join(GLib.get_user_cache_dir(), "harbor", "remote")
+        folder = os.path.join(base, key)
         os.makedirs(folder, exist_ok=True)
         dest = Gio.File.new_for_path(os.path.join(folder, name))
-        self.notify_toast("Opening %s…" % name, timeout=2)
+        self.notify_toast(("Downloading %s…" if temp else "Opening %s…") % name, timeout=2)
 
         def done(src, res):
             try:
                 src.copy_finish(res)
             except GLib.Error as e:
                 self.notify_toast("Can't open %s: %s" % (name, e.message), timeout=5)
+                if temp:
+                    fstream.remove_copy(dest.get_path())
                 return
             self.launch(dest.get_uri(), app)
+            if temp and not common.DRY_RUN:
+                self._watch_temp_copy(dest.get_path())
         gfile.copy_async(dest, Gio.FileCopyFlags.OVERWRITE, GLib.PRIORITY_DEFAULT,
                          None, None, done)
         return True
+
+    def _watch_temp_copy(self, path):
+        """Delete a played copy once the player closed it.
+
+        Waits until a program has opened it (or 60 s pass), then deletes it
+        the first time nobody has it open. Scans /proc in a thread."""
+        started = time.monotonic()
+        state = {"seen": False, "busy": False}
+
+        def check():
+            if state["busy"]:
+                return True
+            if not os.path.exists(path):
+                return False
+            state["busy"] = True
+
+            def work():
+                is_open = fstream.open_by_anyone(path)
+                GLib.idle_add(after, is_open)
+            threading.Thread(target=work, daemon=True).start()
+            return True
+
+        def after(is_open):
+            state["busy"] = False
+            elapsed = time.monotonic() - started
+            if is_open:
+                state["seen"] = True
+            elif state["seen"] or elapsed > 60:
+                fstream.remove_copy(path)
+                GLib.source_remove(state["src"])
+            return False
+        state["src"] = GLib.timeout_add_seconds(3, check)
 
     def choose_app(self, gfile, content_type):
         from .files_pages import AppChooser
@@ -2598,6 +2640,8 @@ class App(Adw.Application):
         # the first Gio.AppInfo lookup scans every .desktop file; do it off the
         # main loop so the first right-click ("Open with") does not stall
         threading.Thread(target=Gio.AppInfo.get_all, daemon=True, name="hb-apps").start()
+        if not common.DRY_RUN:      # played phone videos left from last time
+            threading.Thread(target=fstream.clean_play_dir, daemon=True, name="hb-play-clean").start()
         self.apply_look(initial=True)
         apply_theme(CSS)
         here = os.path.dirname(os.path.realpath(__file__))

@@ -103,3 +103,32 @@ def test_pins_stay_in_memory():
     assert fs.pin_for("10.0.0.9", 2121) == "654321"
     fs.forget_pin("10.0.0.9", 2121)
     assert fs.pin_for("10.0.0.9", 2121) is None
+
+
+def test_thresholds_video_5mb_music_50mb():
+    assert fs.wants_choice("video/x-matroska", 5 * 1024 * 1024)
+    assert not fs.wants_choice("video/mp4", 5 * 1024 * 1024 - 1)
+    assert not fs.wants_choice("audio/mpeg", 20 * 1024 * 1024)
+    assert fs.wants_choice("audio/flac", 50 * 1024 * 1024)
+
+
+def test_temp_copies_removed_only_when_closed(tmp_path, monkeypatch):
+    monkeypatch.setattr(fs, "play_dir", lambda: str(tmp_path / "play"))
+    a = tmp_path / "play" / "k1" / "a.mp4"
+    b = tmp_path / "play" / "k2" / "b.mp4"
+    for p in (a, b):
+        p.parent.mkdir(parents=True)
+        p.write_bytes(b"x" * 10)
+    held = open(b, "rb")                     # "player" still has b open
+    try:
+        assert fs.open_by_anyone(str(b)) and not fs.open_by_anyone(str(a))
+        fs.clean_play_dir()
+        assert not a.parent.exists() and b.exists()
+    finally:
+        held.close()
+    outside = tmp_path / "keep" / "c.mp4"
+    outside.parent.mkdir()
+    outside.write_bytes(b"x")
+    assert not fs.remove_copy(str(outside)) and outside.exists()     # never outside play/
+    assert not fs.remove_copy(str(tmp_path / "play" / "x"))           # never play/ itself
+    assert fs.remove_copy(str(b)) and not b.parent.exists()

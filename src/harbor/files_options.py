@@ -304,7 +304,7 @@ class SettingsDialog(Adw.PreferencesDialog):
         self.wifi_row.connect("notify::active", self._wifi_toggled)
         g3.add(self.wifi_row)
         g3.add(self._combo("remote_media", "Big phone videos and music",
-                           "Video or audio over 50 MB opened from the phone",
+                           "Videos over 5 MB or music over 50 MB opened from the phone. Downloads are deleted when the player closes them",
                            [("ask", "Ask each time"), ("stream", "Stream"),
                             ("download", "Download first")]))
         p.add(g3)

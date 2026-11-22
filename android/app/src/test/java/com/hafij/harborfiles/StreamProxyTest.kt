@@ -84,6 +84,14 @@ class StreamProxyTest {
         assertEquals(404, open(url).responseCode)          // oldest link dropped
     }
 
+    @Test fun choiceForVideosOver5MbAndMusicOver50Mb() {
+        assertTrue(wantsChoice("video/mp4", VIDEO_MIN))
+        assertTrue(!wantsChoice("video/mp4", VIDEO_MIN - 1))
+        assertTrue(!wantsChoice("audio/mpeg", 20L * 1024 * 1024))
+        assertTrue(wantsChoice("audio/flac", AUDIO_MIN))
+        assertTrue(!wantsChoice("application/pdf", 1L shl 30))
+    }
+
     @Test fun onlySingleByteRangesArePassedOn() {
         assertEquals("bytes=5-", StreamProxy.parseHead("GET /t/a HTTP/1.1\r\nRange: bytes=5-\r\n\r\n")!!.range)
         assertNull(StreamProxy.parseHead("GET /t/a HTTP/1.1\r\nRange: bytes=0-1,4-5\r\n\r\n")!!.range)

@@ -596,7 +596,7 @@ fun SettingsScreen(state: AppState) {
             }
             Section("Servers")
             Card {
-                ChipRow("Big videos and music (over 50 MB)", listOf(0 to "Ask", 1 to "Stream", 2 to "Download"), p.remoteMedia) { p.remoteMedia = it }
+                ChipRow("Videos over 5 MB, music over 50 MB", listOf(0 to "Ask", 1 to "Stream", 2 to "Download"), p.remoteMedia) { p.remoteMedia = it }
             }
             Section("MeshDrop")
             Card {
