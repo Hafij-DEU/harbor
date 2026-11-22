@@ -44,6 +44,7 @@ suspend fun openEntry(state: AppState, fs: Fs, e: Entry, chooser: Boolean = fals
         } catch (_: ActivityNotFoundException) {}
         return
     }
+    if (!fs.isLocal && !chooser && streamIfChosen(state, fs, e)) return
     if (!fs.isLocal) state.busy = "Downloading ${e.name}…"
     val f = try { withContext(Dispatchers.IO) { localCopy(ctx, fs, e) } } catch (x: Exception) {
         state.toast(x.message ?: "Couldn't open"); return
@@ -59,6 +60,29 @@ suspend fun openEntry(state: AppState, fs: Fs, e: Entry, chooser: Boolean = fals
         ctx.startActivity(if (chooser) Intent.createChooser(i, "Open with").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) else i)
     } catch (_: ActivityNotFoundException) {
         state.toast("No app can open ${e.name}")
+    }
+}
+
+/**
+ * Big video or music on a server: stream it through [StreamProxy] when the
+ * user picks Stream (or set it in Settings). True when a player was started.
+ */
+private suspend fun streamIfChosen(state: AppState, fs: Fs, e: Entry): Boolean {
+    val mime = e.mime ?: mimeOf(e.name)
+    if (!isMedia(mime) || e.size < STREAM_MIN) return false
+    val src = fs.streamSource(e) ?: return false
+    val choice = when (state.prefs.remoteMedia) {
+        1 -> "stream"
+        2 -> "download"
+        else -> state.askStream(e) ?: return true      // cancelled: nothing to do
+    }
+    if (choice != "stream") return false
+    val url = withContext(Dispatchers.IO) { StreamProxy.shared.add(src.copy(mime = mime), e.name) }
+    val i = Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(url), mime).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    return try {
+        state.ctx.startActivity(i); true
+    } catch (_: ActivityNotFoundException) {
+        state.toast("No player here can stream, so it's downloaded first"); false
     }
 }
 

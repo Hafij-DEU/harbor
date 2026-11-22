@@ -65,6 +65,11 @@ class Prefs(ctx: Context) {
         get() = _idleMin.value
         set(v) { _idleMin.value = v; sp.edit().putInt("idleMin", v).apply() }
 
+    private val _remoteMedia = int("remoteMedia", 0) // big server video/music: 0 ask, 1 stream, 2 download
+    var remoteMedia: Int
+        get() = _remoteMedia.value
+        set(v) { _remoteMedia.value = v; sp.edit().putInt("remoteMedia", v).apply() }
+
     private val _meshdrop = bool("meshdrop", true)
     var meshdrop: Boolean
         get() = _meshdrop.value

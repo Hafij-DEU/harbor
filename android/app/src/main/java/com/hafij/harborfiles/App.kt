@@ -107,6 +107,21 @@ class AppState(val ctx: Context, val prefs: Prefs, val scope: CoroutineScope) {
 
     fun toast(msg: String) { scope.launch { snack.showSnackbar(msg) } }
 
+    /** "Stream or download?" for a big video or music file on a server. */
+    class StreamAsk(val name: String, val size: Long, val answer: (String?, Boolean) -> Unit)
+    var streamAsk by mutableStateOf<StreamAsk?>(null)
+
+    /** "stream", "download" or null (cancelled). "Remember" saves it in Settings. */
+    suspend fun askStream(e: Entry): String? {
+        val d = kotlinx.coroutines.CompletableDeferred<String?>()
+        streamAsk = StreamAsk(e.name, e.size) { ans, remember ->
+            streamAsk = null
+            if (remember && ans != null) prefs.remoteMedia = if (ans == "stream") 1 else 2
+            d.complete(ans)
+        }
+        return d.await()
+    }
+
     /** Runs blocking work off the main thread with a busy dialog, then refreshes lists. */
     fun run(label: String, work: suspend () -> Unit) {
         scope.launch {
@@ -215,6 +230,30 @@ fun Root(state: AppState) {
     }
     } }
     state.busy?.let { BusyDialog(it) }
+    state.streamAsk?.let { StreamAskDialog(it) }
+}
+
+@Composable
+private fun StreamAskDialog(a: AppState.StreamAsk) {
+    var remember by remember(a) { mutableStateOf(false) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { a.answer(null, false) },
+        title = { Text("Play ${a.name}") },
+        text = {
+            Column {
+                Text("This file is ${fmtSize(a.size)} and it's on the PC.")
+                Text("Stream: plays at once and you can skip around. Stay on the same Wi-Fi while it plays.",
+                    Modifier.padding(top = 8.dp))
+                Text("Download: copies it to the phone first, then plays it.", Modifier.padding(top = 4.dp))
+                Row(Modifier.padding(top = 8.dp).clickable { remember = !remember }, verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Checkbox(remember, { remember = it })
+                    Text("Remember my choice")
+                }
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { a.answer("stream", remember) }) { Text("Stream") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { a.answer("download", remember) }) { Text("Download") } },
+    )
 }
 
 @Composable

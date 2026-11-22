@@ -213,6 +213,9 @@ class DavFs(
 
     private fun req(path: String) = Request.Builder().url(origin + path).header("Authorization", auth)
 
+    override fun streamSource(e: Entry): StreamSource? =
+        if (e.isDir) null else StreamSource(origin + e.path, mapOf("Authorization" to auth), e.size, e.mime ?: mimeOf(e.name))
+
     private fun call(r: Request): okhttp3.Response {
         val resp = http.newCall(r).execute()
         if (!resp.isSuccessful) {

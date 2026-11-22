@@ -594,6 +594,10 @@ fun SettingsScreen(state: AppState) {
                 SwitchRow("Read-only", "The PC can download but not change files", p.readOnly) { p.readOnly = it }
                 ChipRow("Stop when idle", listOf(0 to "Never", 5 to "5 min", 15 to "15", 30 to "30", 60 to "60"), p.idleMin) { p.idleMin = it }
             }
+            Section("Servers")
+            Card {
+                ChipRow("Big videos and music (over 50 MB)", listOf(0 to "Ask", 1 to "Stream", 2 to "Download"), p.remoteMedia) { p.remoteMedia = it }
+            }
             Section("MeshDrop")
             Card {
                 SwitchRow("Show MeshDrop in Send", if (meshdropInstalled(state.ctx)) "MeshDrop is installed" else "MeshDrop isn't installed", p.meshdrop) { p.meshdrop = it }

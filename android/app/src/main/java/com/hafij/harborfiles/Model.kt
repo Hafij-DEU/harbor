@@ -81,6 +81,8 @@ interface Fs {
     fun write(dir: String, name: String, size: Long, input: InputStream)
     fun join(dir: String, name: String) = if (dir.endsWith("/")) dir + name else "$dir/$name"
     fun nameOf(path: String) = path.trimEnd('/').substringAfterLast('/')
+    /** How a player can stream [e] with HTTP Range requests, or null (download it instead). */
+    fun streamSource(e: Entry): StreamSource? = null
 }
 
 /** "a.txt" -> "a (1).txt" until the name is free. */
