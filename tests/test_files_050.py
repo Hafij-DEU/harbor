@@ -39,8 +39,9 @@ def test_duplicate_name_and_exec_mode(tmp_path):
 
 
 def test_import_icon(tmp_path):
+    from gi.repository import GdkPixbuf
     src = tmp_path / "pic.png"
-    src.write_bytes(b"\x89PNG fake")
+    GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 32, 32).savev(str(src), "png", [], [])
     store = tmp_path / "store"
     a = fcu.import_icon(str(src), root=str(store))
     assert fcu.import_icon(str(src), root=str(store)) == a          # same content, same file

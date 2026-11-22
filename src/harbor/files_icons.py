@@ -21,7 +21,10 @@ ATTR_CUSTOM_ICON = "metadata::custom-icon"
 ATTR_CUSTOM_ICON_NAME = "metadata::custom-icon-name"
 ATTR_FOLDER_COLOR = "metadata::harbor-folder-color"
 ATTR_EMBLEM = "metadata::harbor-emblem"
-METADATA_ATTRS = (ATTR_CUSTOM_ICON, ATTR_CUSTOM_ICON_NAME, ATTR_FOLDER_COLOR, ATTR_EMBLEM)
+# the Harbor glyph behind an exported global icon, so Customize can reopen it
+ATTR_GLYPH = "metadata::harbor-icon-name"
+METADATA_ATTRS = (ATTR_CUSTOM_ICON, ATTR_CUSTOM_ICON_NAME, ATTR_FOLDER_COLOR, ATTR_EMBLEM,
+                  ATTR_GLYPH)
 
 FOLDER = "harbor-folder"
 FILE = "harbor-file"
@@ -385,23 +388,45 @@ def tinted(name, color=None, emblem=None):
     return tint.icon_name(name, c, emblem if emblem in tint.EMBLEMS else None)
 
 
-def custom_of(info):
-    """(custom icon uri, custom icon name, colour, emblem) from GIO metadata."""
+def global_of(info):
+    """(icon uri, icon name, colour, emblem) from GIO metadata, checked.
+
+    Any app can write these keys, so an unsafe picture reference (remote,
+    not a regular file, too big) or a malformed name is dropped.
+    """
+    from . import files_iconstore as store
+
     def get(attr):
         try:
-            v = info.get_attribute_string(attr)
+            v = info.get_attribute_string(attr) if info is not None else None
         except TypeError:
             v = None
         return v or None
-    return tuple(get(a) for a in METADATA_ATTRS)
+    st = store.clean_state({"icon_uri": get(ATTR_CUSTOM_ICON), "icon_name": get(ATTR_CUSTOM_ICON_NAME),
+                            "color": get(ATTR_FOLDER_COLOR), "emblem": get(ATTR_EMBLEM)}) or {}
+    return tuple(st.get(k) for k in store.FIELDS)
 
 
-def custom_gicon(info, is_dir=False):
+def custom_of(info, path=None):
+    """(icon uri, icon name, colour, emblem) chosen with Customize folder.
+
+    A Harbor-only choice for this folder wins; else the global metadata.
+    """
+    from . import files_iconstore as store
+    if path:
+        own = store.store().get(path)
+        if own:
+            return tuple(own.get(k) for k in store.FIELDS)
+    return global_of(info)
+
+
+def custom_gicon(info, is_dir=False, path=None):
     """Icon chosen with Customize folder, or None."""
-    uri, name, color, emblem = custom_of(info)
+    uri, name, color, emblem = custom_of(info, path)
     if uri:
-        f = Gio.File.new_for_uri(uri) if "://" in uri else Gio.File.new_for_path(uri)
-        return Gio.FileIcon.new(f)
+        from . import files_iconstore as store
+        p = store.safe_icon_path(uri)
+        return Gio.FileIcon.new(Gio.File.new_for_path(p)) if p else None
     if name:
         return Gio.ThemedIcon.new(tinted(name, color if is_dir else None, emblem))
     return None
@@ -409,7 +434,7 @@ def custom_gicon(info, is_dir=False):
 
 def item_gicon(info, path=None, is_dir=False):
     """Icon for a list item: the bundled one in Modern mode, else the theme's."""
-    own = custom_gicon(info, is_dir)
+    own = custom_gicon(info, is_dir, path if is_dir else None)
     if own is not None:
         return own
     if not modern():
@@ -421,7 +446,7 @@ def item_gicon(info, path=None, is_dir=False):
         return own or Gio.ThemedIcon.new(FOLDER)
     name = icon_name_for(ct, info.get_display_name() or "", is_dir, path)
     if is_dir:
-        _u, _n, color, emblem = custom_of(info)
+        _u, _n, color, emblem = custom_of(info, path)
         name = tinted(name, color, emblem)
     return Gio.ThemedIcon.new(name)
 
