@@ -98,6 +98,13 @@ pub fn card<R>(ui: &mut Ui, pal: &Palette, add: impl FnOnce(&mut Ui) -> R) -> R 
 /// A rounded fill in `color` with the glass look of `pal.glass`, layered the
 /// way Fusion Desk draws its glass: optional shadow, the fill, the style's
 /// shading, the gloss band, corner glare, the pointer light and the rim.
+/// The same colour without transparency: dialogs and their text boxes stay
+/// readable over a see-through glass window.
+pub fn solid(color: Color32) -> Color32 {
+    let [r, g, b, _] = color.to_srgba_unmultiplied();
+    Color32::from_rgb(r, g, b)
+}
+
 pub fn glass_fill(pal: &Palette, rect: Rect, corner: u8, color: Color32) -> egui::Shape {
     use crate::theme::{GlassEffect, GlassMaterial, GlassStyle};
     let g = pal.glass;

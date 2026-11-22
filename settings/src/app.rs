@@ -3121,7 +3121,7 @@ The network will not reconnect automatically."
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .frame(
                 egui::Frame::new()
-                    .fill(pal.card)
+                    .fill(crate::widgets::solid(pal.card))
                     .stroke(Stroke::new(1.0, pal.card_border))
                     .corner_radius(8)
                     .inner_margin(Margin::same(22)),
@@ -3262,7 +3262,7 @@ The network will not reconnect automatically."
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .frame(
                 egui::Frame::new()
-                    .fill(pal.card)
+                    .fill(crate::widgets::solid(pal.card))
                     .stroke(Stroke::new(1.0, pal.card_border))
                     .corner_radius(8)
                     .inner_margin(Margin::same(22)),
@@ -3378,7 +3378,7 @@ The network will not reconnect automatically."
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .frame(
                 egui::Frame::new()
-                    .fill(pal.card)
+                    .fill(crate::widgets::solid(pal.card))
                     .stroke(Stroke::new(1.0, pal.card_border))
                     .corner_radius(8)
                     .inner_margin(Margin::same(22)),
@@ -3502,7 +3502,7 @@ The network will not reconnect automatically."
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .frame(
                 egui::Frame::new()
-                    .fill(pal.card)
+                    .fill(crate::widgets::solid(pal.card))
                     .stroke(Stroke::new(1.0, pal.card_border))
                     .corner_radius(8)
                     .inner_margin(Margin::same(22)),
@@ -3721,7 +3721,7 @@ The network will not reconnect automatically."
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .frame(
                 egui::Frame::new()
-                    .fill(pal.card)
+                    .fill(crate::widgets::solid(pal.card))
                     .stroke(Stroke::new(1.0, pal.card_border))
                     .corner_radius(8)
                     .inner_margin(Margin::same(22)),
@@ -3844,7 +3844,7 @@ The network will not reconnect automatically."
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .frame(
                 egui::Frame::new()
-                    .fill(pal.card)
+                    .fill(crate::widgets::solid(pal.card))
                     .stroke(Stroke::new(1.0, pal.card_border))
                     .corner_radius(8)
                     .inner_margin(Margin::same(22)),

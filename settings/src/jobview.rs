@@ -339,7 +339,7 @@ pub fn panel(
             ui.add_space(ROW_PAD);
             let box_w = (ui.available_width() - ROW_PAD).min(width) - 22.0;
             egui::Frame::new()
-                .fill(pal.input_bg)
+                .fill(crate::widgets::solid(pal.input_bg))
                 .stroke(Stroke::new(1.0, pal.input_border))
                 .corner_radius(pal.corner(6))
                 .inner_margin(Margin::same(10))
