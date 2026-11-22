@@ -203,7 +203,7 @@ class HomePage(Gtk.ScrolledWindow):
             sub = "Pinned" if not q["default"] else (
                 "Stored locally" if q["path"] == os.path.normpath(fc.home_dir())
                 else pretty_dir(os.path.dirname(q["path"])))
-            t = tile(q["icon"].replace("-symbolic", ""), q["label"], sub)
+            t = tile(files_icons.place_icon(q["path"], q["icon"].replace("-symbolic", "")), q["label"], sub)
             child = Gtk.FlowBoxChild(child=t)
             child.location = fc.location_for(q["path"])
             child.path = q["path"]
@@ -367,7 +367,7 @@ class ThisPCPage(Gtk.ScrolledWindow):
             if p != home and all(p != r[0] for r in rows):
                 rows.append((p, q["label"], q["icon"]))
         for path, lab, icon in rows:
-            child = Gtk.FlowBoxChild(child=tile(icon, lab, "Stored locally" if path == home
+            child = Gtk.FlowBoxChild(child=tile(files_icons.place_icon(path, icon), lab, "Stored locally" if path == home
                                                 else pretty_dir(os.path.dirname(path))))
             child.location = fc.location_for(path)
             child.path = path

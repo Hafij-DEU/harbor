@@ -451,6 +451,28 @@ def item_gicon(info, path=None, is_dir=False):
     return Gio.ThemedIcon.new(name)
 
 
+def place_icon(path, default):
+    """Icon for a folder shown by path alone (Quick access tiles, Home page,
+    sidebar): the Customize folder choice when there is one, else default."""
+    if not path or not os.path.isabs(path):
+        return default
+    info = None
+    try:
+        info = Gio.File.new_for_path(path).query_info(
+            ",".join(METADATA_ATTRS), Gio.FileQueryInfoFlags.NONE, None)
+    except GLib.Error:
+        pass
+    uri, name, color, emblem = custom_of(info, path)
+    if not (uri or name or color or emblem):
+        return default
+    own = custom_gicon(info, True, path)
+    if own is not None:
+        return own
+    if not modern():
+        return default
+    return Gio.ThemedIcon.new(tinted(icon_for_folder(path), color, emblem))
+
+
 def themed(name):
     """Map a theme icon name used by the UI to the bundled one (Modern mode)."""
     if not modern() or not isinstance(name, str):

@@ -144,3 +144,16 @@ def test_unsafe_global_metadata_is_ignored(tmp_path):
     info.set_attribute_string(fi.ATTR_FOLDER_COLOR, "url(evil)")
     assert fi.global_of(info) == (None, None, None, None)
     assert fi.custom_gicon(info, True) is None
+
+
+def test_place_icon_uses_custom_choice(tmp_path, store):
+    folder = tmp_path / "Docs"
+    folder.mkdir()
+    assert fi.place_icon(str(folder), "folder-documents") == "folder-documents"   # nothing chosen
+    pic = png(tmp_path / "p.png")
+    store.put(str(folder), {"icon_uri": GLib.filename_to_uri(pic, None)})
+    icon = fi.place_icon(str(folder), "folder-documents")
+    assert isinstance(icon, Gio.FileIcon) and icon.get_file().get_path() == pic
+    store.put(str(folder), {"icon_name": "folder-music"})
+    assert "folder-music" in fi.place_icon(str(folder), "folder-documents").get_names()[0]
+    assert fi.place_icon("relative", "x") == "x"

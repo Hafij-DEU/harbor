@@ -322,7 +322,8 @@ class Sidebar(Gtk.Box):
         add("home", "Home", "go-home-symbolic", fc.HOME_PAGE)
         lst.add_separator()
         for q in quick_access(self.settings):
-            add("pin:" + q["path"], q["label"], q["icon"], fc.location_for(q["path"]),
+            add("pin:" + q["path"], q["label"], files_icons.place_icon(q["path"], q["icon"]),
+                fc.location_for(q["path"]),
                 tooltip=q["path"], pinned=not q["default"])
         lst.add_separator()
         add("thispc", "This PC", "computer-symbolic", fc.THIS_PC)

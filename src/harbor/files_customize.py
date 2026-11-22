@@ -407,4 +407,7 @@ class CustomizeDialog(Adw.Dialog):
         tab = self.win.tab()
         if tab is not None:
             tab.refresh()
+        sb = getattr(self.win, "sidebar", None)
+        if sb is not None:
+            sb.queue_rebuild()      # Quick access rows show the new icon too
         self.close()
