@@ -162,6 +162,14 @@ def open_phone(win, text):
                          "Harbor Files › Connect › Start sharing.", timeout=6)
         return
     loc, user, password = got
+    try:
+        from . import files_stream
+        from .files_sidebar import phone_share_addr
+        addr = phone_share_addr(loc)
+        if addr:
+            files_stream.remember_pin(addr[0], addr[1], password)   # memory only, for streaming
+    except Exception:
+        pass
     op = Gio.MountOperation()
     op.set_username(user)
     op.set_password(password)

@@ -325,6 +325,7 @@ class Settings:
                 "share_upload_max_mb": 4096, "share_iface": "", "share_tailscale": False,
                 "share_in_sidebar": False,
                 "icon_scope": "global",   # Customize folder: "global" or "harbor"
+                "remote_media": "ask",    # big phone video/music: "ask", "stream", "download"
                 # 0.5.16
                 "folder_sizes": True,
                 # 0.5.18

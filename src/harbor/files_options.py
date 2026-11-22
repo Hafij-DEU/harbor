@@ -303,6 +303,10 @@ class SettingsDialog(Adw.PreferencesDialog):
         self._wifi_sync = False
         self.wifi_row.connect("notify::active", self._wifi_toggled)
         g3.add(self.wifi_row)
+        g3.add(self._combo("remote_media", "Big phone videos and music",
+                           "Video or audio over 50 MB opened from the phone",
+                           [("ask", "Ask each time"), ("stream", "Stream"),
+                            ("download", "Download first")]))
         p.add(g3)
 
     def _build_preview(self):

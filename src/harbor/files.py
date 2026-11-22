@@ -19,6 +19,7 @@ from . import files_tint  # noqa: E402
 from . import files_view  # noqa: E402
 from . import files_menus as fm  # noqa: E402
 from . import files_sidebar as fsb  # noqa: E402
+from . import files_stream as fstream  # noqa: E402
 from .common import HarborWindow, apply_theme  # noqa: E402
 from .files_ops import Operations  # noqa: E402
 from .files_tab import AddressBar, Tab  # noqa: E402
@@ -1009,8 +1010,126 @@ class FilesWindow(HarborWindow):
             # in the file type's app.
             if app is None and content_type:
                 app = Gio.AppInfo.get_default_for_type(content_type, False)
+            if fstream.is_media(content_type) and fsb.phone_share_addr(gfile.get_uri()):
+                return self._open_phone_media(gfile, content_type, app)
             return self._open_remote_copy(gfile, app)
         return self.launch(gfile.get_uri(), app)
+
+    # ------------------------------------------------ big phone videos / music
+    def _open_phone_media(self, gfile, content_type, app):
+        """Big video or music on the phone: stream it or download it first
+        (Settings > Behaviour > "Big phone videos and music")."""
+        def got(f, res):
+            try:
+                size = f.query_info_finish(res).get_size()
+            except GLib.Error:
+                size = 0
+            if not fstream.wants_choice(content_type, size):
+                self._open_remote_copy(gfile, app)
+                return
+            choice = self.settings.get("remote_media")
+            if choice == "stream":
+                self._stream_phone(gfile, content_type, size, app)
+            elif choice == "download":
+                self._open_remote_copy(gfile, app)
+            else:
+                self._ask_stream(gfile, content_type, size, app)
+        gfile.query_info_async("standard::size", Gio.FileQueryInfoFlags.NONE,
+                               GLib.PRIORITY_DEFAULT, None, got)
+        return True
+
+    def _ask_stream(self, gfile, content_type, size, app):
+        name = gfile.get_basename() or "file"
+        d = Adw.AlertDialog(
+            heading="Play “%s”" % name,
+            body="This file is %s and it's on the phone.\n\n"
+                 "Stream: plays at once and you can skip around. The phone has to stay "
+                 "on the same Wi-Fi while it plays.\n"
+                 "Download and play: copies it to this PC first, then plays it."
+                 % GLib.format_size(size))
+        d.add_response("cancel", "Cancel")
+        d.add_response("download", "Download and play")
+        d.add_response("stream", "Stream")
+        d.set_response_appearance("stream", Adw.ResponseAppearance.SUGGESTED)
+        d.set_default_response("stream")
+        d.set_close_response("cancel")
+        remember = Gtk.CheckButton(label="Remember my choice (change it in Settings › Behaviour)")
+        d.set_extra_child(remember)
+
+        def answered(_d, resp):
+            if resp == "cancel":
+                return
+            if remember.get_active():
+                self.apply_setting("remote_media", resp)
+            if resp == "stream":
+                self._stream_phone(gfile, content_type, size, app)
+            else:
+                self._open_remote_copy(gfile, app)
+        d.connect("response", answered)
+        d.present(self)
+
+    def _stream_phone(self, gfile, content_type, size, app):
+        name = gfile.get_basename() or "file"
+        if app is None or not app.supports_uris():
+            self.notify_toast("%s can't play from a link, so the file is downloaded first"
+                              % (app.get_display_name() if app else "No player"), timeout=5)
+            self._open_remote_copy(gfile, app)
+            return
+        uri = gfile.get_uri()
+        host, port = fsb.phone_share_addr(uri)
+        path = fstream.ftp_path(uri)
+        if path is None:
+            self._open_remote_copy(gfile, app)
+            return
+        user = "harbor"
+
+        def play(pin):
+            url = fstream.relay().add(host, port, user, pin, path, size, name, content_type)
+            self.notify_toast("Streaming %s from the phone" % name, timeout=3)
+            self.launch(url, app, recent=False)
+
+        def verify(pin, again):
+            def work():
+                err = fstream.check_login(host, port, user, pin)
+                GLib.idle_add(after, err)
+
+            def after(err):
+                if err is None:
+                    fstream.remember_pin(host, port, pin)
+                    play(pin)
+                elif again:
+                    fstream.forget_pin(host, port)
+                    self._ask_pin(name, err, lambda p: verify(p, False))
+                else:
+                    self.notify_toast("Can't stream from the phone: %s" % err, timeout=6)
+                return False
+            threading.Thread(target=work, daemon=True).start()
+        pin = fstream.pin_for(host, port)
+        if pin:
+            verify(pin, True)
+        else:
+            self._ask_pin(name, None, lambda p: verify(p, False))
+
+    def _ask_pin(self, name, error, then):
+        d = Adw.AlertDialog(
+            heading="Phone PIN",
+            body=("%s. " % error if error else "") +
+                 "Type the PIN shown on the phone under Harbor Files › Connect to stream “%s”." % name)
+        entry = Gtk.PasswordEntry(show_peek_icon=True, activates_default=True)
+        d.set_extra_child(entry)
+        d.add_response("cancel", "Cancel")
+        d.add_response("play", "Stream")
+        d.set_response_appearance("play", Adw.ResponseAppearance.SUGGESTED)
+        d.set_default_response("play")
+        d.set_close_response("cancel")
+
+        def answered(_d, resp):
+            pin = entry.get_text().strip()
+            entry.set_text("")
+            if resp == "play" and pin:
+                then(pin)
+        d.connect("response", answered)
+        d.present(self)
 
     def _open_remote_copy(self, gfile, app):
         import hashlib
@@ -1036,8 +1155,11 @@ class FilesWindow(HarborWindow):
         from .files_pages import AppChooser
         AppChooser(self, gfile, content_type).present(self)
 
-    def launch(self, uri, app=None):
-        """The one place that starts other apps (dry runs only log it)."""
+    def launch(self, uri, app=None, recent=True):
+        """The one place that starts other apps (dry runs only log it).
+
+        recent=False keeps the link out of Recent files (stream links hold a
+        one-time token)."""
         if common.DRY_RUN:
             common.DRY_RUN_LOG.append(["open-with", app.get_id(), uri] if app else ["open", uri])
             print("[dry-run] open", uri, file=sys.stderr)
@@ -1052,6 +1174,8 @@ class FilesWindow(HarborWindow):
                     Gio.AppInfo.launch_default_for_uri_finish(res)
             except GLib.Error as e:
                 self.notify_toast("Can't open this file: " + e.message, timeout=5)
+                return
+            if not recent:
                 return
             try:
                 Gtk.RecentManager.get_default().add_item(uri)
