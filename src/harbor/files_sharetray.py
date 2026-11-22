@@ -237,6 +237,7 @@ class UsbPhones:
         self.links = {}          # accessory sysname -> PhoneLink
         self.pending = 0.0       # until when a new accessory device is ours
         self.ended = 0.0         # when a link last ended (Disconnect on the phone)
+        self.asking = set()      # phones with a "Connect?" question open
         try:
             with open(_usb_store(), encoding="utf-8") as f:
                 self.known = set(json.load(f).get("serials", []))
@@ -287,10 +288,35 @@ class UsbPhones:
             return False
         return self.mode in ("auto", "only") or (self.mode == "ask" and d["serial"] in self.known)
 
+    def _maybe_switch(self, d):
+        """Switch a phone by itself only once the user agreed to it on this PC:
+        a phone never seen before gets a question first (it would get the PIN)."""
+        if d["serial"] and d["serial"] in self.known:
+            self._switch(d)
+            return
+        if d["sysname"] in self.asking:
+            return
+        self.asking.add(d["sysname"])
+        dlg = Gtk.MessageDialog(message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.NONE,
+                                text="Open this PC's shared folders on %s?" % d["name"],
+                                title="Send by USB cable")
+        dlg.format_secondary_text("A phone was plugged in. It will get access to what you share, "
+                                  "after you also allow Harbor Files on the phone.")
+        dlg.add_buttons("Not now", Gtk.ResponseType.CANCEL, "Connect", Gtk.ResponseType.OK)
+        dlg.set_keep_above(True)
+
+        def answer(w, resp):
+            self.asking.discard(d["sysname"])
+            w.destroy()
+            if resp == Gtk.ResponseType.OK and self.server.running:
+                self._switch(d)
+        dlg.connect("response", answer)
+        dlg.show()
+
     def _auto(self):
         for d in fusb.usb_devices():
             if not d["accessory"] and self._wanted(d):
-                self._switch(d)
+                self._maybe_switch(d)
         return False
 
     def _uevent(self, _client, action, dev):
@@ -314,7 +340,7 @@ class UsbPhones:
                 if time.monotonic() < self.pending and name not in self.links:
                     self._start(d)
             elif self._wanted(d):
-                self._switch(d)
+                self._maybe_switch(d)
         return False
 
     def _start(self, d):

@@ -21,7 +21,12 @@ How the cable link works:
   the data sent before it). ACK frames hand back credit, so a
   paused video can't block the cable for every other stream.
 * A stream can only reach the share server's own address and port: OPEN has
-  no target.
+  no target. Streams open only after HELLO, at most 64 at a time, and a side
+  that sends past its credit window ends the link. The share server still
+  asks for the PIN on every request.
+* The PC only sends HELLO (with the PIN) to a phone the user agreed to on the
+  PC: the first time a phone is seen, the share runner asks before switching
+  it. Android then asks on the phone too.
 * Every USB write is padded with a no-op frame when its length is a multiple
   of 64, so the other side's read always ends with a short packet.
 * While the phone is in accessory mode the PC can't see its files over MTP.
@@ -54,6 +59,7 @@ HELLO, OPEN, DATA, CLOSE, ACK, BYE, NOP = 1, 2, 3, 4, 5, 6, 0
 HEAD = struct.Struct(">BII")
 MAX_PAYLOAD = 64 * 1024
 WINDOW = 512 * 1024           # unacknowledged bytes per stream and direction
+MAX_STREAMS = 64              # open connections from one phone at a time
 READ_SIZE = 16384
 WRITE_TIMEOUT_MS = 15000
 
@@ -295,6 +301,7 @@ class _Stream:
         self.credit = WINDOW
         self.cv = threading.Condition()
         self.inbox = queue.Queue()
+        self.queued = 0           # phone bytes received but not yet written (credit check)
         self.closed = False
 
 
@@ -362,6 +369,12 @@ class Link:
 
     def _on_frame(self, kind, sid, payload):
         if kind == OPEN:
+            # Only after HELLO, and only so many at once.
+            with self.lock:
+                full = self.session is None or len(self.streams) >= MAX_STREAMS
+            if full:
+                self._safe_send(CLOSE, sid)
+                return
             # Registered now, so DATA sent right after OPEN waits in its inbox.
             s = _Stream(sid, None)
             with self.lock:
@@ -390,6 +403,11 @@ class Link:
         if s is None:
             return
         if kind == DATA:
+            with s.cv:
+                s.queued += len(payload)
+                over = s.queued > WINDOW
+            if over:                   # the phone ignored its credit: not our app
+                raise ValueError("phone sent past its window")
             s.inbox.put(payload)
         elif kind == CLOSE:
             s.inbox.put(None)
@@ -421,6 +439,8 @@ class Link:
                 if data is None:
                     break
                 s.sock.sendall(data)
+                with s.cv:
+                    s.queued -= len(data)
                 self._safe_send(ACK, s.sid, struct.pack(">I", len(data)))
         except OSError:
             pass

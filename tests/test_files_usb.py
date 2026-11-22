@@ -172,6 +172,7 @@ def test_link_respects_credit_so_a_paused_stream_stalls_alone():
                   lambda: socket.create_connection(srv.getsockname(), 5), {})
     link.start()
     phone = FakePhone(cable)
+    phone.send(u.HELLO, 1)
     phone.send(u.OPEN, 1)
     phone.recv_until(lambda f: f[0] == u.DATA and f[1] == 1)
     time.sleep(0.5)
@@ -201,6 +202,7 @@ def test_open_fails_cleanly_when_server_is_gone():
     link = u.Link(cable.pc_read, cable.pc_write, refuse, {})
     link.start()
     phone = FakePhone(cable)
+    phone.send(u.HELLO, 1)
     phone.send(u.OPEN, 9)
     phone.recv_until(lambda f: f[0] == u.CLOSE and f[1] == 9)
     link.stop()
@@ -222,6 +224,7 @@ def test_phone_close_ends_the_server_connection():
                   lambda: socket.create_connection(srv.getsockname(), 5), {})
     link.start()
     phone = FakePhone(cable)
+    phone.send(u.HELLO, 1)
     phone.send(u.OPEN, 3)
     time.sleep(0.3)
     phone.send(u.CLOSE, 3)
@@ -306,4 +309,45 @@ def test_new_phone_session_drops_old_streams():
         time.sleep(0.05)
     assert not link.streams
     link.stop()
+    srv.close()
+
+
+def test_open_needs_hello_and_is_capped():
+    def hold(c):
+        try:
+            while c.recv(100):
+                pass
+        except OSError:
+            pass
+    srv = _server(hold)
+    cable = Cable()
+    link = u.Link(cable.pc_read, cable.pc_write,
+                  lambda: socket.create_connection(srv.getsockname(), 5), {})
+    link.start()
+    phone = FakePhone(cable)
+    phone.send(u.OPEN, 1)                       # before HELLO: refused
+    phone.recv_until(lambda f: f[0] == u.CLOSE and f[1] == 1)
+    phone.send(u.HELLO, 5)
+    for i in range(10, 10 + u.MAX_STREAMS + 1):
+        phone.send(u.OPEN, i)
+    phone.recv_until(lambda f: f[0] == u.CLOSE and f[1] == 10 + u.MAX_STREAMS)
+    assert len(link.streams) <= u.MAX_STREAMS
+    link.stop()
+    srv.close()
+
+
+def test_phone_ignoring_credit_ends_the_link():
+    srv = _server(lambda c: time.sleep(3))      # never reads
+    cable = Cable()
+    ended = threading.Event()
+    link = u.Link(cable.pc_read, cable.pc_write,
+                  lambda: socket.create_connection(srv.getsockname(), 5), {}, on_end=ended.set)
+    link.start()
+    phone = FakePhone(cable)
+    phone.send(u.HELLO, 5)
+    phone.send(u.OPEN, 1)
+    time.sleep(0.2)
+    for _ in range(12):
+        phone.send(u.DATA, 1, b"z" * u.MAX_PAYLOAD)
+    assert ended.wait(5)
     srv.close()

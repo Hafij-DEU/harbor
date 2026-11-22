@@ -47,7 +47,9 @@ data class UsbPc(val name: String, val port: Int, val pin: String) {
  * player or Harbor makes to 127.0.0.1:port here becomes one stream (OPEN, DATA,
  * CLOSE) that the PC connects to its share server; ACK hands back credit so
  * one paused video can't stall the cable. The loopback listener is reachable
- * from this phone only.
+ * from this phone only, and every request still needs the PC's PIN (kept in
+ * memory, never saved). At most 64 connections at once; a PC that sends past
+ * its credit window ends the link.
  */
 class UsbLink(
     private val inp: InputStream,
@@ -57,6 +59,7 @@ class UsbLink(
 ) {
     private class Stream(val sock: Socket) {
         val inbox = LinkedBlockingQueue<ByteArray>()
+        val queued = AtomicInteger()      // PC bytes received, not yet written (credit check)
         val lock = Object()
         var credit = WINDOW.toLong()
         @Volatile var closed = false
@@ -104,7 +107,11 @@ class UsbLink(
                     val len = payload.size
                     when (kind) {
                     HELLO -> hello(payload)
-                    DATA -> streams[id]?.inbox?.put(payload)
+                    DATA -> streams[id]?.let { s ->
+                        // The PC must stay inside the window it was given.
+                        if (s.queued.addAndGet(len) > WINDOW) throw java.io.IOException("PC sent past its window")
+                        s.inbox.put(payload)
+                    }
                     CLOSE -> streams[id]?.inbox?.put(EMPTY_CLOSE)
                     ACK -> streams[id]?.let { s ->
                         if (len == 4) synchronized(s.lock) { s.credit += ByteBuffer.wrap(payload).int.toLong() and 0xffffffffL; s.lock.notifyAll() }
@@ -141,6 +148,7 @@ class UsbLink(
     }
 
     private fun open(c: Socket) {
+        if (streams.size >= MAX_STREAMS) { runCatching { c.close() }; return }
         val id = ids.getAndIncrement()
         val s = Stream(c)
         streams[id] = s
@@ -157,6 +165,7 @@ class UsbLink(
                 val b = s.inbox.take()
                 if (b === EMPTY_CLOSE) break
                 o.write(b); o.flush()
+                s.queued.addAndGet(-b.size)
                 safeSend(ACK, id, ByteBuffer.allocate(4).putInt(b.size).array())
             }
         } catch (_: Exception) {
@@ -238,6 +247,7 @@ class UsbLink(
         const val ACK = 5; const val BYE = 6; const val NOP = 0
         const val MAX_PAYLOAD = 64 * 1024
         const val WINDOW = 512 * 1024
+        const val MAX_STREAMS = 64
         private val EMPTY = ByteArray(0)
         private val EMPTY_CLOSE = ByteArray(0)
 
