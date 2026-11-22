@@ -160,16 +160,19 @@ class ServerService : Service() {
          * networks and tunnel interfaces are skipped.
          */
         /**
-         * Addresses the PC can use, best first: Wi-Fi, then the phone's own
-         * hotspot, USB tethering, Ethernet and Bluetooth tethering. Pairs of
+         * Addresses the PC can use, best first: USB tethering, Wi-Fi, then the
+         * phone's own hotspot, Ethernet and Bluetooth tethering. Pairs of
          * (IPv4, how). Mobile data and VPN tunnels never count.
          */
         fun shareAddrs(ctx: Context): List<Pair<String, String>> {
-            val out = ArrayList<Pair<String, String>>()
-            wifiIp(ctx)?.let { out += it to "Wi-Fi" }
             val ifs = runCatching { java.net.NetworkInterface.getNetworkInterfaces()?.toList() }.getOrNull().orEmpty()
                 .filter { runCatching { it.isUp && !it.isLoopback }.getOrDefault(false) }
-            out += chooseTetherIps(ifs.map { IpCandidate(it.name, false, it.inetAddresses.toList()) })
+            val tether = chooseTetherIps(ifs.map { IpCandidate(it.name, false, it.inetAddresses.toList()) })
+            // A USB cable wins over Wi-Fi: faster and works with Wi-Fi asleep.
+            val out = ArrayList<Pair<String, String>>()
+            out += tether.filter { it.second == "USB tethering" }
+            wifiIp(ctx)?.let { out += it to "Wi-Fi" }
+            out += tether
             return out.distinctBy { it.first }
         }
 
