@@ -44,7 +44,8 @@ class StreamProxy(private val client: OkHttpClient = defaultClient()) {
         val token = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(b)
         items[token] = src
         while (items.size > MAX_ITEMS) items.remove(items.keys.first())
-        val ss = server ?: ServerSocket(0, 16, InetAddress.getLoopbackAddress()).also { s ->
+        // IPv4 127.0.0.1, as in the link: getLoopbackAddress() is ::1 on some phones.
+        val ss = server ?: ServerSocket(0, 16, InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1))).also { s ->
             server = s
             thread(name = "stream-accept", isDaemon = true) {
                 while (!s.isClosed) {
