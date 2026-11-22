@@ -2681,7 +2681,7 @@ The network will not reconnect automatically."
                 .layout(Layout::left_to_right(Align::Center)),
             |ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
-                if caption_button(ui, pal, Caption::Minimize, pal.accent).clicked() {
+                if caption_button(ui, pal, Caption::Minimize, pal.accent, 0).clicked() {
                     ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
                 }
                 let glyph = if max {
@@ -2689,10 +2689,10 @@ The network will not reconnect automatically."
                 } else {
                     Caption::Maximize
                 };
-                if caption_button(ui, pal, glyph, pal.accent).clicked() {
+                if caption_button(ui, pal, glyph, pal.accent, 0).clicked() {
                     ctx.send_viewport_cmd(ViewportCommand::Maximized(!max));
                 }
-                if caption_button(ui, pal, Caption::Close, pal.accent).clicked() {
+                if caption_button(ui, pal, Caption::Close, pal.accent, self.frame_r).clicked() {
                     ctx.send_viewport_cmd(ViewportCommand::Close);
                 }
             },
@@ -4107,25 +4107,18 @@ impl eframe::App for App {
         };
         self.frame_r = if framed { FRAME_RADIUS } else { 0 };
         if framed {
-            // GNOME's window shadow: a soft Gaussian a little below the
-            // window, darkest at the edge (as Craft Suite and GTK get).
+            // GNOME's window shadow: soft and a little below the window,
+            // lighter when not focused. egui's feathered shadow has no hard
+            // outline (rings of 1 px strokes left a line at the edge).
             let focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
-            let (peak, sigma, drop) = if focused {
-                (0.30, 5.0, 3.0)
-            } else {
-                (0.18, 3.5, 2.0)
+            let (alpha, blur, drop) = if focused { (70, 20, 3) } else { (40, 14, 2) };
+            let shadow = egui::epaint::Shadow {
+                offset: [0, drop],
+                blur,
+                spread: 0,
+                color: Color32::from_black_alpha(alpha),
             };
-            let steps = FRAME_MARGIN as usize;
-            for i in 0..steps {
-                let t = i as f32;
-                let a = peak * (-(t * t) / (2.0 * sigma * sigma)).exp();
-                root.painter().rect_stroke(
-                    full.translate(Vec2::new(0.0, drop)).expand(t + 0.5),
-                    FRAME_RADIUS.saturating_add(i as u8),
-                    Stroke::new(1.0, Color32::from_black_alpha((a * 255.0) as u8)),
-                    StrokeKind::Middle,
-                );
-            }
+            root.painter().add(shadow.as_shape(full, self.frame_r));
         }
         root.painter().rect_filled(full, self.frame_r, pal.bg);
         widgets::glow_backdrop(root.painter(), full, &pal);

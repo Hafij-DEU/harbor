@@ -1121,20 +1121,32 @@ pub fn device_art(painter: &egui::Painter, rect: Rect, pal: &Palette, accent: Co
     painter.rect_filled(base, 1.5, pal.text_faint);
 }
 
-pub fn caption_button(ui: &mut Ui, pal: &Palette, kind: Caption, accent: Color32) -> Response {
+/// `corner`: the window's corner radius; Close rounds its top-right corner
+/// to match, so the red fill stays inside the rounded window.
+pub fn caption_button(
+    ui: &mut Ui,
+    pal: &Palette,
+    kind: Caption,
+    accent: Color32,
+    corner: u8,
+) -> Response {
     // Full title-bar height: the hit area reaches the window edge.
     let height = ui.available_height().max(32.0);
     let (rect, response) = ui.allocate_exact_size(Vec2::new(46.0, height), Sense::click());
     let close_hover = matches!(kind, Caption::Close) && response.hovered();
     if close_hover {
-        // Square fill: the window has square corners, so a rounded corner
-        // would leave a gap in the top-right corner of the screen.
+        // Rounded like the window's top-right corner (square when maximized,
+        // so the very corner of the screen stays red).
         let red = if pal.design == crate::theme::Design::Win10 {
             Color32::from_rgb(0xE8, 0x11, 0x23)
         } else {
             Color32::from_rgb(0xC4, 0x2B, 0x1C)
         };
-        ui.painter().rect_filled(rect, 0, red);
+        let round = egui::CornerRadius {
+            ne: corner,
+            ..Default::default()
+        };
+        ui.painter().rect_filled(rect, round, red);
     } else if response.hovered() {
         ui.painter().rect_filled(rect, 0, pal.hover);
     }
