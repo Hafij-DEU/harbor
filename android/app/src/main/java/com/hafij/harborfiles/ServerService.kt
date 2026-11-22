@@ -21,13 +21,17 @@ import java.io.File
 import java.net.Inet4Address
 import java.security.SecureRandom
 
-data class ServerInfo(val ip: String, val port: Int, val pin: String) {
+/** [via]: how the PC reaches the phone ("Wi-Fi", "hotspot", "USB tethering"...). */
+data class ServerInfo(val ip: String, val port: Int, val pin: String, val via: String = "Wi-Fi") {
     val url: String get() = "ftp://$ip:$port"
     /** The QR code carries the login too, so a scan connects with no typing. */
     val qrText: String get() = "ftp://harbor:$pin@$ip:$port/"
 }
 
-/** Runs [FtpServer] in the foreground while the phone is shared. Wi-Fi only; stops when idle. */
+/**
+ * Runs [FtpServer] in the foreground while the phone is shared: on Wi-Fi, on
+ * the phone's own hotspot or over USB tethering (never mobile data). Stops when idle.
+ */
 class ServerService : Service() {
     private var ftp: FtpServer? = null
     @Volatile private var lastActivity = 0L
@@ -42,9 +46,9 @@ class ServerService : Service() {
         if (intent?.action == ACTION_STOP) { shutdown(); return START_NOT_STICKY }
         if (ftp != null) return START_NOT_STICKY
         prefs = Prefs(this)
-        val ip = wifiIp(this)
-        if (ip == null) {
-            fail("Connect to Wi-Fi first. The phone is only shared on Wi-Fi."); return START_NOT_STICKY
+        val (ip, via) = shareAddrs(this).firstOrNull() ?: run {
+            fail("Connect to Wi-Fi, or turn on the hotspot or USB tethering first. The phone is never shared on mobile data.")
+            return START_NOT_STICKY
         }
         val pin = (100000 + SecureRandom().nextInt(900000)).toString()
         val s = FtpServer(File(PHONE_ROOT), pin, prefs.ftpPort, { prefs.readOnly }, { lastActivity = System.currentTimeMillis() },
@@ -56,7 +60,7 @@ class ServerService : Service() {
         }
         ftp = s
         lastActivity = System.currentTimeMillis()
-        val info = ServerInfo(ip, s.boundPort, pin)
+        val info = ServerInfo(ip, s.boundPort, pin, via)
         state.value = info
         error.value = null
         startForeground(1, notification(info), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
@@ -75,7 +79,7 @@ class ServerService : Service() {
             val idle = prefs.idleMin
             val tooIdle = idle > 0 && s.activeSessions == 0 &&
                 System.currentTimeMillis() - lastActivity > idle * 60_000L
-            if (tooIdle || wifiIp(this@ServerService) != state.value?.ip) { shutdown(); return }
+            if (tooIdle || shareAddrs(this@ServerService).none { it.first == state.value?.ip }) { shutdown(); return }
             handler.postDelayed(this, 30_000)
         }
     }
@@ -155,6 +159,20 @@ class ServerService : Service() {
          * tunnel address (10.2.0.2 on tun0) is useless to the PC, so VPN
          * networks and tunnel interfaces are skipped.
          */
+        /**
+         * Addresses the PC can use, best first: Wi-Fi, then the phone's own
+         * hotspot, USB tethering, Ethernet and Bluetooth tethering. Pairs of
+         * (IPv4, how). Mobile data and VPN tunnels never count.
+         */
+        fun shareAddrs(ctx: Context): List<Pair<String, String>> {
+            val out = ArrayList<Pair<String, String>>()
+            wifiIp(ctx)?.let { out += it to "Wi-Fi" }
+            val ifs = runCatching { java.net.NetworkInterface.getNetworkInterfaces()?.toList() }.getOrNull().orEmpty()
+                .filter { runCatching { it.isUp && !it.isLoopback }.getOrDefault(false) }
+            out += chooseTetherIps(ifs.map { IpCandidate(it.name, false, it.inetAddresses.toList()) })
+            return out.distinctBy { it.first }
+        }
+
         fun wifiIp(ctx: Context): String? {
             val cm = ctx.getSystemService(ConnectivityManager::class.java)
             val cands = ArrayList<IpCandidate>()
@@ -192,4 +210,28 @@ internal fun chooseWifiIp(cands: List<IpCandidate>): String? {
             ?.let { return it.hostAddress }
     }
     return null
+}
+
+/** How the PC reaches the phone through an interface, by its name, or null (not a local link). */
+internal fun tetherKind(iface: String): String? = when {
+    TUNNEL_IFACES.any { iface.startsWith(it) } -> null
+    listOf("rndis", "usb", "ncm").any { iface.startsWith(it) } -> "USB tethering"
+    listOf("ap", "swlan", "softap", "wlan").any { iface.startsWith(it) } -> "hotspot"
+    iface.startsWith("eth") -> "Ethernet"
+    iface.startsWith("bt-pan") || iface.startsWith("bnep") -> "Bluetooth tethering"
+    else -> null
+}
+
+/**
+ * Private IPv4 addresses on the phone's hotspot / tethering interfaces, best
+ * first (USB, hotspot, Ethernet, Bluetooth). Only private (site-local)
+ * addresses: never a public or mobile-data one.
+ */
+internal fun chooseTetherIps(cands: List<IpCandidate>): List<Pair<String, String>> {
+    val order = listOf("USB tethering", "hotspot", "Ethernet", "Bluetooth tethering")
+    return cands.mapNotNull { c ->
+        val kind = if (c.vpn) null else tetherKind(c.iface)
+        val ip = c.addrs.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }
+        if (kind != null && ip != null) ip.hostAddress!! to kind else null
+    }.sortedBy { order.indexOf(it.second) }
 }

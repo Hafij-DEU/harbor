@@ -152,7 +152,7 @@ fun Sidebar(state: AppState) {
                         Spacer(Modifier.height(8.dp))
                         FilledTonalButton(onClick = { ServerService.error.value = null; ServerService.start(state.ctx) }) { Text("Start sharing") }
                     } else {
-                        Text("Sharing on Wi-Fi", fontWeight = FontWeight.SemiBold, color = c.primary)
+                        Text("Sharing on ${i.via}", fontWeight = FontWeight.SemiBold, color = c.primary)
                         Text(i.url, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                         Text("PIN ${i.pin.chunked(3).joinToString(" ")}", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
                         Row {

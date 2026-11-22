@@ -243,7 +243,7 @@ private fun StreamAskDialog(a: AppState.StreamAsk) {
         text = {
             Column {
                 Text("This file is ${fmtSize(a.size)} and it's on the PC.")
-                Text("Stream: plays at once and you can skip around. Stay on the same Wi-Fi while it plays.",
+                Text("Stream: plays at once and you can skip around. Stay connected (same Wi-Fi, hotspot or USB) while it plays.",
                     Modifier.padding(top = 8.dp))
                 Text("Download: copies it to the phone first, then plays it. The copy is deleted when you come back.", Modifier.padding(top = 4.dp))
                 Row(Modifier.padding(top = 8.dp).clickable { remember = !remember }, verticalAlignment = Alignment.CenterVertically) {

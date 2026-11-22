@@ -49,6 +49,6 @@ suspend fun pairWithPc(code: PairCode): String? = withContext(Dispatchers.IO) {
                 }
             }
     } catch (e: IOException) {
-        "Can't reach the PC. Are both on the same Wi-Fi? (${e.message ?: "no answer"})"
+        "Can't reach the PC. Are both on the same Wi-Fi, hotspot or USB tethering? (${e.message ?: "no answer"})"
     }
 }

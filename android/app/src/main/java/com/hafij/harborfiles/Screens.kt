@@ -670,7 +670,7 @@ fun ConnectScreen(state: AppState) {
                     val qr = remember(i.qrText) { qrBitmap(i.qrText) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("Sharing on Wi-Fi", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                            Text("Sharing on ${i.via}", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.height(8.dp))
                             Text(i.url, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyLarge)
                             Text("User: harbor", style = MaterialTheme.typography.bodySmall)
