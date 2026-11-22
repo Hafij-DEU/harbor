@@ -124,7 +124,13 @@ class StreamProxy(private val client: OkHttpClient = defaultClient()) {
         val rb = Request.Builder().url(src.url)
         src.headers.forEach { (k, v) -> rb.header(k, v) }
         req.range?.let { rb.header("Range", it) }
-        client.newCall(rb.build()).execute().use { resp ->
+        val call = rb.build()
+        val first = try { client.newCall(call).execute() } catch (e: java.io.IOException) {
+            if (!staleConnection(e)) throw e
+            client.connectionPool.evictAll()     // the PC dropped a kept-alive connection
+            client.newCall(call).execute()
+        }
+        first.use { resp ->
             if (resp.code != 200 && resp.code != 206 && resp.code != 416) return reply(out, 502, "Bad Gateway")
             val h = ArrayList<Pair<String, String>>()
             h += "Content-Type" to (resp.header("Content-Type") ?: src.mime)

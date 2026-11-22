@@ -307,6 +307,12 @@ class SettingsDialog(Adw.PreferencesDialog):
                            "Videos over 5 MB or music over 50 MB opened from the phone. Downloads are deleted when the player closes them",
                            [("ask", "Ask each time"), ("stream", "Stream"),
                             ("download", "Download first")]))
+        g3.add(self._combo("share_usb", "Share over USB cable",
+                           "Phones open this PC's shared folders through the cable, no tethering. "
+                           "While connected, the PC can't see the phone's own files over USB",
+                           [("ask", "When I choose it in the share window"),
+                            ("auto", "Every phone plugged in while sharing"),
+                            ("off", "Off")]))
         p.add(g3)
 
     def _build_preview(self):

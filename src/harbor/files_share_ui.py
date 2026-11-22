@@ -108,7 +108,7 @@ def running_share():
         return None
 
 
-def start_share(folders, port, upload_max_mb, minutes):
+def start_share(folders, port, upload_max_mb, minutes, usb="ask"):
     """Start the share process. Returns None, or an error message."""
     pkg = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     env = dict(os.environ)
@@ -118,7 +118,8 @@ def start_share(folders, port, upload_max_mb, minutes):
                              stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                              stderr=subprocess.DEVNULL, start_new_session=True, text=True)
         p.stdin.write(json.dumps({"folders": folders, "port": port,
-                                  "upload_max_mb": upload_max_mb, "minutes": minutes}) + "\n")
+                                  "upload_max_mb": upload_max_mb, "minutes": minutes,
+                                  "usb": usb}) + "\n")
         p.stdin.close()
         line = p.stdout.readline()
         p.stdout.close()
@@ -384,7 +385,7 @@ class ShareDialog(Adw.Dialog):
             common.DRY_RUN_LOG.append(["share-start", [f["path"] for f in folders]])
             return
         err = start_share(folders, s.get("share_port"), s.get("share_upload_max_mb"),
-                          s.get("share_autostop"))
+                          s.get("share_autostop"), s.get("share_usb") or "ask")
         if err:
             self.win.notify_toast("Can't start sharing: %s" % err, timeout=6)
             return

@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Android
 import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Computer
+import androidx.compose.material.icons.rounded.Usb
 import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Description
@@ -690,6 +691,29 @@ fun ConnectScreen(state: AppState) {
             Text("Computers & servers", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             IconButton(onClick = { scanQr(state) }) { Icon(Icons.Rounded.QrCodeScanner, "Scan QR") }
             IconButton(onClick = { adding = true }) { Icon(Icons.Rounded.Add, "Add") }
+        }
+        val usbPc by UsbLinkService.state
+        usbPc?.let { pc ->
+            Card {
+                Row(
+                    Modifier.fillMaxWidth().clickable {
+                        val fs = fsFor(pc.server(), pc.pin)
+                        state.openFolder(fs, fs.root, fs.root, pc.name)
+                    }.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.Usb, null, tint = MaterialTheme.colorScheme.primary)
+                    }
+                    Spacer(Modifier.width(18.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(pc.name)
+                        Text("Over USB cable", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                    TextButton(onClick = { UsbLinkService.stop(state.ctx) }) { Text("Disconnect") }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
         }
         val servers = state.prefs.servers
         Card {

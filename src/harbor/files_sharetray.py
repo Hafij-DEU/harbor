@@ -33,6 +33,13 @@ try:
 except (ValueError, ImportError):
     AppIndicator = None
 
+try:
+    gi.require_version("GUdev", "1.0")
+    from gi.repository import GUdev  # noqa: E402
+except (ValueError, ImportError):
+    GUdev = None
+
+from . import files_usb as fusb  # noqa: E402
 from . import qr  # noqa: E402
 from .files_share import BUS_NAME, OBJECT_PATH, ShareServer  # noqa: E402
 XML = """
@@ -80,7 +87,7 @@ def own_name(conn):
 
 
 class Runner:
-    def __init__(self, server, conn):
+    def __init__(self, server, conn, usb="ask"):
         self.server = server
         self.conn = conn
         self.qr_win = None
@@ -95,6 +102,7 @@ class Runner:
             ind.set_menu(self._menu())
             ind.set_status(AppIndicator.IndicatorStatus.ACTIVE)
             self.indicator = ind
+        self.usb = UsbPhones(server, usb)
 
     def _call(self, conn, sender, path, iface, method, params, inv):
         if method == "Status":
@@ -111,10 +119,13 @@ class Runner:
         head = Gtk.MenuItem(label="Send by Wi-Fi: " + self.server.url, sensitive=False)
         menu.append(head)
         menu.append(Gtk.SeparatorMenuItem())
-        for label, cb in (("Show QR & PIN", self.show_qr),
-                          ("Copy address", self.copy_address),
-                          ("Open Harbor Files", self.open_files),
-                          ("Stop sharing", self.stop)):
+        items = [("Show QR & PIN", self.show_qr)]
+        if self.usb.mode != "off":
+            items.append(("Open on phone over USB cable", self.usb_connect))
+        items += [("Copy address", self.copy_address),
+                  ("Open Harbor Files", self.open_files),
+                  ("Stop sharing", self.stop)]
+        for label, cb in items:
             it = Gtk.MenuItem(label=label)
             it.connect("activate", lambda _i, cb=cb: cb())
             menu.append(it)
@@ -140,6 +151,12 @@ class Runner:
         left = Gtk.Label(label=time_left(s.stops_at))
         left.get_style_context().add_class("dim-label")
         box.add(left)
+        usb = Gtk.Button(label="Open on phone over USB cable")
+        usb.set_tooltip_text("Plug the phone in with a cable, click this, then allow Harbor Files on the phone. "
+                             "No tethering needed. While it's open, the phone's own files aren't shown over USB.")
+        usb.connect("clicked", lambda *_: self.usb_connect())
+        if self.usb.mode != "off":
+            box.add(usb)
         stop = Gtk.Button(label="Stop sharing")
         stop.get_style_context().add_class("destructive-action")
         stop.connect("clicked", lambda *_: self.stop())
@@ -171,9 +188,138 @@ class Runner:
         subprocess.Popen(cmd, start_new_session=True, stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+    def usb_connect(self):
+        msg = self.usb.connect_all()
+        if msg:
+            notice("Open on phone over USB cable", msg)
+
     def stop(self):
+        self.usb.stop()
         self.server.stop()          # on_stop quits the main loop
         return False
+
+
+def _usb_store():
+    return os.path.join(GLib.get_user_config_dir(), "harbor", "usb-phones.json")
+
+
+class UsbPhones:
+    """Phones on a USB cable that open this share (see files_usb).
+
+    mode (Harbor Files › Options › Share over USB cable):
+      "off"   nothing happens on USB
+      "ask"   a phone switches to accessory mode when the user clicks "Open on
+              phone over USB cable", and by itself later if it was opened that
+              way before (remembered by its USB serial number)
+      "auto"  every Android phone plugged in while sharing is on switches
+    """
+
+    def __init__(self, server, mode="ask"):
+        self.server = server
+        self.mode = mode if mode in ("off", "ask", "auto") else "ask"
+        self.links = {}          # accessory sysname -> PhoneLink
+        self.pending = 0.0       # until when a new accessory device is ours
+        try:
+            with open(_usb_store(), encoding="utf-8") as f:
+                self.known = set(json.load(f).get("serials", []))
+        except (OSError, ValueError, AttributeError):
+            self.known = set()
+        self.client = None
+        if GUdev is not None and self.mode != "off":
+            self.client = GUdev.Client.new(["usb/usb_device"])
+            self.client.connect("uevent", self._uevent)
+            GLib.timeout_add(1500, self._auto)
+
+    def _save(self):
+        p = _usb_store()
+        try:
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump({"serials": sorted(self.known)}, f)
+        except OSError:
+            pass
+
+    def _switch(self, d):
+        try:
+            fusb.switch_to_accessory(d["node"])
+        except OSError as e:
+            return "%s: %s" % (d["name"], e.strerror or e)
+        self.pending = time.monotonic() + 20
+        if d["serial"]:
+            self.known.add(d["serial"])
+            self._save()
+        return None
+
+    def connect_all(self):
+        """Switch every plugged-in phone; a short problem text, or None."""
+        if self.mode == "off":
+            return "Sharing over USB is off in Harbor Files › Options."
+        devs = fusb.usb_devices()
+        for d in devs:
+            if d["accessory"] and d["sysname"] not in self.links:
+                self._start(d)
+        phones = [d for d in devs if not d["accessory"]]
+        if not phones:
+            return None if self.links else "No phone found. Plug the phone in with a USB cable first."
+        errs = [e for e in (self._switch(d) for d in phones) if e]
+        return "\n".join(errs) or None
+
+    def _wanted(self, d):
+        return self.mode == "auto" or (self.mode == "ask" and d["serial"] in self.known)
+
+    def _auto(self):
+        for d in fusb.usb_devices():
+            if not d["accessory"] and self._wanted(d):
+                self._switch(d)
+        return False
+
+    def _uevent(self, _client, action, dev):
+        if not self.server.running:
+            return
+        name = dev.get_name()
+        if action == "remove":
+            link = self.links.pop(name, None)
+            if link:
+                link.stop(reset=False)
+            return
+        if action != "add":
+            return
+        GLib.timeout_add(800, self._added, name)
+
+    def _added(self, name):
+        for d in fusb.usb_devices():
+            if d["sysname"] != name:
+                continue
+            if d["accessory"]:
+                if time.monotonic() < self.pending and name not in self.links:
+                    self._start(d)
+            elif self._wanted(d):
+                self._switch(d)
+        return False
+
+    def _start(self, d):
+        hello = {"v": 1, "name": GLib.get_host_name(), "pin": self.server.pin, "port": self.server.port}
+        try:
+            link = fusb.PhoneLink(d["node"], self.server.host, self.server.port, hello,
+                                  on_end=lambda n=d["sysname"]: GLib.idle_add(self._ended, n))
+            link.start()
+        except OSError:
+            return
+        self.links[d["sysname"]] = link
+
+    def _ended(self, name):
+        link = self.links.pop(name, None)
+        if link:
+            link.stop(reset=True)
+        return False
+
+    def stop(self):
+        links, self.links = list(self.links.values()), {}
+        for link in links:
+            try:
+                link.stop(reset=True)
+            except OSError:
+                pass
 
 
 def saved_config(settings=None):
@@ -184,7 +330,7 @@ def saved_config(settings=None):
     d = settings.data
     return {"folders": [dict(f) for f in d.get("share_folders", [])],
             "port": d.get("share_port"), "upload_max_mb": d.get("share_upload_max_mb"),
-            "minutes": d.get("share_autostop")}
+            "minutes": d.get("share_autostop"), "usb": d.get("share_usb") or "ask"}
 
 
 def shareable(folders):
@@ -250,13 +396,14 @@ def main(argv=None):
     except OSError as e:
         answer({"error": str(e)})
         return 1
-    runner = Runner(server, conn)
+    runner = Runner(server, conn, cfg.get("usb") or "ask")
     answer({"ok": True})
     if again:
         runner.show_qr()
     for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sig, lambda *_: server.stop() or False)
     Gtk.main()
+    runner.usb.stop()       # phones on the cable go back to normal (MTP)
     server.stop()
     return 0
 

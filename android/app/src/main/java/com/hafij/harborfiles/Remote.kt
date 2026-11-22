@@ -190,6 +190,10 @@ class FtpFs(
 
 // ------------------------------------------------------------- WebDAV client
 
+internal fun staleConnection(e: IOException): Boolean =
+    e is java.io.EOFException || e is java.net.SocketException ||
+        (e.message ?: "").startsWith("unexpected end of stream")
+
 class DavFs(
     override val key: String,
     override val title: String,
@@ -217,7 +221,18 @@ class DavFs(
         if (e.isDir) null else StreamSource(origin + e.path, mapOf("Authorization" to auth), e.size, e.mime ?: mimeOf(e.name))
 
     private fun call(r: Request): okhttp3.Response {
-        val resp = http.newCall(r).execute()
+        val resp = try {
+            http.newCall(r).execute()
+        } catch (e: IOException) {
+            // A kept-alive connection the PC already dropped (share restarted,
+            // network or cable changed) fails with "unexpected end of stream".
+            // Try once more on a fresh connection, then say what happened.
+            if (!staleConnection(e) || r.body?.isOneShot() == true) throw e
+            http.connectionPool.evictAll()
+            try { http.newCall(r).execute() } catch (e2: IOException) {
+                if (staleConnection(e2)) throw IOException("The PC closed the connection. Is sharing still on?") else throw e2
+            }
+        }
         if (!resp.isSuccessful) {
             val msg = when (resp.code) {
                 401 -> "Wrong PIN"

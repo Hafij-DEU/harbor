@@ -138,7 +138,7 @@ class MainActivity : ComponentActivity() {
 
     private var askTab by mutableIntStateOf(-1)
 
-    override fun onResume() { super.onResume(); resumes++; PlayTemp.cleanup() }
+    override fun onResume() { super.onResume(); resumes++; PlayTemp.cleanup(); UsbLinkService.ensure(this) }
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
