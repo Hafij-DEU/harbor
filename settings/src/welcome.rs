@@ -164,7 +164,7 @@ pub fn show(app: &mut App, ctx: &Context, pal: &Palette) {
         .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
         .frame(
             egui::Frame::new()
-                .fill(pal.card)
+                .fill(crate::widgets::solid(pal.card))
                 .stroke(Stroke::new(1.0, pal.card_border))
                 .corner_radius(pal.corner(10))
                 .inner_margin(Margin::same(26)),
