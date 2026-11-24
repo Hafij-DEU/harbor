@@ -323,7 +323,7 @@ class Settings:
                 # Share over Wi-Fi (never starts by itself)
                 "share_folders": [], "share_port": 8765, "share_autostop": 30,
                 "share_upload_max_mb": 4096, "share_usb": "ask", "share_iface": "", "share_tailscale": False,
-                "share_in_sidebar": False, "usb_in_sidebar": True,
+                "share_in_sidebar": False, "usb_in_sidebar": False,
                 "icon_scope": "global",   # Customize folder: "global" or "harbor"
                 "remote_media": "ask",    # big phone video/music: "ask", "stream", "download"
                 # 0.5.16
