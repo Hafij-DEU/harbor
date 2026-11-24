@@ -18,10 +18,10 @@ pub fn system(app: &mut App, ui: &mut Ui) {
     spacer(ui, 8.0);
     if app.design == crate::theme::Design::Win11 {
         spacer(ui, 6.0);
-        widgets::section_label(ui, &pal, "Quick settings");
+        widgets::section_label(ui, &pal, "Recently accessed");
         let width = ui.available_width();
         let x0 = ui.cursor().left();
-        quick_settings(app, ui, &pal, width, x0, width, 1.0);
+        recent_settings(app, ui, &pal, width, x0, width, 1.0);
         spacer(ui, 14.0);
     }
 

@@ -33,6 +33,9 @@ pub struct KeyboardUi {
     pub task: Option<Task>,
     /// A Type button waiting for a key: (rule index, 0 = from / 1 = to).
     pub capture: Option<(usize, u8)>,
+    /// Remap rules shown as editors; the rest show as a list row with
+    /// Edit and Remove. New rules open here; Apply closes them all.
+    pub open: Vec<usize>,
     pub key_check: super::key_check::KeyCheckUi,
     pub boards: Vec<Keyboard>,
     pub status: Option<Status>,

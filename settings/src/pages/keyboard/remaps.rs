@@ -1,13 +1,14 @@
-//! "Remap keys and shortcuts" card (like PowerToys Keyboard Manager): a key
-//! or shortcut types another key or shortcut, or nothing, on every keyboard
-//! or one keyboard. Edits stay in `KeyboardUi::draft` until Apply.
+//! "Remap keys" card (like PowerToys Keyboard Manager): a key types another
+//! key, a shortcut, or nothing, on every keyboard or one keyboard. Applied
+//! rules show as one line with Edit and Remove; new or edited ones show the
+//! editor. Edits stay in `KeyboardUi::draft` until Apply.
 
 use eframe::egui::{self, Ui};
 
 use super::state;
 use crate::app::App;
 use crate::icons::Icon;
-use crate::keyboard::config::{Rule, RuleKind};
+use crate::keyboard::config::Rule;
 use crate::keyboard::devices::{Keyboard, Target};
 use crate::keyboard::keys::{
     self, mod_bit, mod_label, Combo, DISABLED, MODS, MOD_ALT, MOD_CTRL, MOD_SHIFT, MOD_SUPER,
@@ -20,7 +21,7 @@ const FROM: u8 = 0;
 const TO: u8 = 1;
 
 pub fn show(app: &mut App, ui: &mut Ui, pal: &Palette) {
-    widgets::section_label(ui, pal, "Remap keys and shortcuts");
+    widgets::section_label(ui, pal, "Remap keys");
     let saved = app.keyboard.saved().clone();
     let mut draft = app.keyboard.draft.clone().unwrap_or_else(|| saved.clone());
     let boards = app.keyboard.boards.clone();
@@ -43,7 +44,7 @@ pub fn show(app: &mut App, ui: &mut Ui, pal: &Palette) {
             pal,
             pal.accent,
             Icon::Keyboard,
-            "Remap keys and shortcuts",
+            "Remap keys",
             &sub,
             Right::Switch(&mut draft.remap),
         );
@@ -52,59 +53,92 @@ pub fn show(app: &mut App, ui: &mut Ui, pal: &Palette) {
             .inner_margin(egui::Margin::symmetric(16, 0))
             .show(ui, |ui| {
             let mut remove = None;
-            for (kind, title, sub) in [
-                (
-                    RuleKind::Key,
-                    "Remap a key",
-                    "A key types another key or shortcut, or nothing. Select Type and press the key.",
-                ),
-                (RuleKind::Shortcut, "Remap a shortcut", "A shortcut types another shortcut or key"),
-            ] {
+            {
                 widgets::divider(ui, pal);
                 ui.add_space(8.0);
-                ui.label(egui::RichText::new(title).size(14.5).color(pal.text));
-                ui.label(egui::RichText::new(sub).size(12.0).color(pal.text_faint));
+                ui.label(
+                    egui::RichText::new(
+                        "A key types another key or shortcut, or nothing. Select Type and press the key.",
+                    )
+                    .size(12.0)
+                    .color(pal.text_faint),
+                );
                 ui.add_space(6.0);
                 for (i, rule) in draft.rules.iter_mut().enumerate() {
-                    if rule.kind != kind {
+                    let k = &mut app.keyboard;
+                    if !k.open.contains(&i) {
+                        // Applied rule: one line with Edit and Remove.
+                        ui.horizontal_wrapped(|ui| {
+                            ui.spacing_mut().item_spacing.x = 6.0;
+                            super::keycap(ui, &rule.from.label(), super::colour::FROM_KEY);
+                            ui.label(egui::RichText::new(" → ").size(15.0).color(pal.text_muted));
+                            let to = if rule.to.key == DISABLED {
+                                super::colour::DISABLED_KEY
+                            } else {
+                                super::colour::REMAP
+                            };
+                            super::keycap(ui, &rule.to.label(), to);
+                            ui.label(
+                                egui::RichText::new(format!("· {}", target_text(&rule.on, &boards)))
+                                    .size(12.5)
+                                    .color(pal.text_muted),
+                            );
+                            ui.add_space(8.0);
+                            if super::super::segment(ui, pal, "Edit", false) {
+                                k.open.push(i);
+                            }
+                            if super::super::segment(ui, pal, "Remove", false) {
+                                remove = Some(i);
+                            }
+                        });
+                        ui.add_space(4.0);
                         continue;
                     }
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing.x = 6.0;
-                        let capture = &mut app.keyboard.capture;
-                        combo_editor(ui, pal, (i, FROM), &mut rule.from, kind == RuleKind::Shortcut, false, capture);
+                        let capture = &mut k.capture;
+                        combo_editor(ui, pal, (i, FROM), &mut rule.from, false, false, capture);
                         ui.label(egui::RichText::new("  →  ").size(15.0).color(pal.text_muted));
                         combo_editor(ui, pal, (i, TO), &mut rule.to, true, true, capture);
                         keyboard_picker(ui, i, &mut rule.on, &boards);
+                        if ui.link(egui::RichText::new("Done").color(pal.accent)).clicked() {
+                            k.open.retain(|&o| o != i);
+                            if k.capture.is_some_and(|c| c.0 == i) {
+                                k.capture = None;
+                            }
+                        }
                         if ui.link(egui::RichText::new("Remove").color(pal.accent)).clicked() {
                             remove = Some(i);
                         }
                     });
                     ui.add_space(4.0);
                 }
-                let add = match kind {
-                    RuleKind::Key => "+ Add a key remap",
-                    RuleKind::Shortcut => "+ Add a shortcut remap",
-                };
-                if ui.link(egui::RichText::new(add).color(pal.accent)).clicked() {
-                    let from = match kind {
-                        RuleKind::Key => Combo { mods: 0, key: 58 }, // Caps Lock
-                        RuleKind::Shortcut => Combo { mods: MOD_CTRL | MOD_ALT, key: 20 }, // Ctrl+Alt+T
-                    };
-                    draft.rules.push(Rule { kind, from, to: Combo { mods: 0, key: 1 }, on: Target::Every });
+                if ui.link(egui::RichText::new("+ Add a key remap").color(pal.accent)).clicked() {
+                    app.keyboard.open.push(draft.rules.len());
+                    draft.rules.push(Rule {
+                        from: Combo { mods: 0, key: 58 }, // Caps Lock
+                        to: Combo { mods: 0, key: 1 },    // Esc
+                        on: Target::Every,
+                    });
                 }
                 ui.add_space(6.0);
             }
             if let Some(i) = remove {
                 draft.rules.remove(i);
                 app.keyboard.capture = None;
+                // Later rules move up one place.
+                let open = &mut app.keyboard.open;
+                open.retain(|&o| o != i);
+                for o in open.iter_mut().filter(|o| **o > i) {
+                    *o -= 1;
+                }
             }
             widgets::divider(ui, pal);
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 let changed = draft.remap != saved.remap || draft.rules != saved.rules;
                 let label = if saving { "Saving…" } else { "Apply" };
-                let resp = widgets::button(ui, pal, pal.accent, label, None);
+                let resp = widgets::button(ui, pal, super::colour::REMAP, label, None);
                 if resp.clicked() && !saving && (changed || !running) {
                     apply = true;
                 }
@@ -123,6 +157,8 @@ pub fn show(app: &mut App, ui: &mut Ui, pal: &Palette) {
         let mut cfg = saved;
         cfg.remap = draft.remap;
         cfg.rules = draft.rules.clone();
+        app.keyboard.open.clear();
+        app.keyboard.capture = None;
         state::save(app, cfg, "Remaps saved");
     }
     app.keyboard.draft = Some(draft);
@@ -287,14 +323,7 @@ fn egui_code(key: egui::Key) -> Option<u16> {
 /// Which keyboard a rule works on: every keyboard, the laptop's own, or one
 /// plugged-in keyboard (listed by name, saved by vendor:product).
 fn keyboard_picker(ui: &mut Ui, i: usize, on: &mut Target, boards: &[Keyboard]) {
-    let text = match on {
-        Target::Every => "Every keyboard".to_owned(),
-        Target::Internal => "Laptop keyboard".to_owned(),
-        Target::Id(id) => boards
-            .iter()
-            .find(|k| &k.id == id)
-            .map_or_else(|| format!("Keyboard {id} (unplugged)"), |k| k.name.clone()),
-    };
+    let text = target_text(on, boards);
     egui::ComboBox::from_id_salt(("keymap-board", i))
         .selected_text(text)
         .width(190.0)
@@ -307,4 +336,16 @@ fn keyboard_picker(ui: &mut Ui, i: usize, on: &mut Target, boards: &[Keyboard]) 
                 ui.selectable_value(on, k.target(), &k.name);
             }
         });
+}
+
+/// "Every keyboard", "Laptop keyboard" or a plugged-in keyboard's name.
+fn target_text(on: &Target, boards: &[Keyboard]) -> String {
+    match on {
+        Target::Every => "Every keyboard".to_owned(),
+        Target::Internal => "Laptop keyboard".to_owned(),
+        Target::Id(id) => boards
+            .iter()
+            .find(|k| &k.id == id)
+            .map_or_else(|| format!("Keyboard {id} (unplugged)"), |k| k.name.clone()),
+    }
 }

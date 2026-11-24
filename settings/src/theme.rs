@@ -278,6 +278,55 @@ impl Glass {
     }
 }
 
+/// How icons and switches are coloured (Personalisation › Colour style).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Look {
+    /// Everything in the accent colour.
+    #[default]
+    Accent,
+    /// Each icon (and its row's switch) gets its own colour from `COLOURFUL`.
+    Colourful,
+}
+
+impl Look {
+    pub const ALL: [Look; 2] = [Look::Accent, Look::Colourful];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Look::Accent => "Accent",
+            Look::Colourful => "Colourful",
+        }
+    }
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Look::Accent => "accent",
+            Look::Colourful => "colourful",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Self> {
+        match key.trim().to_ascii_lowercase().as_str() {
+            "accent" => Some(Look::Accent),
+            "colourful" | "colorful" => Some(Look::Colourful),
+            _ => None,
+        }
+    }
+}
+
+/// Colours the Colourful look picks from; all carry a white glyph and read
+/// on light and dark cards.
+pub const COLOURFUL: [Color32; 8] = [
+    Color32::from_rgb(0x00, 0x78, 0xD4), // blue
+    Color32::from_rgb(0x10, 0x7C, 0x10), // green
+    Color32::from_rgb(0xCA, 0x50, 0x10), // orange
+    Color32::from_rgb(0x87, 0x64, 0xB8), // purple
+    Color32::from_rgb(0x03, 0x83, 0x87), // teal
+    Color32::from_rgb(0xD6, 0x33, 0x6B), // rose
+    Color32::from_rgb(0x98, 0x6F, 0x0B), // gold
+    Color32::from_rgb(0xC2, 0x39, 0xB3), // magenta
+];
+
 /// Which Windows design the app paints. The settings, pages and behaviour are
 /// identical; only the chrome, palette and home screen change.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -349,6 +398,8 @@ pub struct Palette {
     pub design: Design,
     /// Glass styling (Personalisation › Glass effects).
     pub glass: Glass,
+    /// Accent or Colourful icons (see `tint`).
+    pub look: Look,
     /// The pointer, for "Light follows pointer".
     pub pointer: Option<egui::Pos2>,
 }
@@ -364,6 +415,21 @@ impl Palette {
     /// Apply a glass style: cards, inputs and panes take the style's tint and
     /// the opacity, so the glow backdrop (and, in a see-through window, the
     /// desktop) shows through them.
+    /// The colour for an icon tile or a row's switch. Widgets ask with the
+    /// accent; in the Colourful look the accent becomes a colour picked by
+    /// `seed` (a row title or icon name), so the same item keeps its colour.
+    /// Any other colour a page chose on purpose is kept.
+    pub fn tint(&self, color: Color32, seed: &str) -> Color32 {
+        if self.look != Look::Colourful || color != self.accent {
+            return color;
+        }
+        // FNV-1a: stable between runs, unlike the std hasher.
+        let hash = seed
+            .bytes()
+            .fold(0x811c_9dc5u32, |h, b| (h ^ b as u32).wrapping_mul(0x0100_0193));
+        COLOURFUL[hash as usize % COLOURFUL.len()]
+    }
+
     pub fn with_glass(mut self, glass: Glass, see_through: bool) -> Self {
         self.glass = glass;
         if !glass.on() {
@@ -459,6 +525,7 @@ impl Palette {
                 tooltip: Color32::from_rgb(0x2B, 0x2B, 0x2B),
                 design,
                 glass: Glass::OFF,
+                look: Look::Accent,
                 pointer: None,
             },
             Mode::Light => Self {
@@ -483,6 +550,7 @@ impl Palette {
                 tooltip: Color32::from_rgb(0xF2, 0xF2, 0xF2),
                 design,
                 glass: Glass::OFF,
+                look: Look::Accent,
                 pointer: None,
             },
         }
@@ -513,6 +581,7 @@ impl Palette {
                 tooltip: Color32::from_rgb(0x2D, 0x2D, 0x2D),
                 design,
                 glass: Glass::OFF,
+                look: Look::Accent,
                 pointer: None,
             },
             Mode::Light => Self {
@@ -537,6 +606,7 @@ impl Palette {
                 tooltip: Color32::from_rgb(0xF0, 0xF0, 0xF0),
                 design,
                 glass: Glass::OFF,
+                look: Look::Accent,
                 pointer: None,
             },
         }

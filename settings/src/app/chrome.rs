@@ -27,6 +27,20 @@ impl App {
         self.search.clear();
     }
 
+    /// Put the page on screen at the top of Recently accessed (saved when
+    /// it changes). Called every frame, so every way of opening a page counts.
+    pub(crate) fn note_recent(&mut self) {
+        const KEEP: usize = 12;
+        if self.view == View::Home || self.recent.first() == Some(&self.view) {
+            return;
+        }
+        let view = self.view;
+        self.recent.retain(|v| *v != view);
+        self.recent.insert(0, view);
+        self.recent.truncate(KEEP);
+        system::save_recent(&self.recent);
+    }
+
     pub fn back(&mut self) {
         match self.view {
             View::Detail(page, _) => self.view = View::Page(page),

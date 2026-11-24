@@ -425,6 +425,17 @@ pub fn divider(ui: &mut Ui, pal: &Palette) {
 
 /// The leading glyph of a row. Windows 11 paints it on an accent tile;
 /// Windows 10 uses a flat, accent-coloured line glyph with no tile.
+/// Seed for `Palette::tint`, so one icon keeps one colour everywhere.
+fn icon_seed(icon: Icon) -> String {
+    format!("icon{}", icon as u16)
+}
+
+/// An icon drawn without a tile: the accent, or its own colour when the look
+/// is Colourful.
+pub fn icon_ink(pal: &Palette, icon: Icon) -> Color32 {
+    pal.tint(pal.accent, &icon_seed(icon))
+}
+
 pub fn icon_tile(
     painter: &egui::Painter,
     rect: Rect,
@@ -433,9 +444,10 @@ pub fn icon_tile(
     fg: Color32,
     pal: &Palette,
 ) {
+    let fill = pal.tint(fill, &icon_seed(icon));
     if pal.design == crate::theme::Design::Win10 {
         let glyph = Rect::from_center_size(rect.center(), Vec2::splat(rect.width() * 0.78));
-        icons::paint(painter, icon, glyph, pal.accent);
+        icons::paint(painter, icon, glyph, icon_ink(pal, icon));
         return;
     }
     painter.rect_filled(rect, 6, fill);
@@ -522,6 +534,8 @@ fn row_impl(
     subtitle: &str,
     mut right: Right<'_>,
 ) -> RowOutcome {
+    // Colourful look: each row's icon and switch take a colour of their own.
+    let accent = pal.tint(accent, title);
     let width = ui.available_width();
     let row_h = if pal.design == crate::theme::Design::Win10 {
         ROW_H_10
@@ -827,6 +841,7 @@ pub fn nav_item(
         Pos2::new(rect.left() + 23.0, rect.center().y),
         Vec2::splat(24.0),
     );
+    let accent = pal.tint(accent, &icon_seed(icon));
     let tile_color = if selected {
         accent
     } else {

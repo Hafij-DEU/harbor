@@ -252,6 +252,31 @@ pub fn personalisation(app: &mut App, ui: &mut Ui) {
         ui.add_space(16.0);
     });
 
+    // Accent or Colourful icons, for the whole app.
+    spacer(ui, 12.0);
+    widgets::card(ui, &pal, |ui| {
+        use crate::theme::Look;
+        let options: Vec<(String, String)> = Look::ALL
+            .iter()
+            .map(|l| (l.key().to_owned(), l.label().to_owned()))
+            .collect();
+        let picked = super::combo_row(
+            ui,
+            &pal,
+            Icon::Sparkle,
+            "Colour style",
+            "Accent: every icon in the accent colour. Colourful: each icon its own colour",
+            "look",
+            &options,
+            app.look.key(),
+            190.0,
+        );
+        if let Some(look) = picked.as_deref().and_then(Look::from_key) {
+            app.set_look(look);
+        }
+        ui.add_space(10.0);
+    });
+
     spacer(ui, 14.0);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 10.0;

@@ -436,6 +436,12 @@ The network will not reconnect automatically."
         self.glass_scopes[0] = Some(system::global_glass());
     }
 
+    pub fn set_look(&mut self, look: crate::theme::Look) {
+        self.look = look;
+        system::save_look(look);
+        self.notify(format!("{} colours applied", look.label()));
+    }
+
     pub fn set_home_links(&mut self, on: bool) {
         self.home_links = on;
         system::save_home_links(on);

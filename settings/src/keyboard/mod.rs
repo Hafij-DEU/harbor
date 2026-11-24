@@ -5,7 +5,7 @@
 //! the service includes it with `#[path]`, so it must stay plain std.
 //!
 //! What it does, for every keyboard or one keyboard:
-//! * remap a key or shortcut to another key or shortcut, or disable a key;
+//! * remap a key to another key or shortcut, or disable a key;
 //! * turn a keyboard off (sysfs `inhibited`, like Toggle Internal Keyboard);
 //! * stuck-key guard: when a key stays down while the keyboard is silent,
 //!   restart (reset) that keyboard, or disable the stuck key;

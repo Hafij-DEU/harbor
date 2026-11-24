@@ -52,6 +52,10 @@ pub struct App {
     pub design: crate::theme::Design,
     /// Windows 10 home: list each category's pages on its card.
     pub home_links: bool,
+    /// Accent or Colourful icons (Personalisation › Colour style).
+    pub look: crate::theme::Look,
+    /// Recently accessed pages, newest first (home and System page tiles).
+    pub recent: Vec<View>,
     /// Glass values per scope (`system::GlassScope::ALL` order); `None`
     /// follows the scope above.
     pub glass_scopes: [Option<crate::theme::Glass>; 5],
@@ -265,6 +269,8 @@ impl App {
             follow_system,
             design,
             home_links: system::saved_home_links(),
+            look: system::saved_look(),
+            recent: system::saved_recent(),
             glass_scopes: system::GlassScope::ALL.map(system::scope_glass),
             glass_edit: system::GlassScope::Harbor,
             glass_window: system::glass_window(),
@@ -381,12 +387,14 @@ impl App {
         let see = self.glass_window && glass.see_through();
         let mut pal = Palette::new(self.mode, self.accent, self.design).with_glass(glass, see);
         pal.pointer = self.pointer;
+        pal.look = self.look;
         pal
     }
 }
 
 impl eframe::App for App {
     fn ui(&mut self, root: &mut Ui, _frame: &mut eframe::Frame) {
+        self.note_recent();
         if std::env::var("WIN11_SETTINGS_STARTUP").is_ok() && !self.first_frame_logged {
             self.first_frame_logged = true;
             eprintln!(

@@ -90,6 +90,54 @@ pub enum Detail {
 }
 
 impl Detail {
+    /// Stable number for saved files (Desk sections are 100 + index).
+    pub fn code(self) -> u16 {
+        match self {
+            Detail::Display => 0,
+            Detail::Sound => 1,
+            Detail::Notifications => 2,
+            Detail::Power => 3,
+            Detail::Storage => 4,
+            Detail::About => 5,
+            Detail::Pointer => 6,
+            Detail::Keyboard => 7,
+            Detail::DefaultApps => 8,
+            Detail::Desk(i) => 100 + i as u16,
+        }
+    }
+
+    /// Own icon (the Desktop & windows sections use their page's).
+    pub fn icon(self) -> Option<Icon> {
+        Some(match self {
+            Detail::Display => Icon::Display,
+            Detail::Sound => Icon::Sound,
+            Detail::Notifications => Icon::Bell,
+            Detail::Power => Icon::Battery,
+            Detail::Storage => Icon::Storage,
+            Detail::About => Icon::Info,
+            Detail::Pointer => Icon::Pointer,
+            Detail::Keyboard => Icon::Keyboard,
+            Detail::DefaultApps => Icon::Apps,
+            Detail::Desk(_) => return None,
+        })
+    }
+
+    pub fn from_code(code: u16) -> Option<Detail> {
+        Some(match code {
+            0 => Detail::Display,
+            1 => Detail::Sound,
+            2 => Detail::Notifications,
+            3 => Detail::Power,
+            4 => Detail::Storage,
+            5 => Detail::About,
+            6 => Detail::Pointer,
+            7 => Detail::Keyboard,
+            8 => Detail::DefaultApps,
+            100..=355 => Detail::Desk((code - 100) as u8),
+            _ => return None,
+        })
+    }
+
     pub fn title(self) -> &'static str {
         match self {
             Detail::Display => "Display",
@@ -411,6 +459,43 @@ pub enum View {
 }
 
 impl View {
+    /// Name shown in Recently accessed: the sub-page or the page.
+    pub fn title(self) -> &'static str {
+        match self {
+            View::Detail(_, d) => d.title(),
+            v => v.page().label(),
+        }
+    }
+
+    /// Icon of the sub-page, else the page's icon.
+    pub fn icon(self) -> Icon {
+        match self {
+            View::Detail(p, d) => d.icon().unwrap_or(p.icon()),
+            v => v.page().icon(),
+        }
+    }
+
+    /// Text form for the recently accessed file: `page N` or `detail N D`
+    /// (N = index in `Page::ALL`, D = `Detail::code`). Home has none.
+    pub fn key(self) -> Option<String> {
+        let index = |p: Page| Page::ALL.iter().position(|x| *x == p);
+        match self {
+            View::Home => None,
+            View::Page(p) => Some(format!("page {}", index(p)?)),
+            View::Detail(p, d) => Some(format!("detail {} {}", index(p)?, d.code())),
+        }
+    }
+
+    pub fn from_key(text: &str) -> Option<View> {
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let page = |w: &str| Page::ALL.get(w.parse::<usize>().ok()?).copied();
+        match words.as_slice() {
+            ["page", n] => Some(View::Page(page(n)?)),
+            ["detail", n, d] => Some(View::Detail(page(n)?, Detail::from_code(d.parse().ok()?)?)),
+            _ => None,
+        }
+    }
+
     pub fn page(self) -> Page {
         match self {
             View::Home => Page::System,

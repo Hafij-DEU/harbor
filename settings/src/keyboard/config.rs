@@ -2,9 +2,8 @@
 //!
 //! ```text
 //! remap on                              remap rules below are active (or `off`)
-//! key CAPSLOCK ESC                      a key types another key or shortcut
+//! key CAPSLOCK ESC                      a key types another key or a shortcut
 //! key F1 DISABLED on 046d:c31c          ... or nothing, on one keyboard only
-//! shortcut CTRL+ALT+T SUPER+E           a shortcut types another one
 //! stuck restart                         default for every keyboard when a key sticks
 //! keyboard internal off                 the laptop keyboard is turned off
 //! keyboard 046d:c31c stuck disable-key  this keyboard: own stuck-key action
@@ -21,17 +20,10 @@ pub const PATH: &str = "/etc/harbor/keyboard.conf";
 /// Read when `PATH` does not exist yet (Settings 0.5.35 and older).
 pub const OLD_PATH: &str = "/etc/harbor/keymap.conf";
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum RuleKind {
-    /// One key -> key or shortcut.
-    Key,
-    /// A shortcut -> key or shortcut.
-    Shortcut,
-}
-
+/// One key types another key, a shortcut, or nothing.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Rule {
-    pub kind: RuleKind,
+    /// Always one plain key (`mods == 0`).
     pub from: Combo,
     /// `to.key == DISABLED` makes the key do nothing.
     pub to: Combo,
@@ -129,8 +121,8 @@ impl Config {
                         cfg.boards.push(b);
                     }
                 }
-                [kind @ ("key" | "shortcut"), from, to, rest @ ..] => {
-                    if let Some(r) = parse_rule(kind, from, to, rest) {
+                ["key", from, to, rest @ ..] => {
+                    if let Some(r) = parse_rule(from, to, rest) {
                         cfg.rules.push(r);
                     }
                 }
@@ -143,11 +135,7 @@ impl Config {
     pub fn text(&self) -> String {
         let mut out = format!("remap {}\n", if self.remap { "on" } else { "off" });
         for r in &self.rules {
-            let kind = match r.kind {
-                RuleKind::Key => "key",
-                RuleKind::Shortcut => "shortcut",
-            };
-            out.push_str(&format!("{kind} {} {}", r.from.text(), r.to.text()));
+            out.push_str(&format!("key {} {}", r.from.text(), r.to.text()));
             if let Some(on) = r.on.word() {
                 out.push_str(&format!(" on {on}"));
             }
@@ -240,39 +228,32 @@ fn parse_board(dev: &str, rest: &[&str]) -> Option<BoardSettings> {
     Some(b)
 }
 
-/// `key|shortcut FROM TO [on DEV]`
-fn parse_rule(kind: &str, from: &str, to: &str, rest: &[&str]) -> Option<Rule> {
+/// `key FROM TO [on DEV]`
+fn parse_rule(from: &str, to: &str, rest: &[&str]) -> Option<Rule> {
     let on = match rest {
         [] => Target::Every,
         ["on", dev] => Target::parse(dev)?,
         _ => return None,
     };
     let (from, to) = (Combo::parse(from)?, Combo::parse(to)?);
-    let kind = if kind == "key" {
-        RuleKind::Key
-    } else {
-        RuleKind::Shortcut
-    };
-    // A key rule starts from one plain key; nothing starts from "no key".
-    if (kind == RuleKind::Key && from.mods != 0) || from.key == DISABLED {
+    // A rule starts from one plain key; nothing starts from "no key".
+    if from.mods != 0 || from.key == DISABLED {
         return None;
     }
-    Some(Rule { kind, from, to, on })
+    Some(Rule { from, to, on })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::keys::{MOD_ALT, MOD_CTRL};
     use super::*;
 
     #[test]
     fn round_trip_and_bad_lines() {
-        let text = "enabled true\nkey CAPSLOCK ESC\nshortcut CTRL+ALT+T SUPER+E\nkey CTRL+A B\nkey NOPE ESC\nkey F1 DISABLED\nkey 102ND LEFTSHIFT on internal\nkey F2 F3 on 046d:c31c\nkey F4 F5 on nowhere\nstuck restart\nkeyboard internal off\nkeyboard 046d:c31c stuck disable-key\nkeyboard 046d:c31c bogus\n";
+        let text = "enabled true\nkey CAPSLOCK ESC\nshortcut CTRL+ALT+T SUPER+E\nkey E SUPER+E\nkey CTRL+A B\nkey NOPE ESC\nkey F1 DISABLED\nkey 102ND LEFTSHIFT on internal\nkey F2 F3 on 046d:c31c\nkey F4 F5 on nowhere\nstuck restart\nkeyboard internal off\nkeyboard 046d:c31c stuck disable-key\nkeyboard 046d:c31c bogus\n";
         let cfg = Config::parse(text);
         assert!(cfg.remap);
         assert_eq!(cfg.rules.len(), 5);
         assert_eq!(cfg.rules[3].on, Target::Internal);
-        assert_eq!(cfg.rules[1].from.mods, MOD_CTRL | MOD_ALT);
         assert_eq!(cfg.rules[1].to.label(), "Super + E");
         assert_eq!(cfg.stuck, StuckAction::Restart);
         assert_eq!(cfg.boards.len(), 2);

@@ -268,6 +268,60 @@ pub fn save_home_links(on: bool) {
     let _ = fs::write(path, if on { "on" } else { "off" });
 }
 
+/// Recently accessed pages, newest first, one `View::key` per line.
+pub fn saved_recent() -> Vec<crate::app::View> {
+    design_path()
+        .and_then(|p| fs::read_to_string(p.with_file_name("recent")).ok())
+        .map(|text| text.lines().filter_map(crate::app::View::from_key).collect())
+        .unwrap_or_default()
+}
+
+pub fn save_recent(views: &[crate::app::View]) {
+    if std::env::var("WIN11_SETTINGS_VIEW").is_ok() {
+        return; // screenshot and test runs leave the list alone
+    }
+    let Some(path) = design_path().map(|p| p.with_file_name("recent")) else {
+        return;
+    };
+    if let Some(dir) = path.parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    let text: String = views
+        .iter()
+        .filter_map(|v| v.key())
+        .map(|k| k + "\n")
+        .collect();
+    let _ = fs::write(path, text);
+}
+
+/// Accent or Colourful icons. `WIN11_SETTINGS_LOOK=accent|colourful`
+/// overrides it for screenshot runs.
+pub fn saved_look() -> crate::theme::Look {
+    if let Some(look) = std::env::var("WIN11_SETTINGS_LOOK")
+        .ok()
+        .and_then(|v| crate::theme::Look::from_key(&v))
+    {
+        return look;
+    }
+    design_path()
+        .and_then(|p| fs::read_to_string(p.with_file_name("look")).ok())
+        .and_then(|text| crate::theme::Look::from_key(&text))
+        .unwrap_or_default()
+}
+
+pub fn save_look(look: crate::theme::Look) {
+    if std::env::var("WIN11_SETTINGS_LOOK").is_ok() {
+        return;
+    }
+    let Some(path) = design_path().map(|p| p.with_file_name("look")) else {
+        return;
+    };
+    if let Some(dir) = path.parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    let _ = fs::write(path, look.key());
+}
+
 /// The interface design chosen in Personalisation. `WIN11_SETTINGS_UI`
 /// overrides the saved choice (used by the screenshot and test runs).
 pub fn saved_design() -> Option<crate::theme::Design> {

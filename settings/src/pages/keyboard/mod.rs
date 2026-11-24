@@ -3,7 +3,7 @@
 //! Top: Keyboard Manager, one file per card:
 //! * `keyboards.rs` - each keyboard on/off and what to do when a key sticks;
 //! * `key_check.rs` - live view of the keys each keyboard presses or holds;
-//! * `remaps.rs` - remap keys and shortcuts (PowerToys style).
+//! * `remaps.rs` - remap keys (PowerToys style).
 //!
 //! `state.rs` holds what these cards remember between frames and saves the
 //! config. Below them: input sources and key repeat (this file).
@@ -18,6 +18,27 @@ pub use state::KeyboardUi;
 
 /// Amber for stuck or disabled keys (readable on light and dark cards).
 const WARNING: egui::Color32 = egui::Color32::from_rgb(0xd0, 0x80, 0x00);
+
+/// Colours for key pills, the last key and Apply (icons and switches keep
+/// the accent). All carry white text and read on light and dark cards.
+mod colour {
+    use eframe::egui::Color32;
+    pub const KEY_CHECK: Color32 = Color32::from_rgb(0xCA, 0x50, 0x10); // orange
+    pub const REMAP: Color32 = Color32::from_rgb(0x10, 0x7C, 0x10); // green
+    pub const FROM_KEY: Color32 = Color32::from_rgb(0x00, 0x63, 0xB1); // blue
+    pub const DISABLED_KEY: Color32 = Color32::from_rgb(0xC4, 0x2B, 0x1C); // red
+}
+
+/// A key name on a solid coloured pill, like a keycap.
+fn keycap(ui: &mut Ui, text: &str, color: egui::Color32) {
+    egui::Frame::NONE
+        .fill(color)
+        .corner_radius(6)
+        .inner_margin(egui::Margin::symmetric(9, 3))
+        .show(ui, |ui| {
+            ui.label(egui::RichText::new(text).size(13.5).color(egui::Color32::WHITE));
+        });
+}
 
 use eframe::egui::{self, Ui};
 

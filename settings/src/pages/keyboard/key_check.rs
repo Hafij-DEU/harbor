@@ -156,7 +156,7 @@ fn draw(ui: &mut Ui, pal: &Palette, kc: &mut KeyCheckUi, name: &dyn Fn(&str) -> 
             ui.label(
                 egui::RichText::new(keys::any_label(*code))
                     .size(26.0)
-                    .color(pal.text),
+                    .color(super::colour::KEY_CHECK),
             );
             ui.label(faint(&format!("from {} · key code {code}", name(id))));
         }
@@ -201,13 +201,8 @@ fn draw(ui: &mut Ui, pal: &Palette, kc: &mut KeyCheckUi, name: &dyn Fn(&str) -> 
     );
     ui.horizontal_wrapped(|ui| {
         for (_, id, code) in data.presses.iter().rev().take(SHOW_PRESSES) {
-            ui.label(
-                egui::RichText::new(keys::any_label(*code))
-                    .size(13.0)
-                    .color(pal.text),
-            )
-            .on_hover_text(name(id));
-            ui.label(faint("·"));
+            super::keycap(ui, &keys::any_label(*code), super::colour::FROM_KEY);
+            ui.label(faint(&name(id))).on_hover_text("Keyboard that sent it");
         }
     });
     ui.add_space(8.0);

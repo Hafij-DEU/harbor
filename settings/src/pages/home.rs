@@ -1,4 +1,4 @@
-//! Home page (Windows 11 and Windows 10 designs) and quick settings.
+//! Home page (Windows 11 and Windows 10 designs) and recently accessed settings.
 
 use eframe::egui::{
     Align, Align2, Color32, CursorIcon, Id, Layout, Pos2, Rect, ScrollArea, Sense, Stroke,
@@ -7,120 +7,8 @@ use eframe::egui::{
 
 use crate::app::{App, Detail, Page, View};
 use crate::icons::Icon;
-use crate::system::{self};
 use crate::theme::{regular, semibold, with_alpha, Palette};
 use crate::widgets::{self};
-
-/// A toggle on the Windows 10 home page.
-#[derive(Clone, Copy)]
-pub(crate) enum Quick {
-    Wifi,
-    Bluetooth,
-    NightLight,
-    Focus,
-    Mute,
-    Dark,
-}
-
-impl Quick {
-    pub(crate) const ALL: [Quick; 6] = [
-        Quick::Wifi,
-        Quick::Bluetooth,
-        Quick::NightLight,
-        Quick::Focus,
-        Quick::Mute,
-        Quick::Dark,
-    ];
-
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            Quick::Wifi => "Wi-Fi",
-            Quick::Bluetooth => "Bluetooth",
-            Quick::NightLight => "Night light",
-            Quick::Focus => "Do not disturb",
-            Quick::Mute => "Mute",
-            Quick::Dark => "Dark mode",
-        }
-    }
-
-    pub(crate) fn icon(self) -> Icon {
-        match self {
-            Quick::Wifi => Icon::Wifi,
-            Quick::Bluetooth => Icon::Bluetooth,
-            Quick::NightLight => Icon::Sun,
-            Quick::Focus => Icon::Bell,
-            Quick::Mute => Icon::Sound,
-            Quick::Dark => Icon::Moon,
-        }
-    }
-
-    pub(crate) fn is_on(self, app: &App) -> bool {
-        match self {
-            Quick::Wifi => app.info.wifi_enabled,
-            Quick::Bluetooth => app.info.bluetooth_on,
-            Quick::NightLight => app.info.night_light,
-            Quick::Focus => !app.info.notifications,
-            Quick::Mute => app.info.muted,
-            Quick::Dark => app.mode == crate::theme::Mode::Dark,
-        }
-    }
-
-    pub(crate) fn toggle(self, app: &mut App) {
-        let on = !self.is_on(app);
-        let state = if on { "on" } else { "off" };
-        let ok = match self {
-            Quick::Wifi => {
-                app.set_wifi_radio(on);
-                return;
-            }
-            Quick::Bluetooth => match system::set_bluetooth(on) {
-                Ok(()) => {
-                    app.info.bluetooth_on = on;
-                    true
-                }
-                Err(err) => {
-                    app.notify_error(err);
-                    return;
-                }
-            },
-            Quick::NightLight => {
-                let ok = system::set_night_light(on);
-                if ok {
-                    app.info.night_light = on;
-                }
-                ok
-            }
-            Quick::Focus => {
-                let ok = system::set_notifications(!on);
-                if ok {
-                    app.info.notifications = !on;
-                }
-                ok
-            }
-            Quick::Mute => {
-                let ok = system::set_muted(on);
-                if ok {
-                    app.info.muted = on;
-                }
-                ok
-            }
-            Quick::Dark => {
-                app.follow_system = false;
-                app.mode = if on {
-                    crate::theme::Mode::Dark
-                } else {
-                    crate::theme::Mode::Light
-                };
-                return;
-            }
-        };
-        if ok {
-            app.notify(format!("{} turned {state}", self.label()));
-        } else {
-            app.notify_error(format!("Could not change {}", self.label().to_lowercase()));
-        }
-    }
-}
 
 /// Extra home-page links for categories with few sub-pages: the main
 /// settings on that page, so every card shows what it holds.
@@ -179,58 +67,54 @@ pub(crate) fn home_extras(cat: crate::app::Cat10) -> &'static [(&'static str, Ic
     }
 }
 
-/// Quick toggles (Wi-Fi, Bluetooth, night light, do not disturb, mute, dark
-/// mode) and the volume and brightness sliders. Shared by the Windows 10 home
-/// and the Windows 11 System page.
-pub fn quick_settings(
-    app: &mut App,
-    ui: &mut Ui,
-    pal: &Palette,
-    width: f32,
-    x0: f32,
-    content_w: f32,
-    s: f32,
-) {
+/// "Recently accessed": the pages opened last (newest first, see
+/// `App::note_recent`), as tiles that open them again. Shared by the
+/// Windows 10 home and the Windows 11 System page; the page being shown is
+/// left out.
+pub fn recent_settings(app: &mut App, ui: &mut Ui, pal: &Palette, width: f32, x0: f32, content_w: f32, s: f32) {
+    let items: Vec<View> = app
+        .recent
+        .iter()
+        .copied()
+        .filter(|v| *v != app.view)
+        .take(6)
+        .collect();
+    if items.is_empty() {
+        ui.horizontal(|ui| {
+            ui.add_space(x0 - ui.cursor().left() + 2.0);
+            ui.label(
+                eframe::egui::RichText::new("Settings pages you open show up here.")
+                    .size(12.5 * s)
+                    .color(pal.text_muted),
+            );
+        });
+        return;
+    }
     let cols = if content_w >= 6.0 * 150.0 { 6 } else { 3 };
     let gap = 10.0 * s;
-    let qw = (content_w - gap * (cols as f32 - 1.0)) / cols as f32;
-    let qh = 74.0 * s;
-    let rows = Quick::ALL.len().div_ceil(cols);
+    let tw = (content_w - gap * (cols as f32 - 1.0)) / cols as f32;
+    let th = 74.0 * s;
+    let rows = items.len().div_ceil(cols);
     let (area, _) = ui.allocate_exact_size(
-        Vec2::new(width, rows as f32 * qh + (rows as f32 - 1.0) * gap),
+        Vec2::new(width, rows as f32 * th + (rows as f32 - 1.0) * gap),
         Sense::hover(),
     );
-    let mut toggled: Option<Quick> = None;
-    for (i, quick) in Quick::ALL.into_iter().enumerate() {
+    let mut go = None;
+    for (i, view) in items.into_iter().enumerate() {
         let tile = Rect::from_min_size(
             Pos2::new(
-                x0 + (i % cols) as f32 * (qw + gap),
-                area.top() + (i / cols) as f32 * (qh + gap),
+                x0 + (i % cols) as f32 * (tw + gap),
+                area.top() + (i / cols) as f32 * (th + gap),
             ),
-            Vec2::new(qw, qh),
+            Vec2::new(tw, th),
         );
-        let on = quick.is_on(app);
         let resp = ui
-            .interact(tile, Id::new(("home-toggle", i)), Sense::click())
+            .interact(tile, Id::new(("home-recent", i)), Sense::click())
             .on_hover_cursor(CursorIcon::PointingHand);
-        let (fill, ink, sub) = if on {
-            let fill = if resp.hovered() {
-                crate::theme::lighten(pal.accent, 14)
-            } else {
-                pal.accent
-            };
-            (fill, pal.on_accent, pal.on_accent.gamma_multiply(0.85))
-        } else {
-            let fill = if resp.hovered() {
-                pal.card_hover
-            } else {
-                pal.card
-            };
-            (fill, pal.text, pal.text_faint)
-        };
+        let fill = if resp.hovered() { pal.card_hover } else { pal.card };
         ui.painter()
             .add(widgets::glass_fill(pal, tile, pal.corner(6), fill));
-        if !on && !widgets::glassy(pal) {
+        if !widgets::glassy(pal) {
             ui.painter().rect_stroke(
                 tile,
                 pal.corner(6),
@@ -238,121 +122,33 @@ pub fn quick_settings(
                 StrokeKind::Inside,
             );
         }
+        let icon = view.icon();
         let glyph = Rect::from_min_size(
             tile.min + Vec2::new(14.0 * s, 14.0 * s),
             Vec2::splat(20.0 * s),
         );
-        crate::icons::paint(ui.painter(), quick.icon(), glyph, ink);
+        crate::icons::paint(ui.painter(), icon, glyph, widgets::icon_ink(pal, icon));
         let painter = ui.painter().with_clip_rect(tile.shrink(4.0));
         painter.text(
             Pos2::new(tile.left() + 14.0 * s, tile.bottom() - 26.0 * s),
             Align2::LEFT_CENTER,
-            quick.label(),
+            view.title(),
             semibold(12.5 * s),
-            ink,
+            pal.text,
         );
         painter.text(
             Pos2::new(tile.left() + 14.0 * s, tile.bottom() - 11.0 * s),
             Align2::LEFT_CENTER,
-            if on { "On" } else { "Off" },
+            view.page().label(),
             regular(11.0 * s),
-            sub,
+            pal.text_faint,
         );
         if resp.clicked() {
-            toggled = Some(quick);
+            go = Some(view);
         }
     }
-    if let Some(quick) = toggled {
-        quick.toggle(app);
-    }
-
-    ui.add_space(gap);
-    let brightness = app.info.brightness;
-    let sliders = if brightness.is_some() { 2 } else { 1 };
-    let sw = (content_w - gap * (sliders as f32 - 1.0)) / sliders as f32;
-    let sh = 62.0 * s;
-    let (area, _) = ui.allocate_exact_size(Vec2::new(width, sh), Sense::hover());
-    for i in 0..sliders {
-        let card = Rect::from_min_size(
-            Pos2::new(x0 + i as f32 * (sw + gap), area.top()),
-            Vec2::new(sw, sh),
-        );
-        ui.painter()
-            .add(widgets::glass_fill(pal, card, pal.corner(6), pal.card));
-        ui.painter().rect_stroke(
-            card,
-            pal.corner(6),
-            Stroke::new(1.0, pal.card_border),
-            StrokeKind::Inside,
-        );
-        let (icon, label, mut value, readout) = if i == 0 {
-            let v = app.info.volume as f32 / 100.0;
-            let text = if app.info.muted {
-                "Muted".to_owned()
-            } else {
-                format!("{}%", app.info.volume)
-            };
-            (Icon::Sound, "Volume", v, text)
-        } else {
-            let pct = brightness.unwrap_or(100);
-            (
-                Icon::Display,
-                "Brightness",
-                pct as f32 / 100.0,
-                format!("{pct}%"),
-            )
-        };
-        let glyph = Rect::from_center_size(
-            Pos2::new(card.left() + 26.0 * s, card.center().y),
-            Vec2::splat(20.0 * s),
-        );
-        crate::icons::paint(ui.painter(), icon, glyph, pal.accent);
-        ui.painter().text(
-            Pos2::new(card.left() + 48.0 * s, card.top() + 18.0 * s),
-            Align2::LEFT_CENTER,
-            label,
-            semibold(12.5 * s),
-            pal.text,
-        );
-        ui.painter().text(
-            Pos2::new(card.right() - 18.0 * s, card.top() + 18.0 * s),
-            Align2::RIGHT_CENTER,
-            readout,
-            regular(12.0 * s),
-            pal.text_muted,
-        );
-        let track = Rect::from_min_max(
-            Pos2::new(card.left() + 48.0 * s, card.top() + 28.0 * s),
-            Pos2::new(card.right() - 18.0 * s, card.bottom() - 4.0 * s),
-        );
-        let changed = ui
-            .scope_builder(UiBuilder::new().max_rect(track), |ui| {
-                widgets::slider(ui, pal, pal.accent, &mut value, Id::new(("home-slider", i)))
-            })
-            .inner;
-        if changed {
-            if i == 0 {
-                let pct = (value * 100.0).round() as u32;
-                if pct != app.info.volume && system::set_volume(pct) {
-                    app.info.volume = pct;
-                    app.test_volume = value;
-                    if app.info.muted && system::set_muted(false) {
-                        app.info.muted = false;
-                    }
-                }
-            } else {
-                let pct = (value * 100.0).round().max(1.0) as u8;
-                if Some(pct) != app.info.brightness {
-                    match system::set_brightness(pct) {
-                        Ok(()) => {
-                            app.test_brightness = value;
-                            app.info.brightness = Some(pct);
-                        }
-                        Err(err) => app.notify_error(err),
-                    }
-                }
-            }
-        }
+    if let Some(view) = go {
+        app.go(view);
     }
 }
 
@@ -692,7 +488,7 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
                     Pos2::new(cell.left() + 16.0 * k, head.top() + 12.0 * k),
                     Vec2::splat(icon_sz),
                 );
-                crate::icons::paint(ui.painter(), cat.icon(), glyph, pal.accent);
+                crate::icons::paint(ui.painter(), cat.icon(), glyph, widgets::icon_ink(&pal, cat.icon()));
                 let painter = ui.painter().with_clip_rect(cell);
                 let tx = cell.left() + text_x;
                 painter.text(
@@ -754,18 +550,18 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
                 }
             }
 
-            // --- quick settings below the categories ----------------------
+            // --- recently accessed pages below the categories -------------
             ui.add_space(40.0 * s);
             let (row, _) = ui.allocate_exact_size(Vec2::new(width, 22.0 * s), Sense::hover());
             ui.painter().text(
                 Pos2::new(x0 + 2.0, row.center().y),
                 Align2::LEFT_CENTER,
-                "Quick settings",
+                "Recently accessed",
                 semibold(16.0 * s),
                 pal.text,
             );
             ui.add_space(12.0 * s);
-            quick_settings(app, ui, pal, width, x0, col_w, s);
+            recent_settings(app, ui, pal, width, x0, col_w, s);
 
             if let Some(view) = go {
                 app.go(view);
