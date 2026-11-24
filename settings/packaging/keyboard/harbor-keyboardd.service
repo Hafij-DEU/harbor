@@ -1,0 +1,10 @@
+[Unit]
+Description=Harbor Keyboard Manager (remaps, keyboard on/off, stuck-key guard, key check)
+
+[Service]
+ExecStart=/usr/local/lib/win11-settings/harbor-keyboardd
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target

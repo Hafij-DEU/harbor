@@ -33,14 +33,15 @@ mkdir -p \
     "$STAGE/usr/share/polkit-1/actions"
 
 install -m 0755 target/release/win11-settings "$STAGE/usr/local/bin/win11-settings"
-# Keyboard Manager: remapping service, rule-saving helper, polkit action.
-install -m 0755 target/release/harbor-keymapd "$STAGE/usr/local/lib/win11-settings/harbor-keymapd"
-install -m 0755 packaging/keymap/harbor-keymap-apply \
-    "$STAGE/usr/local/lib/win11-settings/harbor-keymap-apply"
-install -m 0644 packaging/keymap/harbor-keymapd.service \
-    "$STAGE/usr/lib/systemd/system/harbor-keymapd.service"
-install -m 0644 packaging/keymap/io.github.hafij_deu.Harbor.Keymap.policy \
-    "$STAGE/usr/share/polkit-1/actions/io.github.hafij_deu.Harbor.Keymap.policy"
+# Keyboard Manager: root service, its pkexec helper and polkit action
+# (how they fit together: src/keyboard/mod.rs).
+install -m 0755 target/release/harbor-keyboardd "$STAGE/usr/local/lib/win11-settings/harbor-keyboardd"
+install -m 0755 packaging/keyboard/harbor-keyboard-apply \
+    "$STAGE/usr/local/lib/win11-settings/harbor-keyboard-apply"
+install -m 0644 packaging/keyboard/harbor-keyboardd.service \
+    "$STAGE/usr/lib/systemd/system/harbor-keyboardd.service"
+install -m 0644 packaging/keyboard/io.github.hafij_deu.Harbor.Keyboard.policy \
+    "$STAGE/usr/share/polkit-1/actions/io.github.hafij_deu.Harbor.Keyboard.policy"
 install -m 0644 win11-settings.desktop \
     "$STAGE/usr/share/applications/win11-settings.desktop"
 install -m 0644 assets/win11-settings.svg \
@@ -71,9 +72,26 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
     gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
 fi
 if command -v systemctl >/dev/null 2>&1; then
+    # The old remapping service (0.5.35 and older) must stop before its unit
+    # file is forgotten by the daemon-reload below.
+    systemctl stop harbor-keymapd.service 2>/dev/null || true
     systemctl daemon-reload || true
-    # New engine version: restart it when Keyboard Manager is in use.
-    systemctl try-restart harbor-keymapd.service || true
+    # 0.5.36 renamed harbor-keymapd to harbor-keyboardd and keymap.conf to
+    # keyboard.conf: move an old setup over.
+    if [ -e /etc/systemd/system/multi-user.target.wants/harbor-keymapd.service ]; then
+        systemctl disable --now harbor-keymapd.service 2>/dev/null || true
+        rm -f /etc/systemd/system/multi-user.target.wants/harbor-keymapd.service
+    fi
+    if [ -f /etc/harbor/keymap.conf ] && [ ! -f /etc/harbor/keyboard.conf ]; then
+        sed 's/^enabled true$/remap on/; s/^enabled false$/remap off/' \
+            /etc/harbor/keymap.conf > /etc/harbor/keyboard.conf
+        rm -f /etc/harbor/keymap.conf
+    fi
+    # The service runs once the user has saved any keyboard setting.
+    if [ -f /etc/harbor/keyboard.conf ]; then
+        systemctl enable harbor-keyboardd.service >/dev/null 2>&1 || true
+        systemctl restart harbor-keyboardd.service || true
+    fi
 fi
 EOF
 chmod 0755 "$STAGE/DEBIAN/postinst"
@@ -82,7 +100,7 @@ cat > "$STAGE/DEBIAN/prerm" <<'EOF'
 #!/bin/sh
 set -e
 if [ "$1" = remove ] && command -v systemctl >/dev/null 2>&1; then
-    systemctl disable --now harbor-keymapd.service || true
+    systemctl disable --now harbor-keyboardd.service || true
 fi
 EOF
 chmod 0755 "$STAGE/DEBIAN/prerm"

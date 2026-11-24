@@ -1,3 +1,19 @@
+//! Harbor Settings: a Windows 11 / Windows 10 style Settings app for Ubuntu.
+//!
+//! Code map (each folder's `mod.rs` explains its own files):
+//! | Module | What lives there |
+//! |---|---|
+//! | `app/` | the window: navigation model, title bar, sidebar, dialogs, background jobs, App methods that change settings |
+//! | `pages/` | one file per page (`display.rs`, `network.rs`, ...); `pages/mod.rs` has shared row helpers |
+//! | `system/` | everything that reads or changes the system, one file per area (audio, display, network, ...) |
+//! | `desktop/` | "Desktop & windows" and "Extensions" pages (GNOME options catalogue, Fusion Desk) |
+//! | `keyboard/` | Keyboard Manager data shared with the `harbor-keyboardd` service (`src/bin/`) |
+//! | `hub.rs`, `inventory.rs`, `cleaner.rs`, `jobs.rs`, `jobview.rs` | App Hub catalogue, installed apps, cleaner, apt jobs |
+//! | `theme.rs`, `widgets.rs`, `icons.rs`, `welcome.rs` | colours, Fluent widgets, icons, first-run welcome |
+//!
+//! Rule of thumb: a page only draws and calls `system::*` (often on a thread);
+//! `system::*` never touches egui.
+
 mod app;
 mod cleaner;
 mod desktop;
@@ -6,8 +22,8 @@ mod icons;
 mod inventory;
 mod jobs;
 mod jobview;
-#[allow(dead_code)] // the engine uses the rest
-mod keymap;
+#[allow(dead_code)] // parts are used only by the harbor-keyboardd service
+mod keyboard;
 mod pages;
 mod system;
 mod theme;

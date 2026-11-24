@@ -1,0 +1,43 @@
+#!/bin/sh
+# Harbor Settings > Keyboard: the only way Settings changes root state.
+# Run through pkexec (polkit action io.github.hafij_deu.Harbor.Keyboard.apply).
+#
+#   harbor-keyboard-apply save                  config on stdin -> /etc/harbor/keyboard.conf,
+#                                               then the service is started (it reloads by itself)
+#   harbor-keyboard-apply restart               restart the service (disabled stuck keys work again)
+#   harbor-keyboard-apply stop-toggle-watchdog  turn off Toggle Internal Keyboard's watchdog
+#
+# Every config line must match LINE below, so nothing else reaches the root
+# service. Keep LINE in step with src/keyboard/config.rs.
+set -eu
+DEV='(internal|[0-9a-f]{4}:[0-9a-f]{4})'
+ACTION='(off|restart|disable-key)'
+LINE="^(remap (on|off)|stuck $ACTION|keyboard $DEV( off)?( stuck $ACTION)?|(key|shortcut) [A-Z0-9_+]+ [A-Z0-9_+]+( on $DEV)?)\$"
+SERVICE=harbor-keyboardd.service
+
+case "${1:-}" in
+save)
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT
+    head -c 65536 > "$tmp"
+    if grep -qvE "$LINE" "$tmp"; then
+        echo "These are not Keyboard Manager settings" >&2
+        exit 2
+    fi
+    mkdir -p /etc/harbor
+    install -m 0644 "$tmp" /etc/harbor/keyboard.conf
+    rm -f /etc/harbor/keymap.conf
+    systemctl enable "$SERVICE" >/dev/null 2>&1 || true
+    systemctl start "$SERVICE"
+    ;;
+restart)
+    systemctl restart "$SERVICE"
+    ;;
+stop-toggle-watchdog)
+    systemctl disable --now toggle-internal-keyboard-watchdog.service
+    ;;
+*)
+    echo "usage: harbor-keyboard-apply save|restart|stop-toggle-watchdog" >&2
+    exit 64
+    ;;
+esac
