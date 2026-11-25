@@ -7,6 +7,8 @@
 //! stuck restart                         default for every keyboard when a key sticks
 //! keyboard internal off                 the laptop keyboard is turned off
 //! keyboard 046d:c31c stuck disable-key  this keyboard: own stuck-key action
+//! stuck-keys except LEFTCTRL RIGHTCTRL  the guard never acts on these keys
+//! stuck-keys only LEFTSHIFT             ... or acts on these keys only
 //! ```
 //!
 //! Unknown or broken lines are skipped, so an old or hand-edited file never
@@ -14,7 +16,7 @@
 //! `packaging/keyboard/harbor-keyboard-apply`); keep both in step.
 
 use super::devices::{Keyboard, Target};
-use super::keys::{Combo, DISABLED};
+use super::keys::{self, Combo, DISABLED};
 
 pub const PATH: &str = "/etc/harbor/keyboard.conf";
 /// Read when `PATH` does not exist yet (Settings 0.5.35 and older).
@@ -71,6 +73,84 @@ impl StuckAction {
     }
 }
 
+/// Which keys the stuck-key guard may restart a keyboard or disable a key for.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub enum KeyFilter {
+    /// Every key.
+    #[default]
+    All,
+    /// Every key except these.
+    Except(Vec<u16>),
+    /// Only these keys (none listed: the guard never acts).
+    Only(Vec<u16>),
+}
+
+impl KeyFilter {
+    /// Mode words as written and shown: (word, label).
+    pub const MODES: [(&'static str, &'static str); 3] = [
+        ("all", "All keys"),
+        ("except", "All keys except these"),
+        ("only", "Only these keys"),
+    ];
+
+    pub fn word(&self) -> &'static str {
+        match self {
+            KeyFilter::All => "all",
+            KeyFilter::Except(_) => "except",
+            KeyFilter::Only(_) => "only",
+        }
+    }
+
+    /// The listed keys (empty for `All`).
+    pub fn keys(&self) -> &[u16] {
+        match self {
+            KeyFilter::All => &[],
+            KeyFilter::Except(k) | KeyFilter::Only(k) => k,
+        }
+    }
+
+    /// Same keys, another mode ("all" drops the list).
+    pub fn with_mode(&self, word: &str) -> KeyFilter {
+        let keys = self.keys().to_vec();
+        match word {
+            "except" => KeyFilter::Except(keys),
+            "only" => KeyFilter::Only(keys),
+            _ => KeyFilter::All,
+        }
+    }
+
+    /// Same mode, another key list.
+    pub fn with_keys(&self, mut keys: Vec<u16>) -> KeyFilter {
+        keys.sort_unstable();
+        keys.dedup();
+        keys.retain(|&c| c != DISABLED);
+        match self {
+            KeyFilter::All => KeyFilter::All,
+            KeyFilter::Except(_) => KeyFilter::Except(keys),
+            KeyFilter::Only(_) => KeyFilter::Only(keys),
+        }
+    }
+
+    /// May the guard act when this key is stuck?
+    pub fn watches(&self, code: u16) -> bool {
+        match self {
+            KeyFilter::All => true,
+            KeyFilter::Except(k) => !k.contains(&code),
+            KeyFilter::Only(k) => k.contains(&code),
+        }
+    }
+
+    /// `stuck-keys MODE KEY...`; unknown key names are skipped.
+    fn parse(mode: &str, names: &[&str]) -> Option<KeyFilter> {
+        let keys: Vec<u16> = names.iter().filter_map(|n| keys::code(n)).collect();
+        match mode {
+            "all" => Some(KeyFilter::All),
+            "except" | "only" => Some(KeyFilter::All.with_mode(mode).with_keys(keys)),
+            _ => None,
+        }
+    }
+}
+
 /// Settings for one keyboard. Only written when something differs from the default.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BoardSettings {
@@ -88,6 +168,8 @@ pub struct Config {
     pub rules: Vec<Rule>,
     /// Stuck-key action for keyboards without their own.
     pub stuck: StuckAction,
+    /// Keys the stuck-key guard acts on (every keyboard).
+    pub stuck_keys: KeyFilter,
     pub boards: Vec<BoardSettings>,
 }
 
@@ -97,6 +179,7 @@ impl Default for Config {
             remap: true,
             rules: Vec::new(),
             stuck: StuckAction::Nothing,
+            stuck_keys: KeyFilter::All,
             boards: Vec::new(),
         }
     }
@@ -113,6 +196,11 @@ impl Config {
                 ["stuck", action] => {
                     if let Some(a) = StuckAction::parse(action) {
                         cfg.stuck = a;
+                    }
+                }
+                ["stuck-keys", mode, names @ ..] => {
+                    if let Some(f) = KeyFilter::parse(mode, names) {
+                        cfg.stuck_keys = f;
                     }
                 }
                 ["keyboard", dev, rest @ ..] => {
@@ -143,6 +231,13 @@ impl Config {
         }
         if self.stuck != StuckAction::Nothing {
             out.push_str(&format!("stuck {}\n", self.stuck.word()));
+        }
+        if self.stuck_keys != KeyFilter::All {
+            out.push_str(&format!("stuck-keys {}", self.stuck_keys.word()));
+            for &c in self.stuck_keys.keys() {
+                out.push_str(&format!(" {}", keys::name(c)));
+            }
+            out.push('\n');
         }
         for b in &self.boards {
             let Some(dev) = b.target.word() else { continue };
@@ -284,6 +379,37 @@ mod tests {
         assert_eq!(cfg.stuck_for(&laptop), StuckAction::Restart);
         assert_eq!(cfg.stuck_for(&usb), StuckAction::Nothing);
         assert_eq!(cfg.stuck_for(&other), StuckAction::Restart);
+    }
+
+    #[test]
+    fn stuck_key_filter() {
+        let cfg = Config::parse("stuck restart\nstuck-keys except RIGHTCTRL LEFTCTRL NOPE\n");
+        assert_eq!(cfg.stuck_keys, KeyFilter::Except(vec![29, 97]));
+        assert!(!cfg.stuck_keys.watches(29));
+        assert!(cfg.stuck_keys.watches(42));
+        assert!(cfg
+            .text()
+            .contains("stuck-keys except LEFTCTRL RIGHTCTRL\n"));
+        assert_eq!(Config::parse(&cfg.text()), cfg);
+
+        let only = Config::parse("stuck-keys only LEFTSHIFT\n");
+        assert!(only.stuck_keys.watches(42));
+        assert!(!only.stuck_keys.watches(29));
+        let none = Config::parse("stuck-keys only\n");
+        assert_eq!(none.stuck_keys, KeyFilter::Only(vec![]));
+        assert!(!none.stuck_keys.watches(42));
+        assert_eq!(Config::parse(&none.text()), none);
+
+        assert_eq!(
+            Config::parse("stuck-keys bogus A\n").stuck_keys,
+            KeyFilter::All
+        );
+        assert!(!Config::default().text().contains("stuck-keys"));
+        assert_eq!(
+            KeyFilter::Except(vec![29]).with_mode("only"),
+            KeyFilter::Only(vec![29])
+        );
+        assert_eq!(KeyFilter::Except(vec![29]).with_mode("all"), KeyFilter::All);
     }
 
     #[test]

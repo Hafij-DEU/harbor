@@ -6,7 +6,7 @@ use eframe::egui::{self, Ui};
 use super::state;
 use crate::app::App;
 use crate::icons::Icon;
-use crate::keyboard::config::StuckAction;
+use crate::keyboard::config::{Config, KeyFilter, StuckAction};
 use crate::keyboard::devices::Target;
 use crate::keyboard::keys;
 use crate::system;
@@ -42,6 +42,11 @@ pub fn show(app: &mut App, ui: &mut Ui, pal: &Palette) {
             let mut cfg = saved.clone();
             cfg.stuck = a;
             change = Some((cfg, "Stuck-key setting saved"));
+        }
+
+        // Which keys may trigger the guard.
+        if let Some(cfg) = key_filter(ui, pal, &saved, busy) {
+            change = Some((cfg, "Stuck-key filter saved"));
         }
 
         // Plugged-in keyboards, then unplugged ones that have settings.
@@ -199,7 +204,9 @@ pub fn show(app: &mut App, ui: &mut Ui, pal: &Palette) {
         pal,
         "Restart resets the keyboard so it lets go of the key. If the key sticks again \
          within a minute, it is disabled until you turn it back on here. The laptop \
-         keyboard counts as stuck after 4 silent seconds, other keyboards after 30.",
+         keyboard counts as stuck after 4 silent seconds, other keyboards after 30. \
+         \"Keys that count\" picks which keys can restart a keyboard or get disabled: \
+         leave out Ctrl, Shift, Alt and Super if you hold them long while using the mouse.",
     );
 
     if let Some((cfg, done)) = change {
@@ -219,6 +226,90 @@ pub fn show(app: &mut App, ui: &mut Ui, pal: &Palette) {
             system::stop_toggle_watchdog,
         );
     }
+}
+
+/// Left and right Ctrl, Shift, Alt and Super.
+const MODIFIER_KEYS: [u16; 8] = [29, 97, 42, 54, 56, 100, 125, 126];
+
+/// "Keys that count" row: All / All except these / Only these, then the key
+/// list with remove buttons and an Add key picker. Returns the config to save.
+fn key_filter(ui: &mut Ui, pal: &Palette, saved: &Config, busy: bool) -> Option<Config> {
+    let filter = &saved.stuck_keys;
+    let modes: Vec<(String, String)> = KeyFilter::MODES
+        .iter()
+        .map(|(w, l)| ((*w).to_owned(), (*l).to_owned()))
+        .collect();
+    let mut next: Option<KeyFilter> = None;
+    widgets::divider(ui, pal);
+    let picked = super::super::combo_row(
+        ui,
+        pal,
+        Icon::Keyboard,
+        "Keys that count",
+        "Which stuck keys restart a keyboard or get disabled",
+        "kb-stuck-keys",
+        &modes,
+        filter.word(),
+        190.0,
+    );
+    if let Some(word) = picked {
+        next = Some(filter.with_mode(&word));
+    }
+    if *filter != KeyFilter::All {
+        let listed = filter.keys().to_vec();
+        ui.horizontal_wrapped(|ui| {
+            ui.add_space(52.0);
+            if listed.is_empty() {
+                ui.label(
+                    egui::RichText::new(match filter {
+                        KeyFilter::Only(_) => "No keys yet: the guard does nothing.",
+                        _ => "No keys left out yet.",
+                    })
+                    .size(12.5)
+                    .color(pal.text_muted),
+                );
+            }
+            for &code in &listed {
+                let chip = ui
+                    .button(egui::RichText::new(format!("{}  ✕", keys::any_label(code))).size(12.5))
+                    .on_hover_text("Remove");
+                if chip.clicked() {
+                    let keep = listed.iter().copied().filter(|&c| c != code).collect();
+                    next = Some(filter.with_keys(keep));
+                }
+            }
+            egui::ComboBox::from_id_salt("kb-stuck-keys-add")
+                .selected_text("Add key")
+                .width(150.0)
+                .height(320.0)
+                .show_ui(ui, |ui| {
+                    for &(_, code, label) in keys::KEYS {
+                        if code == keys::DISABLED || listed.contains(&code) {
+                            continue;
+                        }
+                        if ui.selectable_label(false, label).clicked() {
+                            let mut all = listed.clone();
+                            all.push(code);
+                            next = Some(filter.with_keys(all));
+                        }
+                    }
+                });
+            if MODIFIER_KEYS.iter().any(|c| !listed.contains(c))
+                && ui
+                    .link(egui::RichText::new("Add Ctrl, Shift, Alt, Super").color(pal.accent))
+                    .clicked()
+            {
+                let mut all = listed.clone();
+                all.extend(MODIFIER_KEYS);
+                next = Some(filter.with_keys(all));
+            }
+        });
+        ui.add_space(4.0);
+    }
+    let next = next.filter(|f| f != filter && !busy)?;
+    let mut cfg = saved.clone();
+    cfg.stuck_keys = next;
+    Some(cfg)
 }
 
 /// "Built in · Off", "USB 046d:c31c · On", "Unplugged · Off"...

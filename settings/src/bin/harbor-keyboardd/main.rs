@@ -403,7 +403,9 @@ impl Service {
             } else {
                 guard::LIMIT_OTHER
             };
-            let held = evdev::held_keys(&b.dev.file);
+            let mut held = evdev::held_keys(&b.dev.file);
+            // Keys left out by the "Keys that count" filter never trigger the guard.
+            held.retain(|&c| self.config.stuck_keys.watches(c));
             let ignore: Vec<u16> = b.disabled.iter().copied().collect();
             if let Some(code) = b.watch.stuck_key(now, limit, &held, &ignore) {
                 found.push((id, code, b.watch.decide(action, now)));
