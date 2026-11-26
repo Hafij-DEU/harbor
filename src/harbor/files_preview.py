@@ -16,7 +16,7 @@ import threading
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
 
 from . import files_core as fc
-from . import files_icons, files_office, files_package
+from . import files_icons, files_media, files_office, files_package
 
 PREVIEW_MAX_IMAGE_BYTES = 64 * 1024 * 1024
 PREVIEW_PX = 640
@@ -182,9 +182,10 @@ class PreviewPane(Gtk.Box):
     # ------------------------------------------------------------ helpers
     def _clear(self):
         self._gen += 1
+        if getattr(self, "_stream", None) is not None:
+            self._stream.close()
+            self._stream = None
         while (c := self.content.get_first_child()) is not None:
-            if isinstance(c, Gtk.Video) and c.get_media_stream() is not None:
-                c.get_media_stream().pause()
             self.content.remove(c)
         return self._gen
 
@@ -312,14 +313,17 @@ class PreviewPane(Gtk.Box):
         elif kind == "office":
             self._show_office(item, gen, icon)
         elif kind in ("video", "audio"):
-            media = Gtk.MediaFile.new_for_file(item.gfile)
-            video = Gtk.Video(media_stream=media, autoplay=False, loop=False, vexpand=True,
-                              css_classes=["hbf-preview-video"])
-            if kind == "audio":
-                self._message(icon, item.name)
-                video.set_vexpand(False)
-                video.set_size_request(-1, 48)
-            self.content.append(video)
+            # Not Gtk.MediaFile: GTK's GStreamer backend aborts the app on MP3s
+            # (see files_media).
+            widget, stream = files_media.player(path, video=kind == "video")
+            if widget is None:
+                self._message(icon, item.name, "No preview available")
+            else:
+                if kind == "audio":
+                    self._message(icon, item.name)
+                self._stream = stream
+                widget.connect("unrealize", lambda *_: stream.close())
+                self.content.append(widget)
         elif kind == "font":
             sp = self._loading()
 
