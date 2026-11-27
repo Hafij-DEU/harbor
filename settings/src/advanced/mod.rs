@@ -1,4 +1,4 @@
-//! System > Advanced settings (Glint's system tweaks) and
+//! Advanced settings (own left-menu page: Glint's system tweaks) and
 //! Network & internet > Advanced network settings (DNS).
 //!
 //! The catalogue and the root work come from Glint (`glint_core.py`,
@@ -202,10 +202,7 @@ fn apply_tweaks(state: Arc<Mutex<TweakState>>, ctx: egui::Context) {
 
 pub fn advanced(app: &mut App, ui: &mut Ui) {
     let pal = app.pal();
-    if widgets::h1_back(ui, &pal, "Advanced settings") {
-        app.back();
-        return;
-    }
+    widgets::h1(ui, &pal, "Advanced settings");
     let state = shared::<TweakState>(ui, "harbor-advanced-tweaks");
     {
         let mut st = state.lock().unwrap();

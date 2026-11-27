@@ -47,11 +47,6 @@ pub fn search_entries() -> Vec<SearchEntry> {
         ),
         (Detail::Storage, "Disk space and volumes", Icon::Storage),
         (
-            Detail::Advanced,
-            "Tweaks: privacy, speed, services, startup",
-            Icon::Sparkle,
-        ),
-        (
             Detail::About,
             "Device specifications and rename",
             Icon::Info,
@@ -66,6 +61,13 @@ pub fn search_entries() -> Vec<SearchEntry> {
             icon,
         });
     }
+    entries.push(SearchEntry {
+        page: Page::Advanced,
+        detail: None,
+        title: "Tweaks",
+        subtitle: "Privacy, performance, services, startup",
+        icon: Icon::Sparkle,
+    });
     for (title, subtitle) in [
         ("Advanced network settings", "DNS servers, find fastest DNS, clear DNS cache"),
         ("DNS", "Cloudflare, Google, Quad9, AdGuard or custom DNS"),

@@ -235,7 +235,7 @@ impl App {
             "pointer" => View::Detail(Page::System, Detail::Pointer),
             "keyboard" => View::Detail(Page::System, Detail::Keyboard),
             "defaultapps" => View::Detail(Page::System, Detail::DefaultApps),
-            "advanced" => View::Detail(Page::System, Detail::Advanced),
+            "advanced" => View::Page(Page::Advanced),
             "dns" | "advanced-network" => View::Detail(Page::Network, Detail::AdvancedNetwork),
             "bluetooth" => View::Page(Page::Bluetooth),
             "network" => View::Page(Page::Network),

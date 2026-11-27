@@ -208,20 +208,6 @@ pub fn system(app: &mut App, ui: &mut Ui) {
         {
             target = Some(Detail::About);
         }
-        widgets::divider(ui, &pal);
-        if widgets::row(
-            ui,
-            &pal,
-            pal.accent,
-            Icon::Sparkle,
-            "Advanced settings",
-            "Tweaks for privacy, speed, services and startup",
-            Right::Chevron,
-        )
-        .clicked()
-        {
-            target = Some(Detail::Advanced);
-        }
     });
 
     if let Some(detail) = target {

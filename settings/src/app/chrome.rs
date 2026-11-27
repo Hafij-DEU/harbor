@@ -557,6 +557,7 @@ impl App {
                                 View::Page(Page::TimeLanguage) => pages::time_language(self, ui),
                                 View::Page(Page::Compatibility) => pages::compatibility(self, ui),
                                 View::Page(Page::Updates) => pages::updates(self, ui),
+                                View::Page(Page::Advanced) => crate::advanced::advanced(self, ui),
                                 View::Detail(_, Detail::Display) => pages::display(self, ui),
                                 View::Detail(_, Detail::Sound) => pages::sound(self, ui),
                                 View::Detail(_, Detail::Notifications) => {
@@ -569,9 +570,6 @@ impl App {
                                 View::Detail(_, Detail::Keyboard) => pages::keyboard(self, ui),
                                 View::Detail(_, Detail::DefaultApps) => {
                                     pages::default_apps(self, ui)
-                                }
-                                View::Detail(_, Detail::Advanced) => {
-                                    crate::advanced::advanced(self, ui)
                                 }
                                 View::Detail(_, Detail::AdvancedNetwork) => {
                                     crate::advanced::advanced_network(self, ui)

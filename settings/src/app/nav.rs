@@ -17,10 +17,13 @@ pub enum Page {
     TimeLanguage,
     Compatibility,
     Updates,
+    /// Advanced settings: system tweaks (own entry in the left menu).
+    Advanced,
 }
 
 impl Page {
-    pub const ALL: [Page; 13] = [
+    // New pages go last: the index is saved in the Recently accessed file.
+    pub const ALL: [Page; 14] = [
         Page::System,
         Page::Bluetooth,
         Page::Network,
@@ -34,6 +37,7 @@ impl Page {
         Page::TimeLanguage,
         Page::Compatibility,
         Page::Updates,
+        Page::Advanced,
     ];
 
     pub fn label(self) -> &'static str {
@@ -51,6 +55,7 @@ impl Page {
             Page::TimeLanguage => "Time & language",
             Page::Compatibility => "Compatibility",
             Page::Updates => "Software updates",
+            Page::Advanced => "Advanced settings",
         }
     }
 
@@ -69,6 +74,7 @@ impl Page {
             Page::TimeLanguage => Icon::Clock,
             Page::Compatibility => Icon::Compatibility,
             Page::Updates => Icon::Update,
+            Page::Advanced => Icon::Sparkle,
         }
     }
 }
@@ -84,8 +90,6 @@ pub enum Detail {
     Pointer,
     Keyboard,
     DefaultApps,
-    /// System > Advanced settings (system tweaks).
-    Advanced,
     /// Network & internet > Advanced network settings (DNS).
     AdvancedNetwork,
     /// One section of Desktop & windows (index into `desktop::SECTIONS`,
@@ -106,7 +110,6 @@ impl Detail {
             Detail::Pointer => 6,
             Detail::Keyboard => 7,
             Detail::DefaultApps => 8,
-            Detail::Advanced => 9,
             Detail::AdvancedNetwork => 10,
             Detail::Desk(i) => 100 + i as u16,
         }
@@ -124,7 +127,6 @@ impl Detail {
             Detail::Pointer => Icon::Pointer,
             Detail::Keyboard => Icon::Keyboard,
             Detail::DefaultApps => Icon::Apps,
-            Detail::Advanced => Icon::Sparkle,
             Detail::AdvancedNetwork => Icon::Globe,
             Detail::Desk(_) => return None,
         })
@@ -141,7 +143,6 @@ impl Detail {
             6 => Detail::Pointer,
             7 => Detail::Keyboard,
             8 => Detail::DefaultApps,
-            9 => Detail::Advanced,
             10 => Detail::AdvancedNetwork,
             100..=355 => Detail::Desk((code - 100) as u8),
             _ => return None,
@@ -159,7 +160,6 @@ impl Detail {
             Detail::Pointer => "Mouse & touchpad",
             Detail::Keyboard => "Keyboard",
             Detail::DefaultApps => "Default applications",
-            Detail::Advanced => "Advanced settings",
             Detail::AdvancedNetwork => "Advanced network settings",
             Detail::Desk(i) => crate::desktop::section_name(i),
         }
@@ -286,6 +286,7 @@ impl Cat10 {
                     Icon::Info,
                     View::Detail(Page::System, Detail::About),
                 ),
+                ("Advanced settings", Icon::Sparkle, View::Page(Page::Advanced)),
             ],
             Cat10::Devices => &[
                 (
@@ -458,6 +459,7 @@ impl Cat10 {
             View::Page(Page::Accessibility) => Cat10::Ease,
             View::Page(Page::Privacy) => Cat10::Privacy,
             View::Page(Page::Updates) => Cat10::Update,
+            View::Page(Page::Advanced) => Cat10::System,
         })
     }
 
@@ -540,6 +542,7 @@ impl View {
             View::Page(Page::TimeLanguage) => "time",
             View::Page(Page::Compatibility) => "compat",
             View::Page(Page::Updates) => "updates",
+            View::Page(Page::Advanced) => "advanced",
             View::Detail(_, Detail::Display) => "display",
             View::Detail(_, Detail::Sound) => "sound",
             View::Detail(_, Detail::Notifications) => "notifications",
@@ -549,7 +552,6 @@ impl View {
             View::Detail(_, Detail::Pointer) => "pointer",
             View::Detail(_, Detail::Keyboard) => "keyboard",
             View::Detail(_, Detail::DefaultApps) => "default-apps",
-            View::Detail(_, Detail::Advanced) => "advanced",
             View::Detail(_, Detail::AdvancedNetwork) => "advanced-network",
             View::Detail(_, Detail::Desk(i)) => crate::desktop::section_key(i),
         }
