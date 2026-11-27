@@ -30,7 +30,7 @@ APPEARANCE_CHOICES = (
      (("follow", "Follow system"), ("light", "Light"), ("dark", "Dark"))),
     ("glass", "Glass effect", "Style, opacity, rim and glare: Harbor Settings > Personalisation",
      (("harbor", "Same as all Harbor apps"), ("off", "Off"), ("soft", "Soft"),
-      ("strong", "Strong"), ("planner", "Glass (Planner)"), ("custom", "Custom (Harbor Settings)"))),
+      ("strong", "Strong"), ("planner", "Lumina Glass"), ("custom", "Custom (Harbor Settings)"))),
     ("icons", "Icons", "Modern uses Harbor's own icon set",
      (("modern", "Modern"), ("system", "System icon theme"))),
     ("folder_color", "Folder colour", "Every folder icon in the Modern set",

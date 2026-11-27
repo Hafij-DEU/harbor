@@ -63,7 +63,7 @@ glass_choice!(GlassStyle {
     Smoke = "SMOKE", "Smoke";
     Halo = "HALO", "Halo";
     Glow = "GLOW", "Glow";
-    Planner = "PLANNER", "Planner";
+    Planner = "PLANNER", "Lumina Glass";
 });
 
 /// Glass styling shared by every Harbor app and Fusion Desk. The fields are

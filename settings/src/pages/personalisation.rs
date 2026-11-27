@@ -381,7 +381,7 @@ pub(crate) const GLASS_PRESETS: [(&str, &str); 13] = [
     ("Vision", "effect=STRONG,material=GLASS,style=SMOKE,opacity=60,rim=true,glare=true,shadow=true,light-follows=true,style-strength=80,shine-strength=100,rim-strength=170,glare-strength=90,shadow-strength=60,light-strength=110"),
     // Daily Routine Planner look (PLANNER-SPEC.md): solid planner gradient,
     // white/80 cards, indigo accent; opacity 100 keeps windows solid.
-    ("Planner", "effect=STRONG,material=GLASS,style=PLANNER,opacity=100,rim=true,glare=false,shadow=true,light-follows=false,style-strength=100,shine-strength=60,rim-strength=100,glare-strength=100,shadow-strength=100,light-strength=100"),
+    ("Lumina Glass", "effect=STRONG,material=GLASS,style=PLANNER,opacity=100,rim=true,glare=false,shadow=true,light-follows=false,style-strength=100,shine-strength=60,rim-strength=100,glare-strength=100,shadow-strength=100,light-strength=100"),
 ];
 
 pub(crate) fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {

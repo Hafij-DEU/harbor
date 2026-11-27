@@ -199,7 +199,7 @@ GLASS_OFF = dict(GLASS_DEFAULT, effect="OFF", opacity=100)
 # "custom" means Harbor Settings gave it its own full set of values.
 GLASS_APP_CHOICES = ("harbor", "off", "soft", "strong", "planner", "custom")
 GLASS_APP_LABELS = (("harbor", "Same as all Harbor apps"), ("off", "Off"), ("soft", "Soft"),
-                    ("strong", "Strong"), ("planner", "Glass (Planner)"),
+                    ("strong", "Strong"), ("planner", "Lumina Glass"),
                     ("custom", "Custom (Harbor Settings)"))
 
 
