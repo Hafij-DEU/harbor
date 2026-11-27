@@ -77,6 +77,21 @@ pub fn search_entries() -> Vec<SearchEntry> {
         subtitle: "Privacy, performance, services, startup",
         icon: Icon::Sparkle,
     });
+    for (i, (title, icon, _)) in crate::app::SECURITY_PAGES.iter().enumerate() {
+        entries.push(SearchEntry {
+            page: Page::Privacy,
+            detail: Some(Detail::Security(i as u8)),
+            title,
+            subtitle: [
+                "Firewall, Secure Boot, AppArmor, encryption",
+                "BIOS and device firmware (fwupd)",
+                "Webcam on or off, per app",
+                "Internet per app, OpenSnitch",
+                "ClamAV virus scan, quarantine",
+            ][i],
+            icon: *icon,
+        });
+    }
     for (title, subtitle) in [
         ("Advanced network settings", "DNS servers, find fastest DNS, clear DNS cache"),
         ("DNS", "Cloudflare, Google, Quad9, AdGuard or custom DNS"),

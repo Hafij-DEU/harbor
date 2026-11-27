@@ -49,12 +49,12 @@ fn run(prefix: &[&str], args: &[String]) -> (bool, String) {
     }
 }
 
-fn shared<T: Default + Send + 'static>(ui: &Ui, key: &str) -> Arc<Mutex<T>> {
+pub(crate) fn shared<T: Default + Send + 'static>(ui: &Ui, key: &str) -> Arc<Mutex<T>> {
     ui.ctx()
         .data_mut(|d| d.get_temp_mut_or_default::<Arc<Mutex<T>>>(Id::new(key)).clone())
 }
 
-fn faint(ui: &mut Ui, pal: &Palette, text: &str) {
+pub(crate) fn faint(ui: &mut Ui, pal: &Palette, text: &str) {
     ui.label(
         egui::RichText::new(text)
             .font(regular(12.0))
@@ -62,7 +62,7 @@ fn faint(ui: &mut Ui, pal: &Palette, text: &str) {
     );
 }
 
-fn log_card(ui: &mut Ui, pal: &Palette, log: &[String]) {
+pub(crate) fn log_card(ui: &mut Ui, pal: &Palette, log: &[String]) {
     if log.is_empty() {
         return;
     }
@@ -90,7 +90,6 @@ struct Tweak {
     cat: String,
     title: String,
     desc: String,
-    warn: String,
     risk: String,
     why: String,
     rec: bool,
@@ -148,7 +147,6 @@ fn load_tweaks(state: Arc<Mutex<TweakState>>, ctx: egui::Context) {
                         cat: s(t, "cat"),
                         title: s(t, "title"),
                         desc: s(t, "desc"),
-                        warn: s(t, "warn"),
                         risk: s(t, "risk"),
                         why: s(t, "why"),
                         rec: b(t, "rec"),

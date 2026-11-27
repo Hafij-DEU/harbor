@@ -13,6 +13,34 @@ pub fn privacy(app: &mut App, ui: &mut Ui) {
     let pal = app.pal();
     widgets::h1(ui, &pal, "Privacy & security");
 
+    widgets::section_label(ui, &pal, "Protection");
+    let mut open: Option<u8> = None;
+    widgets::card(ui, &pal, |ui| {
+        let subs = [
+            "Firewall, updates, Secure Boot, AppArmor, encryption at a glance",
+            "BIOS and device firmware from fwupd",
+            "Whole PC or per app",
+            "Whole PC, per app, OpenSnitch for deb apps",
+            "Local ClamAV scan, quarantine",
+        ];
+        for (i, (title, icon, _)) in crate::app::SECURITY_PAGES.iter().enumerate() {
+            if i > 0 {
+                widgets::divider(ui, &pal);
+            }
+            if widgets::row(ui, &pal, pal.accent, *icon, title, subs[i], Right::Chevron).clicked() {
+                open = Some(i as u8);
+            }
+        }
+    });
+    if let Some(i) = open {
+        app.go(crate::app::View::Detail(
+            crate::app::Page::Privacy,
+            crate::app::Detail::Security(i),
+        ));
+        return;
+    }
+    spacer(ui, 16.0);
+
     widgets::section_label(ui, &pal, "Security");
     widgets::card(ui, &pal, |ui| {
         let mut on = app.privacy.screen_lock;

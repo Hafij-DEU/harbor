@@ -242,6 +242,12 @@ impl App {
                 .map_or(View::Page(Page::Advanced), |i| {
                     View::Detail(Page::Advanced, Detail::TweakGroup(i as u8))
                 }),
+            key if key.starts_with("security") => crate::app::SECURITY_PAGES
+                .iter()
+                .position(|g| g.2 == key)
+                .map_or(View::Page(Page::Privacy), |i| {
+                    View::Detail(Page::Privacy, Detail::Security(i as u8))
+                }),
             "dns" | "advanced-network" => View::Detail(Page::Network, Detail::AdvancedNetwork),
             "bluetooth" => View::Page(Page::Bluetooth),
             "network" => View::Page(Page::Network),

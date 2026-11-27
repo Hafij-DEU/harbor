@@ -613,6 +613,9 @@ impl App {
                                 View::Detail(_, Detail::TweakGroup(i)) => {
                                     crate::advanced::advanced_group(self, ui, Some(i))
                                 }
+                                View::Detail(_, Detail::Security(i)) => {
+                                    crate::security::page(self, ui, i)
+                                }
                                 View::Detail(_, Detail::AdvancedNetwork) => {
                                     crate::advanced::advanced_network(self, ui)
                                 }

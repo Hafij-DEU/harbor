@@ -15,6 +15,7 @@
 //! `system::*` never touches egui.
 
 mod advanced;
+mod security;
 mod app;
 mod cleaner;
 mod desktop;

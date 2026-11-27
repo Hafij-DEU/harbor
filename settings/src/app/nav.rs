@@ -112,6 +112,8 @@ pub enum Detail {
     AdvancedNetwork,
     /// Advanced settings > one tweak group (index into `TWEAK_GROUPS`).
     TweakGroup(u8),
+    /// Privacy & security > one security page (index into `SECURITY_PAGES`).
+    Security(u8),
     /// One section of Desktop & windows (index into `desktop::SECTIONS`,
     /// the last one is Startup apps).
     Desk(u8),
@@ -132,6 +134,7 @@ impl Detail {
             Detail::DefaultApps => 8,
             Detail::AdvancedNetwork => 10,
             Detail::TweakGroup(i) => 200 + i as u16,
+            Detail::Security(i) => 300 + i as u16,
             Detail::Desk(i) => 100 + i as u16,
         }
     }
@@ -150,6 +153,7 @@ impl Detail {
             Detail::DefaultApps => Icon::Apps,
             Detail::AdvancedNetwork => Icon::Globe,
             Detail::TweakGroup(i) => TWEAK_GROUPS.get(i as usize)?.2,
+            Detail::Security(i) => SECURITY_PAGES.get(i as usize)?.1,
             Detail::Desk(_) => return None,
         })
     }
@@ -167,6 +171,7 @@ impl Detail {
             8 => Detail::DefaultApps,
             10 => Detail::AdvancedNetwork,
             200..=206 => Detail::TweakGroup((code - 200) as u8),
+            300..=304 => Detail::Security((code - 300) as u8),
             100..=199 => Detail::Desk((code - 100) as u8),
             _ => return None,
         })
@@ -185,10 +190,20 @@ impl Detail {
             Detail::DefaultApps => "Default applications",
             Detail::AdvancedNetwork => "Advanced network settings",
             Detail::TweakGroup(i) => TWEAK_GROUPS.get(i as usize).map_or("Tweaks", |g| g.1),
+            Detail::Security(i) => SECURITY_PAGES.get(i as usize).map_or("Security", |g| g.0),
             Detail::Desk(i) => crate::desktop::section_name(i),
         }
     }
 }
+
+/// Security pages under Privacy & security: (title, icon, view key).
+pub const SECURITY_PAGES: [(&str, Icon, &str); 5] = [
+    ("Security overview", Icon::Shield, "security"),
+    ("Firmware updates", Icon::Update, "security-firmware"),
+    ("Camera access", Icon::Image, "security-camera"),
+    ("Network access", Icon::Wifi, "security-network"),
+    ("Virus scan", Icon::Search, "security-virus"),
+];
 
 /// Advanced settings groups: (Glint category id, title, icon, view key).
 /// Order matches Glint's `TWEAK_CATS` and the Win10 `Cat10::Advanced` list.
@@ -485,11 +500,11 @@ impl Cat10 {
                 Icon::Accessibility,
                 View::Page(Page::Accessibility),
             )],
-            Cat10::Privacy => &[(
-                "Security & permissions",
-                Icon::Shield,
-                View::Page(Page::Privacy),
-            )],
+            Cat10::Privacy => &[
+                ("Security & permissions", Icon::Shield, View::Page(Page::Privacy)),
+                ("Camera access", Icon::Image, View::Detail(Page::Privacy, Detail::Security(2))),
+                ("Network access", Icon::Wifi, View::Detail(Page::Privacy, Detail::Security(3))),
+            ],
             Cat10::Advanced => &[
                 ("Overview", Icon::Sparkle, View::Page(Page::Advanced)),
                 ("Privacy", Icon::Shield, View::Detail(Page::Advanced, Detail::TweakGroup(0))),
@@ -500,7 +515,12 @@ impl Cat10 {
                 ("Startup", Icon::Clock, View::Detail(Page::Advanced, Detail::TweakGroup(5))),
                 ("Desktop", Icon::Display, View::Detail(Page::Advanced, Detail::TweakGroup(6))),
             ],
-            Cat10::Update => &[("Software Update", Icon::Update, View::Page(Page::Updates))],
+            Cat10::Update => &[
+                ("Software Update", Icon::Update, View::Page(Page::Updates)),
+                ("Security", Icon::Shield, View::Detail(Page::Privacy, Detail::Security(0))),
+                ("Firmware updates", Icon::Update, View::Detail(Page::Privacy, Detail::Security(1))),
+                ("Virus scan", Icon::Search, View::Detail(Page::Privacy, Detail::Security(4))),
+            ],
         }
     }
 
@@ -512,6 +532,8 @@ impl Cat10 {
             View::Detail(_, Detail::DefaultApps) => Cat10::Apps,
             View::Detail(_, Detail::AdvancedNetwork) => Cat10::Network,
             View::Detail(_, Detail::TweakGroup(_)) => Cat10::Advanced,
+            View::Detail(_, Detail::Security(2 | 3)) => Cat10::Privacy,
+            View::Detail(_, Detail::Security(_)) => Cat10::Update,
             View::Detail(_, Detail::Desk(i)) if i >= 8 => Cat10::Fusion,
             View::Detail(_, Detail::Desk(_)) => Cat10::Desktop,
             View::Detail(_, _) => Cat10::System,
@@ -622,6 +644,9 @@ impl View {
             View::Detail(_, Detail::AdvancedNetwork) => "advanced-network",
             View::Detail(_, Detail::TweakGroup(i)) => {
                 TWEAK_GROUPS.get(i as usize).map_or("tweaks", |g| g.3)
+            }
+            View::Detail(_, Detail::Security(i)) => {
+                SECURITY_PAGES.get(i as usize).map_or("security", |g| g.2)
             }
             View::Detail(_, Detail::Desk(i)) => crate::desktop::section_key(i),
         }
