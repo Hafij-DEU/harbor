@@ -570,6 +570,12 @@ impl App {
                                 View::Detail(_, Detail::DefaultApps) => {
                                     pages::default_apps(self, ui)
                                 }
+                                View::Detail(_, Detail::Advanced) => {
+                                    crate::advanced::advanced(self, ui)
+                                }
+                                View::Detail(_, Detail::AdvancedNetwork) => {
+                                    crate::advanced::advanced_network(self, ui)
+                                }
                                 View::Detail(_, Detail::Desk(i)) => {
                                     crate::desktop::desktop_section(self, ui, i)
                                 }
@@ -637,7 +643,12 @@ impl App {
         // returns, to prove cached values are already visible.
         let early = std::env::var("WIN11_SETTINGS_SHOT_EARLY").is_ok();
         if !self.screenshot_requested
-            && (early || (self.info_rx.is_none() && !waiting_hub && !waiting_updates))
+            && (early
+                || (self.info_rx.is_none()
+                    && !waiting_hub
+                    && !waiting_updates
+                    && !self.cleaner.scanning
+                    && !crate::advanced::LOADING.load(std::sync::atomic::Ordering::Relaxed)))
         {
             ctx.send_viewport_cmd(ViewportCommand::Screenshot(egui::UserData::default()));
             self.screenshot_requested = true;

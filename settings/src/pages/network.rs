@@ -244,6 +244,27 @@ pub fn network(app: &mut App, ui: &mut Ui) {
         });
     }
 
+    spacer(ui, 16.0);
+    widgets::section_label(ui, &pal, "More settings");
+    widgets::card(ui, &pal, |ui| {
+        if widgets::row(
+            ui,
+            &pal,
+            pal.accent,
+            Icon::Globe,
+            "Advanced network settings",
+            "DNS servers, find the fastest DNS, clear DNS cache",
+            Right::Chevron,
+        )
+        .clicked()
+        {
+            app.go(crate::app::View::Detail(
+                crate::app::Page::Network,
+                crate::app::Detail::AdvancedNetwork,
+            ));
+        }
+    });
+
     spacer(ui, 10.0);
     if widgets::ghost_button(ui, &pal, "Refresh networks", Some(Icon::Update)).clicked() {
         reload(app, ui);

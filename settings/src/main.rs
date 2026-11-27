@@ -14,6 +14,7 @@
 //! Rule of thumb: a page only draws and calls `system::*` (often on a thread);
 //! `system::*` never touches egui.
 
+mod advanced;
 mod app;
 mod cleaner;
 mod desktop;

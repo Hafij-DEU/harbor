@@ -84,6 +84,10 @@ pub enum Detail {
     Pointer,
     Keyboard,
     DefaultApps,
+    /// System > Advanced settings (system tweaks).
+    Advanced,
+    /// Network & internet > Advanced network settings (DNS).
+    AdvancedNetwork,
     /// One section of Desktop & windows (index into `desktop::SECTIONS`,
     /// the last one is Startup apps).
     Desk(u8),
@@ -102,6 +106,8 @@ impl Detail {
             Detail::Pointer => 6,
             Detail::Keyboard => 7,
             Detail::DefaultApps => 8,
+            Detail::Advanced => 9,
+            Detail::AdvancedNetwork => 10,
             Detail::Desk(i) => 100 + i as u16,
         }
     }
@@ -118,6 +124,8 @@ impl Detail {
             Detail::Pointer => Icon::Pointer,
             Detail::Keyboard => Icon::Keyboard,
             Detail::DefaultApps => Icon::Apps,
+            Detail::Advanced => Icon::Sparkle,
+            Detail::AdvancedNetwork => Icon::Globe,
             Detail::Desk(_) => return None,
         })
     }
@@ -133,6 +141,8 @@ impl Detail {
             6 => Detail::Pointer,
             7 => Detail::Keyboard,
             8 => Detail::DefaultApps,
+            9 => Detail::Advanced,
+            10 => Detail::AdvancedNetwork,
             100..=355 => Detail::Desk((code - 100) as u8),
             _ => return None,
         })
@@ -149,6 +159,8 @@ impl Detail {
             Detail::Pointer => "Mouse & touchpad",
             Detail::Keyboard => "Keyboard",
             Detail::DefaultApps => "Default applications",
+            Detail::Advanced => "Advanced settings",
+            Detail::AdvancedNetwork => "Advanced network settings",
             Detail::Desk(i) => crate::desktop::section_name(i),
         }
     }
@@ -292,7 +304,14 @@ impl Cat10 {
                     View::Detail(Page::Bluetooth, Detail::Keyboard),
                 ),
             ],
-            Cat10::Network => &[("Status", Icon::Wifi, View::Page(Page::Network))],
+            Cat10::Network => &[
+                ("Status", Icon::Wifi, View::Page(Page::Network)),
+                (
+                    "Advanced network settings",
+                    Icon::Globe,
+                    View::Detail(Page::Network, Detail::AdvancedNetwork),
+                ),
+            ],
             Cat10::Personalisation => &[
                 (
                     "Background & colours",
@@ -424,6 +443,7 @@ impl Cat10 {
             View::Home => return None,
             View::Detail(_, Detail::Pointer | Detail::Keyboard) => Cat10::Devices,
             View::Detail(_, Detail::DefaultApps) => Cat10::Apps,
+            View::Detail(_, Detail::AdvancedNetwork) => Cat10::Network,
             View::Detail(_, Detail::Desk(i)) if i >= 8 => Cat10::Fusion,
             View::Detail(_, Detail::Desk(_)) => Cat10::Desktop,
             View::Detail(_, _) => Cat10::System,
@@ -529,6 +549,8 @@ impl View {
             View::Detail(_, Detail::Pointer) => "pointer",
             View::Detail(_, Detail::Keyboard) => "keyboard",
             View::Detail(_, Detail::DefaultApps) => "default-apps",
+            View::Detail(_, Detail::Advanced) => "advanced",
+            View::Detail(_, Detail::AdvancedNetwork) => "advanced-network",
             View::Detail(_, Detail::Desk(i)) => crate::desktop::section_key(i),
         }
     }

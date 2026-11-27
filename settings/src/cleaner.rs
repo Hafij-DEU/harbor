@@ -10,6 +10,34 @@ use std::sync::mpsc::Receiver;
 use crate::inventory::ROOT_SCRIPT;
 use crate::jobs::{self, JobEvent};
 
+/// Per-browser deep clean (shared with App Hub): `scan` / `delete JSON`.
+pub const BROWSER_SCRIPT: &str = include_str!("browser_clean.py");
+
+fn str_list(v: Option<&serde_json::Value>) -> Vec<String> {
+    v.and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Browser deep-clean groups. Never fails the whole scan.
+fn browser_groups() -> Vec<serde_json::Value> {
+    let Ok(out) = Command::new("python3")
+        .args(["-I", "-c", BROWSER_SCRIPT, "scan"])
+        .stdin(Stdio::null())
+        .output()
+    else {
+        return Vec::new();
+    };
+    serde_json::from_str::<serde_json::Value>(String::from_utf8_lossy(&out.stdout).trim())
+        .ok()
+        .and_then(|v| v.as_array().cloned())
+        .unwrap_or_default()
+}
+
 #[derive(Clone, Default)]
 pub struct CleanerItem {
     pub label: String,
@@ -20,6 +48,10 @@ pub struct CleanerItem {
     /// Root-plan step for this item (granular root groups only):
     /// ("apt_purge", pkg) or ("snap_remove", name, rev)
     pub step: Vec<String>,
+    /// "delete" groups (browser deep clean): every file or folder this row
+    /// deletes, and the browser processes that must not be running.
+    pub paths: Vec<String>,
+    pub procs: Vec<String>,
 }
 
 #[derive(Clone, Default)]
@@ -271,6 +303,11 @@ pub fn scan() -> Result<Vec<CleanerGroup>, String> {
     let Some(groups) = json.as_array() else {
         return Err("The cleaner returned no data.".to_owned());
     };
+    let mut groups = groups.clone();
+    if std::env::var("WIN11_SETTINGS_OPEN_CLEANER").as_deref() == Ok("browsers") {
+        groups.clear();
+    }
+    groups.extend(browser_groups());
     let mut result = Vec::new();
     for g in groups {
         let items = g
@@ -291,7 +328,7 @@ pub fn scan() -> Result<Vec<CleanerGroup>, String> {
                     .unwrap_or("")
                     .to_owned(),
                 size: i.get("size").and_then(|v| v.as_i64()).unwrap_or(0),
-                selected: true,
+                selected: i.get("selected").and_then(|v| v.as_bool()).unwrap_or(true),
                 path: i
                     .get("path")
                     .and_then(|v| v.as_str())
@@ -306,6 +343,8 @@ pub fn scan() -> Result<Vec<CleanerGroup>, String> {
                             .collect()
                     })
                     .unwrap_or_default(),
+                paths: str_list(i.get("paths")),
+                procs: str_list(i.get("procs")),
             })
             .collect();
         result.push(CleanerGroup {
@@ -368,6 +407,8 @@ pub struct CleanerSelection {
     pub trash: Vec<String>,
     pub plan: serde_json::Map<String, serde_json::Value>,
     pub user: Vec<Vec<String>>,
+    /// Browser deep clean: [{"label", "paths", "procs"}], deleted for good.
+    pub delete: Vec<serde_json::Value>,
     pub selected_bytes: i64,
 }
 
@@ -376,6 +417,7 @@ pub fn selection(groups: &[CleanerGroup]) -> CleanerSelection {
     let mut plan = serde_json::Map::new();
     let mut user: Vec<Vec<String>> = Vec::new();
     let mut selected_bytes = 0i64;
+    let mut delete = Vec::new();
     let mut apt_purge: Vec<String> = Vec::new();
     let mut snap_remove: Vec<(String, String)> = Vec::new();
 
@@ -387,6 +429,11 @@ pub fn selection(groups: &[CleanerGroup]) -> CleanerSelection {
                 }
                 selected_bytes += item.size;
                 match g.action.as_str() {
+                    "delete" => delete.push(serde_json::json!({
+                        "label": format!("{} · {}", g.title, item.label),
+                        "paths": item.paths,
+                        "procs": item.procs,
+                    })),
                     "trash" => {
                         if !item.path.is_empty() {
                             trash.push(item.path.clone());
@@ -443,6 +490,7 @@ pub fn selection(groups: &[CleanerGroup]) -> CleanerSelection {
         trash,
         plan,
         user,
+        delete,
         selected_bytes,
     }
 }
@@ -452,6 +500,7 @@ pub fn execute(sel: &CleanerSelection) -> Receiver<JobEvent> {
     let trash = serde_json::to_string(&sel.trash).unwrap_or_else(|_| "[]".to_owned());
     let user = serde_json::to_string(&sel.user).unwrap_or_else(|_| "[]".to_owned());
     let root_script = ROOT_SCRIPT;
+    let delete = serde_json::to_string(&sel.delete).unwrap_or_else(|_| "[]".to_owned());
 
     // Everything user-side first (Trash, --user commands); then one pkexec
     // prompt for the root plan, streaming its output.
@@ -461,9 +510,16 @@ import json, os, subprocess, sys
 trash = json.loads(sys.argv[1])
 user = json.loads(sys.argv[2])
 plan_json, root_script = sys.argv[3], sys.argv[4]
+delete, browser_script = json.loads(sys.argv[5]), sys.argv[6]
 need_root = bool(json.loads(plan_json))
 
 rc = 0
+if delete:
+    r = subprocess.run(['python3', '-I', '-c', browser_script, 'delete', json.dumps(delete)],
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    for line in (r.stdout or '').splitlines():
+        print(line, flush=True)
+    rc = rc or r.returncode
 for path in trash:
     r = subprocess.run(['gio', 'trash', '--', path], capture_output=True, text=True)
     if r.returncode == 0:
@@ -493,7 +549,16 @@ sys.exit(rc)
 "#;
     jobs::spawn({
         let mut cmd = Command::new("python3");
-        cmd.args(["-c", script, &trash, &user, &plan_json, root_script]);
+        cmd.args([
+            "-c",
+            script,
+            &trash,
+            &user,
+            &plan_json,
+            root_script,
+            &delete,
+            BROWSER_SCRIPT,
+        ]);
         cmd.stdin(Stdio::null());
         cmd
     })

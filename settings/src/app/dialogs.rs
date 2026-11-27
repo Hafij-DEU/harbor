@@ -567,6 +567,18 @@ impl App {
                                             if cleaner_item_row(ui, pal, item).clicked() {
                                                 toggle_item = Some((gi, ii));
                                             }
+                                            if group.action == "delete" && !item.path.is_empty() {
+                                                // Say exactly what goes before anything is deleted.
+                                                ui.label(
+                                                    egui::RichText::new(format!(
+                                                        "Deletes: {}",
+                                                        item.path.replace('\n', "\n            ")
+                                                    ))
+                                                    .font(regular(10.5))
+                                                    .color(pal.text_faint),
+                                                );
+                                                ui.add_space(4.0);
+                                            }
                                         }
                                     });
                                 } else {

@@ -235,6 +235,8 @@ impl App {
             "pointer" => View::Detail(Page::System, Detail::Pointer),
             "keyboard" => View::Detail(Page::System, Detail::Keyboard),
             "defaultapps" => View::Detail(Page::System, Detail::DefaultApps),
+            "advanced" => View::Detail(Page::System, Detail::Advanced),
+            "dns" | "advanced-network" => View::Detail(Page::Network, Detail::AdvancedNetwork),
             "bluetooth" => View::Page(Page::Bluetooth),
             "network" => View::Page(Page::Network),
             "personalisation" => View::Page(Page::Personalisation),
@@ -347,6 +349,9 @@ impl App {
             app.check_updates();
         } else if let Ok(kind) = std::env::var("WIN11_SETTINGS_FAKE_JOB") {
             app.fake_job(&kind);
+        } else if std::env::var("WIN11_SETTINGS_OPEN_CLEANER").is_ok() {
+            // Screenshot of Free Up Space (`browsers` = only the browser groups).
+            app.open_cleaner();
         }
         app
     }
