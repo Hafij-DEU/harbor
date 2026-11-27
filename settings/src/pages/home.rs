@@ -52,6 +52,10 @@ pub(crate) fn home_extras(cat: crate::app::Cat10) -> &'static [(&'static str, Ic
                 View::Page(Page::Privacy),
             ),
         ],
+        Cat10::Advanced => &[
+            ("Privacy tweaks", Icon::Shield, View::Page(Page::Advanced)),
+            ("Services & startup", Icon::Power, View::Page(Page::Advanced)),
+        ],
         Cat10::Update => &[
             ("Available updates", Icon::Update, View::Page(Page::Updates)),
             ("Update policy", Icon::Clock, View::Page(Page::Updates)),
@@ -71,7 +75,15 @@ pub(crate) fn home_extras(cat: crate::app::Cat10) -> &'static [(&'static str, Ic
 /// `App::note_recent`), as tiles that open them again. Shared by the
 /// Windows 10 home and the Windows 11 System page; the page being shown is
 /// left out.
-pub fn recent_settings(app: &mut App, ui: &mut Ui, pal: &Palette, width: f32, x0: f32, content_w: f32, s: f32) {
+pub fn recent_settings(
+    app: &mut App,
+    ui: &mut Ui,
+    pal: &Palette,
+    width: f32,
+    x0: f32,
+    content_w: f32,
+    s: f32,
+) {
     let items: Vec<View> = app
         .recent
         .iter()
@@ -111,7 +123,11 @@ pub fn recent_settings(app: &mut App, ui: &mut Ui, pal: &Palette, width: f32, x0
         let resp = ui
             .interact(tile, Id::new(("home-recent", i)), Sense::click())
             .on_hover_cursor(CursorIcon::PointingHand);
-        let fill = if resp.hovered() { pal.card_hover } else { pal.card };
+        let fill = if resp.hovered() {
+            pal.card_hover
+        } else {
+            pal.card
+        };
         ui.painter()
             .add(widgets::glass_fill(pal, tile, pal.corner(6), fill));
         if !widgets::glassy(pal) {
@@ -488,7 +504,12 @@ pub fn home10(app: &mut App, ui: &mut Ui, rect: Rect, pal: &Palette) {
                     Pos2::new(cell.left() + 16.0 * k, head.top() + 12.0 * k),
                     Vec2::splat(icon_sz),
                 );
-                crate::icons::paint(ui.painter(), cat.icon(), glyph, widgets::icon_ink(&pal, cat.icon()));
+                crate::icons::paint(
+                    ui.painter(),
+                    cat.icon(),
+                    glyph,
+                    widgets::icon_ink(&pal, cat.icon()),
+                );
                 let painter = ui.painter().with_clip_rect(cell);
                 let tx = cell.left() + text_x;
                 painter.text(

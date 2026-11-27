@@ -40,6 +40,24 @@ impl Page {
         Page::Advanced,
     ];
 
+    /// Left-menu order (differs from `ALL`, whose index is saved).
+    pub const SIDEBAR: [Page; 14] = [
+        Page::System,
+        Page::Bluetooth,
+        Page::Network,
+        Page::Personalisation,
+        Page::Desktop,
+        Page::Extensions,
+        Page::Apps,
+        Page::Accounts,
+        Page::Accessibility,
+        Page::Privacy,
+        Page::TimeLanguage,
+        Page::Compatibility,
+        Page::Advanced,
+        Page::Updates,
+    ];
+
     pub fn label(self) -> &'static str {
         match self {
             Page::System => "System",
@@ -181,11 +199,12 @@ pub enum Cat10 {
     Time,
     Ease,
     Privacy,
+    Advanced,
     Update,
 }
 
 impl Cat10 {
-    pub const ALL: [Cat10; 12] = [
+    pub const ALL: [Cat10; 13] = [
         Cat10::System,
         Cat10::Devices,
         Cat10::Network,
@@ -197,6 +216,7 @@ impl Cat10 {
         Cat10::Time,
         Cat10::Ease,
         Cat10::Privacy,
+        Cat10::Advanced,
         Cat10::Update,
     ];
 
@@ -213,6 +233,7 @@ impl Cat10 {
             Cat10::Time => "Time & Language",
             Cat10::Ease => "Ease of Access",
             Cat10::Privacy => "Privacy",
+            Cat10::Advanced => "Advanced",
             Cat10::Update => "Update & Security",
         }
     }
@@ -230,6 +251,7 @@ impl Cat10 {
             Cat10::Time => "Date, time, language, region",
             Cat10::Ease => "Text size, visual alerts, keys",
             Cat10::Privacy => "Screen lock, location, camera",
+            Cat10::Advanced => "Tweaks for privacy, speed, services",
             Cat10::Update => "Software and security updates",
         }
     }
@@ -247,6 +269,7 @@ impl Cat10 {
             Cat10::Time => Icon::Clock,
             Cat10::Ease => Icon::Accessibility,
             Cat10::Privacy => Icon::Shield,
+            Cat10::Advanced => Icon::Sparkle,
             Cat10::Update => Icon::Update,
         }
     }
@@ -286,7 +309,6 @@ impl Cat10 {
                     Icon::Info,
                     View::Detail(Page::System, Detail::About),
                 ),
-                ("Advanced settings", Icon::Sparkle, View::Page(Page::Advanced)),
             ],
             Cat10::Devices => &[
                 (
@@ -434,6 +456,11 @@ impl Cat10 {
                 Icon::Shield,
                 View::Page(Page::Privacy),
             )],
+            Cat10::Advanced => &[(
+                "Advanced settings",
+                Icon::Sparkle,
+                View::Page(Page::Advanced),
+            )],
             Cat10::Update => &[("Software Update", Icon::Update, View::Page(Page::Updates))],
         }
     }
@@ -459,7 +486,7 @@ impl Cat10 {
             View::Page(Page::Accessibility) => Cat10::Ease,
             View::Page(Page::Privacy) => Cat10::Privacy,
             View::Page(Page::Updates) => Cat10::Update,
-            View::Page(Page::Advanced) => Cat10::System,
+            View::Page(Page::Advanced) => Cat10::Advanced,
         })
     }
 

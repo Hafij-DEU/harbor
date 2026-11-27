@@ -346,7 +346,7 @@ impl App {
                 .show(ui, |ui| {
                     ui.set_width(inner.width());
                     ui.spacing_mut().item_spacing.y = 2.0;
-                    for page in Page::ALL {
+                    for page in Page::SIDEBAR {
                         let selected = self.view.page() == page;
                         if nav_item(ui, pal, pal.accent, page.icon(), page.label(), selected)
                             .clicked()
