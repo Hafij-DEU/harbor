@@ -489,7 +489,7 @@ impl Palette {
     /// The Daily Routine Planner look (spec: ~/Music/apps/glass-theme/PLANNER-SPEC.md):
     /// indigo accent, white/80 (dark zinc/80) cards with a white rim over the
     /// lavender/sky (dark navy) gradient that `widgets::glow_backdrop` paints.
-    /// PLANNER palette v2 ("Planner Mist"): one violet-indigo hue family.
+    /// PLANNER palette v3 ("Planner Glass"): one violet-indigo hue family.
     /// Mist backdrop (dark: ink-violet), solid cards (slightly see-through
     /// only while Fusion Desk blurs behind the window), indigo-tinted ink
     /// text, hovers and inputs. Spec: ~/Music/apps/glass-theme/PLANNER-SPEC.md
@@ -499,45 +499,43 @@ impl Palette {
         self.accent = rgb(0x63, 0x66, 0xf1);
         self.on_accent = Color32::WHITE;
         if dark {
-            let card_a = if see_through { 0.86 } else { 1.0 };
-            self.card = rgba(0x1f, 0x1c, 0x33, card_a);
-            self.card_hover = rgba(0x2a, 0x26, 0x44, card_a);
-            self.card_border = rgba(0xc4, 0xb5, 0xfd, 0.12);
+            self.card = rgba(40, 35, 76, 0.55);
+            self.card_hover = rgba(52, 46, 96, 0.65);
+            self.card_border = rgba(0xff, 0xff, 0xff, 0.13);
             self.text = rgb(0xec, 0xeb, 0xf7);
             self.text_muted = rgb(0xa9, 0xa6, 0xc4);
             self.text_faint = rgb(0x6f, 0x6c, 0x8c);
-            self.hover = rgba(0x8b, 0x80, 0xf9, 0.16);
-            self.pressed = rgba(0x8b, 0x80, 0xf9, 0.26);
+            self.hover = rgba(0xff, 0xff, 0xff, 0.08);
+            self.pressed = rgba(0xff, 0xff, 0xff, 0.14);
             self.divider = rgb(0x2c, 0x29, 0x45);
-            self.input_bg = rgb(0x29, 0x26, 0x3f);
-            self.input_border = rgba(0xc4, 0xb5, 0xfd, 0.18);
+            self.input_bg = rgba(0xff, 0xff, 0xff, 0.06);
+            self.input_border = rgba(0xff, 0xff, 0xff, 0.14);
             self.track = rgb(0x33, 0x2f, 0x52);
             self.nav_selected = rgba(0x81, 0x8c, 0xf8, 0.22);
             // Opaque on purpose: code tells dark from light by bg.r(), and
             // egui stores colours premultiplied. The backdrop paints over it.
-            self.bg = rgb(0x17, 0x14, 0x30);
-            self.nav_bg = rgba(0x13, 0x11, 0x1f, 0.45);
+            self.bg = rgb(27, 31, 69);
+            self.nav_bg = rgba(20, 17, 40, 0.40);
             self.tooltip = rgb(0x24, 0x21, 0x3a);
         } else {
-            let card_a = if see_through { 0.90 } else { 1.0 };
-            self.card = rgba(0xff, 0xff, 0xff, card_a);
-            self.card_hover = rgb(0xf3, 0xf1, 0xff);
-            self.card_border = rgb(0xe6, 0xe3, 0xf6);
+            self.card = rgba(0xff, 0xff, 0xff, 0.30);
+            self.card_hover = rgba(0xff, 0xff, 0xff, 0.55);
+            self.card_border = rgba(0xff, 0xff, 0xff, 0.85);
             self.text = rgb(0x1e, 0x1b, 0x3a);
             self.text_muted = rgb(0x5f, 0x5b, 0x7a);
             self.text_faint = rgb(0x9a, 0x97, 0xb3);
-            self.hover = rgb(0xe9, 0xe6, 0xff);
-            self.pressed = rgb(0xde, 0xda, 0xff);
+            self.hover = rgba(0xff, 0xff, 0xff, 0.50);
+            self.pressed = rgba(0xff, 0xff, 0xff, 0.80);
             self.divider = rgb(0xec, 0xe9, 0xf8);
-            self.input_bg = rgb(0xf7, 0xf6, 0xfd);
-            self.input_border = rgb(0xdc, 0xd8, 0xf0);
+            self.input_bg = rgba(0xff, 0xff, 0xff, 0.55);
+            self.input_border = rgba(0xff, 0xff, 0xff, 0.90);
             self.track = rgb(0xe4, 0xe0, 0xff);
             self.nav_selected = rgba(0x63, 0x66, 0xf1, 0.12);
-            self.bg = rgb(0xee, 0xf0, 0xff);
-            self.nav_bg = rgba(0xff, 0xff, 0xff, 0.45);
+            self.bg = rgb(220, 224, 255);
+            self.nav_bg = rgba(0xff, 0xff, 0xff, 0.30);
             self.tooltip = Color32::WHITE;
         }
-        let _ = glass; // rim/effect only change the other styles
+        let _ = (glass, see_through); // the backdrop thins itself when see-through
         self
     }
 

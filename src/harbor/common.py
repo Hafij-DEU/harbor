@@ -152,35 +152,42 @@ GLASS_KEYS = ("effect", "material", "style", "opacity", "rim", "glare", "shadow"
 GLASS_EFFECTS = ("OFF", "SOFT", "STRONG")
 GLASS_MATERIALS = ("GLASS", "GLOSS")
 GLASS_STYLES = ("CLEAR", "FROSTED", "GEL", "TINTED", "SMOKE", "HALO", "GLOW", "PLANNER")
-# PLANNER = the Daily Routine Planner look, palette v2 ("Planner Mist"): one
-# violet-indigo hue family. A low-chroma violet mist backdrop (dark: deep
-# ink-violet) behind clean white (dark: #1f1c33) cards, indigo-tinted neutral
-# buttons and ink text, an indigo->violet accent, 24/16/12 px corners and
-# indigo-tinted shadows. Spec: ~/Music/apps/glass-theme/PLANNER-SPEC.md
+# PLANNER = the Daily Routine Planner look, palette v3 ("Planner Glass"): one
+# violet-indigo hue family. A soft lavender -> periwinkle backdrop (dark: ink
+# indigo) with real glass cards on it: translucent white (dark: smoky violet)
+# with a top-to-bottom sheen, a white rim, a bright top edge and a soft
+# coloured shadow. Header = near-solid bar; footer = floating glass card.
+# Spec: ~/Music/apps/glass-theme/PLANNER-SPEC.md
 PLANNER = {
-    False: {"stops": ((246, 244, 255), (238, 240, 255), (232, 236, 254)),
-            "card": "#ffffff", "surface": "#ffffff", "entry": "#f7f6fd",
-            "window": "rgba(255,255,255,0.30)", "sidebar": "rgba(255,255,255,0.45)",
-            "nav_hover": "rgba(99,102,241,0.07)", "rim": "#e6e3f6", "line": "#dcd8f0",
-            "text": "#1e1b3a", "soft": "#5f5b7a", "accent_text": "#4f46e5",
-            "btn": "#e9e6ff", "btn_hover": "#dedaff", "btn_text": "#4338ca", "btn_line": "#d9d4fb",
-            "bar": "#ffffff", "shade": "49,46,129"},
-    True: {"stops": ((19, 17, 31), (23, 20, 48), (29, 25, 58)),
-           "card": "#1f1c33", "surface": "#1c1930", "entry": "#29263f",
-           "window": "rgba(19,17,31,0.30)", "sidebar": "rgba(19,17,31,0.45)",
-           "nav_hover": "rgba(196,181,253,0.08)", "rim": "rgba(196,181,253,0.12)",
-           "line": "rgba(196,181,253,0.18)",
-           "text": "#ecebf7", "soft": "#a9a6c4", "accent_text": "#a5b4fc",
-           "btn": "rgba(139,128,249,0.16)", "btn_hover": "rgba(139,128,249,0.26)",
-           "btn_text": "#d4d0ff", "btn_line": "rgba(167,139,250,0.22)",
-           "bar": "#1c1930", "shade": "0,0,0"},
+    False: {"stops": ((232, 218, 255), (220, 224, 255), (203, 220, 255)),
+            "card": "rgba(255,255,255,0.30)",
+            "card_img": "linear-gradient(to bottom, rgba(255,255,255,0.72), rgba(255,255,255,0.40))",
+            "surface": "rgba(255,255,255,0.0)", "entry": "rgba(255,255,255,0.55)",
+            "window": "rgba(255,255,255,0.10)", "sidebar": "rgba(255,255,255,0.30)",
+            "nav_hover": "rgba(255,255,255,0.45)", "rim": "rgba(255,255,255,0.85)",
+            "spec": "inset 0 1px rgba(255,255,255,0.95)", "line": "rgba(255,255,255,0.90)",
+            "text": "#1e1b3a", "soft": "#5b5778", "accent_text": "#4f46e5",
+            "btn": "rgba(255,255,255,0.50)", "btn_hover": "rgba(255,255,255,0.80)",
+            "btn_text": "#4338ca", "btn_line": "rgba(255,255,255,0.90)",
+            "bar": "rgba(255,255,255,0.90)", "hair": "rgba(99,102,241,0.10)", "shade": "76,61,180"},
+    True: {"stops": ((26, 21, 51), (27, 31, 69), (20, 26, 58)),
+           "card": "rgba(40,35,76,0.55)",
+           "card_img": "linear-gradient(to bottom, rgba(255,255,255,0.10), rgba(255,255,255,0.03))",
+           "surface": "rgba(20,17,40,0.25)", "entry": "rgba(255,255,255,0.06)",
+           "window": "rgba(20,17,40,0.20)", "sidebar": "rgba(20,17,40,0.40)",
+           "nav_hover": "rgba(255,255,255,0.06)", "rim": "rgba(255,255,255,0.13)",
+           "spec": "inset 0 1px rgba(255,255,255,0.16)", "line": "rgba(255,255,255,0.14)",
+           "text": "#eeedf9", "soft": "#aaa7c8", "accent_text": "#a5b4fc",
+           "btn": "rgba(255,255,255,0.08)", "btn_hover": "rgba(255,255,255,0.14)",
+           "btn_text": "#d4d0ff", "btn_line": "rgba(255,255,255,0.14)",
+           "bar": "rgba(24,21,48,0.92)", "hair": "rgba(255,255,255,0.07)", "shade": "0,0,0"},
 }
 PLANNER_ACCENT = "linear-gradient(135deg, #6366f1, #8b5cf6)"
-PLANNER_SHADOW_ACCENT = "0 8px 16px -6px rgba(99,102,241,0.45)"
+PLANNER_SHADOW_ACCENT = "0 8px 18px -6px rgba(99,102,241,0.50)"
 
 
 def _planner_backdrop(dark, alpha=1.0):
-    return "linear-gradient(160deg, %s)" % ", ".join(
+    return "linear-gradient(150deg, %s)" % ", ".join(
         "rgba(%d,%d,%d,%.2f)" % (*c, alpha) for c in PLANNER[bool(dark)]["stops"])
 
 
@@ -430,63 +437,65 @@ def glass_palette(pal, spec, dark, see_through=None):
 
 
 def _planner_palette(pal, spec, dark, see_through):
-    """PLANNER colours. The window paints the planner mist (see _planner_css),
-    so window/sidebar colours are thin veils over it; cards are solid (a
-    little see-through only while Fusion Desk blurs behind the window)."""
+    """PLANNER colours. The window paints the planner gradient (see
+    _planner_css); window/sidebar are thin veils, cards are glass on it."""
     p = PLANNER[bool(dark)]
-    card_a = (0.86 if dark else 0.90) if see_through else 1.0
-    pal["card"] = _alpha(p["card"], card_a)
-    pal["card_hover"] = p["btn"] if not dark else _alpha("#2a2644", card_a)
-    pal["card_active"] = p["btn_hover"]
-    pal["surface"] = _alpha(p["surface"], 0.55 if see_through else 0.70)
+    pal["card"] = p["card"]
+    pal["card_hover"] = p["btn_hover"]
+    pal["card_active"] = p["btn"]
+    pal["surface"] = p["surface"]
     pal["entry"] = p["entry"]
     pal["entry_border"] = p["line"]
     pal["window"] = p["window"]
     pal["sidebar"] = p["sidebar"]
     pal["nav_hover"] = p["nav_hover"]
-    pal["nav_sel"] = "rgba(99,102,241,%.2f)" % (0.22 if dark else 0.12)
+    pal["nav_sel"] = "rgba(99,102,241,%.2f)" % (0.24 if dark else 0.14)
     pal["border"] = p["rim"]
     return pal
 
 
 def _planner_css(spec, dark, see_through):
-    """PLANNER shapes and colours: the mist backdrop, planner corner scale,
-    indigo accent, tinted neutral buttons, a solid header and a floating
-    footer card. Added after the shared glass layers."""
+    """PLANNER shapes and colours: the planner gradient, glass cards (sheen,
+    white rim, bright top edge, coloured shadow), planner corner scale,
+    indigo accent, a near-solid header and a floating glass footer card."""
     p = PLANNER[bool(dark)]
     backdrop = _planner_backdrop(dark, max(0.35, spec["opacity"] / 100) if see_through else 1.0)
     ds = spec["shadow-strength"] / 100
-    k = 2.2 if dark else 1.0
-    card_shadow = (f"0 1px 2px rgba({p['shade']},{0.06 * ds * k:.2f}), "
-                   f"0 6px 16px -8px rgba({p['shade']},{0.12 * ds * k:.2f})")
-    tile_shadow = f"0 12px 24px -10px rgba({p['shade']},{0.22 * ds * k:.2f})"
+    k = 1.8 if dark else 1.0
+    card_shadow = (f"0 10px 24px -12px rgba({p['shade']},{min(1, 0.30 * ds * k):.2f}), "
+                   f"0 2px 6px -2px rgba({p['shade']},{min(1, 0.10 * ds * k):.2f})")
+    big_shadow = f"0 16px 32px -14px rgba({p['shade']},{min(1, 0.38 * ds * k):.2f})"
+    glass = (f"background-color: {p['card']}; background-image: {p['card_img']}; "
+             f"border: 1px solid {p['rim']};")
     return f"""
 :root {{ --accent-bg-color: #6366f1; --accent-fg-color: #ffffff; --accent-color: {p["accent_text"]};
     --window-fg-color: {p["text"]}; --view-fg-color: {p["text"]}; }}
 window.hb-window {{ background-image: {backdrop}; color: {p["text"]}; }}
-window.hb-window .dim-label, window.hb-window .hb-subtitle-dim {{ color: {p["soft"]}; }}
+window.hb-window .dim-label {{ color: {p["soft"]}; }}
 window.hb-window headerbar {{ background-color: {p["bar"]}; color: {p["text"]};
-    box-shadow: 0 1px {p["rim"]}, 0 6px 14px -10px rgba({p["shade"]},{0.25 * k:.2f}); }}
+    box-shadow: 0 1px {p["hair"]}, 0 6px 14px -10px rgba({p["shade"]},{0.30 * k:.2f}); }}
 window.hb-window toolbarview > .bottom-bar, window.hb-window actionbar > revealer > box,
-window.hb-window .hb-statusbar, window.hb-window .hbf-statusbar {{ background-color: {p["card"]}; margin: 0 12px 12px;
-    border-radius: 16px; border: 1px solid {p["rim"]}; box-shadow: {tile_shadow}; }}
-.hb-surface {{ border-top-left-radius: 24px; border-color: {p["rim"]}; }}
-.hb-card, .hb-card-group {{ border-radius: 16px; border-color: {p["rim"]}; box-shadow: {card_shadow}; }}
-.hb-tile, flowbox.hbf-cards > flowboxchild, .hb-tm-mem-card, .hb-tm-sweep-tile {{
-    border-radius: 16px; border-color: {p["rim"]}; box-shadow: {card_shadow}; }}
-.hb-tm-sweep-hero {{ border-radius: 24px; box-shadow: {tile_shadow}; }}
+window.hb-window .hb-statusbar, window.hb-window .hbf-statusbar {{ {glass} margin: 0 12px 12px;
+    border-radius: 16px; box-shadow: {p["spec"]}, {big_shadow}; }}
+.hb-surface {{ border-top-left-radius: 24px; border-color: {p["rim"]}; background-color: {p["surface"]}; background-image: none; }}
+.hb-card, .hb-card-group, .hb-tile, flowbox.hbf-cards > flowboxchild, .hb-tm-mem-card, .hb-tm-sweep-tile {{
+    {glass} border-radius: 16px; box-shadow: {p["spec"]}, {card_shadow}; }}
+.hb-tile:hover, flowbox.hbf-cards > flowboxchild:hover {{ background-color: {p["btn_hover"]}; }}
+.hb-tm-sweep-hero {{ border-radius: 24px; box-shadow: {p["spec"]}, {big_shadow}; }}
 list.hb-nav > row {{ border-radius: 12px; }}
-list.hb-nav > row:selected {{ background-image: none; color: {p["accent_text"]}; }}
+list.hb-nav > row:selected {{ background-image: none; color: {p["accent_text"]};
+    box-shadow: {p["spec"]}; }}
 list.hb-nav > row:selected .hb-nav-pill {{ background-image: linear-gradient(to bottom, #6366f1, #8b5cf6); }}
 entry.hb-search, searchentry.hb-search {{ border-radius: 12px; border: 1px solid {p["line"]};
-    background-color: {p["entry"]}; color: {p["text"]}; }}
+    background-color: {p["entry"]}; color: {p["text"]}; box-shadow: {p["spec"]}; }}
 entry.hb-search:focus-within, searchentry.hb-search:focus-within {{ box-shadow: 0 0 0 2px #6366f1; }}
 button.hb-accent {{ background-image: {PLANNER_ACCENT}; color: #ffffff; border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.20); box-shadow: {PLANNER_SHADOW_ACCENT}; font-weight: 600; }}
+    border: 1px solid rgba(255,255,255,0.25); box-shadow: inset 0 1px rgba(255,255,255,0.30), {PLANNER_SHADOW_ACCENT};
+    font-weight: 600; }}
 button.hb-accent:hover {{ filter: none; opacity: 0.92; }}
 button.hb-accent:active, button.hb-plain:active {{ transform: scale(0.95); }}
 button.hb-plain {{ background: {p["btn"]}; color: {p["btn_text"]}; border: 1px solid {p["btn_line"]};
-    border-radius: 12px; box-shadow: none; }}
+    border-radius: 12px; box-shadow: {p["spec"]}; }}
 button.hb-plain:hover {{ background: {p["btn_hover"]}; }}
 button.hb-tool {{ border-radius: 12px; }}
 .hb-badge {{ background-image: {PLANNER_ACCENT}; border-radius: 9999px; }}

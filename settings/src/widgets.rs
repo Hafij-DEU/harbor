@@ -111,6 +111,9 @@ pub fn glass_fill(pal: &Palette, rect: Rect, corner: u8, color: Color32) -> egui
     if !g.on() || rect.height() < 4.0 || rect.width() < 4.0 {
         return egui::Shape::rect_filled(rect, corner, color);
     }
+    if g.style == GlassStyle::Planner {
+        return planner_card(pal, rect, corner, color);
+    }
     let dark = pal.bg.r() < 128;
     let r = (corner as f32).min(rect.height() / 2.0);
     let k = if g.effect == GlassEffect::Strong {
@@ -401,6 +404,54 @@ pub fn glow_backdrop(painter: &egui::Painter, rect: Rect, pal: &Palette, corner:
     }
 }
 
+/// A Planner glass card like the Daily Routine Planner app: translucent
+/// fill with a top-to-bottom white sheen, a white rim, a bright top edge and
+/// a soft coloured shadow. Strong colours (accent buttons) stay solid with
+/// just the top edge.
+fn planner_card(pal: &Palette, rect: Rect, corner: u8, color: Color32) -> egui::Shape {
+    let dark = pal.bg.r() < 128;
+    let wa = |a: f32| Color32::from_white_alpha((a.clamp(0.0, 1.0) * 255.0) as u8);
+    let ds = crate::theme::Glass::scale(pal.glass.shadow_strength);
+    let r = (corner as f32).min(rect.height() / 2.0);
+    let colourful = color.r().abs_diff(color.b()) > 60 || color.g().abs_diff(color.b()) > 60;
+    let flat_control = rect.height() < 44.0; // buttons, chips, inputs: no shadow
+    let mut shapes = Vec::new();
+    if color.a() == 0 {
+        return egui::Shape::Noop;
+    }
+    if pal.glass.shadow && ds > 0.0 && !flat_control {
+        let (cr, cg, cb) = if dark { (0, 0, 0) } else { (76, 61, 180) };
+        for (grow, dy, a) in [(12.0_f32, 8.0_f32, 0.035), (6.0, 4.0, 0.05), (1.5, 1.5, 0.06)] {
+            let a = a * ds * if dark { 2.6 } else { 1.0 };
+            shapes.push(egui::Shape::rect_filled(
+                rect.translate(Vec2::new(0.0, dy)).expand(grow),
+                corner.saturating_add(grow as u8),
+                Color32::from_rgba_unmultiplied(cr, cg, cb, (a.min(1.0) * 255.0) as u8),
+            ));
+        }
+    }
+    shapes.push(egui::Shape::rect_filled(rect, corner, color));
+    if !colourful {
+        let (t, b) = if dark { (0.10, 0.03) } else { (0.62, 0.30) };
+        shapes.push(rounded_rows(rect, r, rect.top(), rect.bottom(), &[(0.0, wa(t)), (1.0, wa(b))]));
+        shapes.push(egui::Shape::rect_stroke(
+            rect.shrink(0.5),
+            corner,
+            egui::Stroke::new(1.0, wa(if dark { 0.13 } else { 0.85 })),
+            egui::StrokeKind::Inside,
+        ));
+    }
+    // bright top edge (the "glass" highlight)
+    let inset = r.max(4.0);
+    if rect.width() > inset * 2.0 + 4.0 {
+        shapes.push(egui::Shape::line_segment(
+            [egui::pos2(rect.left() + inset, rect.top() + 1.0), egui::pos2(rect.right() - inset, rect.top() + 1.0)],
+            egui::Stroke::new(1.0, wa(if colourful { 0.30 } else if dark { 0.18 } else { 0.95 })),
+        ));
+    }
+    egui::Shape::Vec(shapes)
+}
+
 /// The Planner style's backdrop: the planner gradient (light lavender to sky,
 /// dark navy) behind the page. `corner` keeps it inside a rounded frame.
 /// In a see-through window it thins with the opacity so Fusion Desk's blur
@@ -414,9 +465,9 @@ pub fn planner_backdrop(painter: &egui::Painter, rect: Rect, pal: &Palette, corn
     };
     let c = |r: u8, g: u8, b: u8| Color32::from_rgba_unmultiplied(r, g, b, (a * 255.0) as u8);
     let stops: Vec<(f32, Color32)> = if dark {
-        vec![(0.0, c(0x13, 0x11, 0x1f)), (0.55, c(0x17, 0x14, 0x30)), (1.0, c(0x1d, 0x19, 0x3a))]
+        vec![(0.0, c(26, 21, 51)), (0.5, c(27, 31, 69)), (1.0, c(20, 26, 58))]
     } else {
-        vec![(0.0, c(0xf6, 0xf4, 0xff)), (0.55, c(0xee, 0xf0, 0xff)), (1.0, c(0xe8, 0xec, 0xfe))]
+        vec![(0.0, c(232, 218, 255)), (0.5, c(220, 224, 255)), (1.0, c(203, 220, 255))]
     };
     painter.add(rounded_rows(rect, corner, rect.top(), rect.bottom(), &stops));
 }
