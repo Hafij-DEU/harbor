@@ -347,24 +347,20 @@ impl App {
                     ui.set_width(inner.width());
                     ui.spacing_mut().item_spacing.y = 2.0;
                     // Like Windows 10: a page with sub-pages opens its own
-                    // short menu here; Back returns to the full list, Home
-                    // goes to the start page. `top_for` remembers the page
-                    // the user stepped back from.
+                    // short menu here; Home goes to the start page with the
+                    // full list. `top_view` is the view that shows the full list.
                     let top_id = egui::Id::new("nav-top-for");
                     // Unset at start: the start page shows the full list.
-                    let top_for: Option<Page> = ui
+                    let top_view: Option<View> = ui
                         .ctx()
-                        .data(|d| d.get_temp::<Option<Page>>(top_id))
-                        .unwrap_or(Some(Page::System));
+                        .data(|d| d.get_temp::<Option<View>>(top_id))
+                        .unwrap_or(Some(View::Page(Page::System)));
                     let page = self.view.page();
                     let subs = page.sub_items();
-                    let mut set_top: Option<Option<Page>> = None;
-                    if subs.len() > 1 && top_for != Some(page) {
-                        if nav_item(ui, pal, pal.accent, Icon::Back, "Back", false).clicked() {
-                            set_top = Some(Some(page));
-                        }
+                    let mut set_top: Option<Option<View>> = None;
+                    if subs.len() > 1 && top_view != Some(self.view) {
                         if nav_item(ui, pal, pal.accent, Icon::Home, "Home", false).clicked() {
-                            set_top = Some(Some(Page::System));
+                            set_top = Some(Some(View::Page(Page::System)));
                             self.go(View::Page(Page::System));
                         }
                         ui.add_space(10.0);
