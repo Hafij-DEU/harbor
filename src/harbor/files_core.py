@@ -339,7 +339,7 @@ class Settings:
                "icons": ("modern", "system"), "menu_style": ("win11", "classic", "merged"),
                "command_bar": ("win11", "ribbon"), "ui_design": ("win11", "win10", "custom"),
                "density": ("comfortable", "compact"),
-               "glass": ("harbor", "off", "soft", "strong", "custom"),
+               "glass": ("harbor", "off", "soft", "strong", "planner", "custom"),
                "theme": ("follow", "light", "dark"),
                "folder_color": ("classic", "accent") + tuple(FOLDER_PALETTE) + ("custom",),
                "click_to_open": ("double", "single"), "group_by": ("none", "type", "date")}

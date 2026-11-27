@@ -197,9 +197,10 @@ GLASS_DEFAULT = {"effect": "STRONG", "material": "GLASS", "style": "FROSTED", "o
 GLASS_OFF = dict(GLASS_DEFAULT, effect="OFF", opacity=100)
 # An app's own quick choice (Files > Options, Task Manager > Settings);
 # "custom" means Harbor Settings gave it its own full set of values.
-GLASS_APP_CHOICES = ("harbor", "off", "soft", "strong", "custom")
+GLASS_APP_CHOICES = ("harbor", "off", "soft", "strong", "planner", "custom")
 GLASS_APP_LABELS = (("harbor", "Same as all Harbor apps"), ("off", "Off"), ("soft", "Soft"),
-                    ("strong", "Strong"), ("custom", "Custom (Harbor Settings)"))
+                    ("strong", "Strong"), ("planner", "Glass (Planner)"),
+                    ("custom", "Custom (Harbor Settings)"))
 
 
 def harbor_config_path(name):
@@ -349,6 +350,8 @@ def app_glass_choice(app):
     base = resolve_glass("harbor") if scope_glass("harbor") is not None else global_glass()
     if spec["effect"] == "OFF":
         return "off"
+    if spec["style"] == "PLANNER" and base["style"] != "PLANNER":
+        return "planner"
     if dict(spec, effect=base["effect"]) == base:
         return spec["effect"].lower()
     return "custom"
@@ -361,6 +364,9 @@ def set_app_glass_choice(app, choice):
     elif choice in ("off", "soft", "strong"):
         base = resolve_glass("harbor") if scope_glass("harbor") is not None else global_glass()
         _write_config("glass-" + app, glass_text(dict(base, effect=choice.upper())))
+    elif choice == "planner":   # the Daily Routine Planner glass, this app only
+        _write_config("glass-" + app, glass_text(dict(
+            GLASS_DEFAULT, effect="STRONG", style="PLANNER", opacity=100, glare=False, shadow=True)))
 
 
 def _rgb(value):
