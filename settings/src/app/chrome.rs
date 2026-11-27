@@ -346,13 +346,56 @@ impl App {
                 .show(ui, |ui| {
                     ui.set_width(inner.width());
                     ui.spacing_mut().item_spacing.y = 2.0;
-                    for page in Page::SIDEBAR {
-                        let selected = self.view.page() == page;
-                        if nav_item(ui, pal, pal.accent, page.icon(), page.label(), selected)
-                            .clicked()
-                        {
-                            self.go(View::Page(page));
+                    // Like Windows 10: a page with sub-pages opens its own
+                    // short menu here; Back returns to the full list, Home
+                    // goes to the start page. `top_for` remembers the page
+                    // the user stepped back from.
+                    let top_id = egui::Id::new("nav-top-for");
+                    // Unset at start: the start page shows the full list.
+                    let top_for: Option<Page> = ui
+                        .ctx()
+                        .data(|d| d.get_temp::<Option<Page>>(top_id))
+                        .unwrap_or(Some(Page::System));
+                    let page = self.view.page();
+                    let subs = page.sub_items();
+                    let mut set_top: Option<Option<Page>> = None;
+                    if subs.len() > 1 && top_for != Some(page) {
+                        if nav_item(ui, pal, pal.accent, Icon::Back, "Back", false).clicked() {
+                            set_top = Some(Some(page));
                         }
+                        if nav_item(ui, pal, pal.accent, Icon::Home, "Home", false).clicked() {
+                            set_top = Some(Some(Page::System));
+                            self.go(View::Page(Page::System));
+                        }
+                        ui.add_space(10.0);
+                        ui.horizontal(|ui| {
+                            ui.add_space(12.0);
+                            ui.label(
+                                egui::RichText::new(page.label())
+                                    .font(semibold(15.0))
+                                    .color(pal.text),
+                            );
+                        });
+                        ui.add_space(8.0);
+                        for (label, icon, view) in &subs {
+                            let selected = Cat10::same(*view, self.view);
+                            if nav_item(ui, pal, pal.accent, *icon, label, selected).clicked() {
+                                self.go(*view);
+                            }
+                        }
+                    } else {
+                        for page in Page::SIDEBAR {
+                            let selected = self.view.page() == page;
+                            if nav_item(ui, pal, pal.accent, page.icon(), page.label(), selected)
+                                .clicked()
+                            {
+                                set_top = Some(None);
+                                self.go(View::Page(page));
+                            }
+                        }
+                    }
+                    if let Some(value) = set_top {
+                        ui.ctx().data_mut(|d| d.insert_temp(top_id, value));
                     }
                     ui.add_space(12.0);
                 });
@@ -570,6 +613,9 @@ impl App {
                                 View::Detail(_, Detail::Keyboard) => pages::keyboard(self, ui),
                                 View::Detail(_, Detail::DefaultApps) => {
                                     pages::default_apps(self, ui)
+                                }
+                                View::Detail(_, Detail::TweakGroup(i)) => {
+                                    crate::advanced::advanced_group(self, ui, Some(i))
                                 }
                                 View::Detail(_, Detail::AdvancedNetwork) => {
                                     crate::advanced::advanced_network(self, ui)

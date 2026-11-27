@@ -236,6 +236,12 @@ impl App {
             "keyboard" => View::Detail(Page::System, Detail::Keyboard),
             "defaultapps" => View::Detail(Page::System, Detail::DefaultApps),
             "advanced" => View::Page(Page::Advanced),
+            key if key.starts_with("tweaks-") => TWEAK_GROUPS
+                .iter()
+                .position(|g| g.3 == key)
+                .map_or(View::Page(Page::Advanced), |i| {
+                    View::Detail(Page::Advanced, Detail::TweakGroup(i as u8))
+                }),
             "dns" | "advanced-network" => View::Detail(Page::Network, Detail::AdvancedNetwork),
             "bluetooth" => View::Page(Page::Bluetooth),
             "network" => View::Page(Page::Network),

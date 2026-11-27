@@ -61,6 +61,15 @@ pub fn search_entries() -> Vec<SearchEntry> {
             icon,
         });
     }
+    for (i, g) in crate::app::TWEAK_GROUPS.iter().enumerate() {
+        entries.push(SearchEntry {
+            page: Page::Advanced,
+            detail: Some(Detail::TweakGroup(i as u8)),
+            title: g.1,
+            subtitle: "Advanced settings group",
+            icon: g.2,
+        });
+    }
     entries.push(SearchEntry {
         page: Page::Advanced,
         detail: None,

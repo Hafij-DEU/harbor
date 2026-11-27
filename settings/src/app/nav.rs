@@ -110,6 +110,8 @@ pub enum Detail {
     DefaultApps,
     /// Network & internet > Advanced network settings (DNS).
     AdvancedNetwork,
+    /// Advanced settings > one tweak group (index into `TWEAK_GROUPS`).
+    TweakGroup(u8),
     /// One section of Desktop & windows (index into `desktop::SECTIONS`,
     /// the last one is Startup apps).
     Desk(u8),
@@ -129,6 +131,7 @@ impl Detail {
             Detail::Keyboard => 7,
             Detail::DefaultApps => 8,
             Detail::AdvancedNetwork => 10,
+            Detail::TweakGroup(i) => 200 + i as u16,
             Detail::Desk(i) => 100 + i as u16,
         }
     }
@@ -146,6 +149,7 @@ impl Detail {
             Detail::Keyboard => Icon::Keyboard,
             Detail::DefaultApps => Icon::Apps,
             Detail::AdvancedNetwork => Icon::Globe,
+            Detail::TweakGroup(i) => TWEAK_GROUPS.get(i as usize)?.2,
             Detail::Desk(_) => return None,
         })
     }
@@ -162,7 +166,8 @@ impl Detail {
             7 => Detail::Keyboard,
             8 => Detail::DefaultApps,
             10 => Detail::AdvancedNetwork,
-            100..=355 => Detail::Desk((code - 100) as u8),
+            200..=206 => Detail::TweakGroup((code - 200) as u8),
+            100..=199 => Detail::Desk((code - 100) as u8),
             _ => return None,
         })
     }
@@ -179,8 +184,37 @@ impl Detail {
             Detail::Keyboard => "Keyboard",
             Detail::DefaultApps => "Default applications",
             Detail::AdvancedNetwork => "Advanced network settings",
+            Detail::TweakGroup(i) => TWEAK_GROUPS.get(i as usize).map_or("Tweaks", |g| g.1),
             Detail::Desk(i) => crate::desktop::section_name(i),
         }
+    }
+}
+
+/// Advanced settings groups: (Glint category id, title, icon, view key).
+/// Order matches Glint's `TWEAK_CATS` and the Win10 `Cat10::Advanced` list.
+pub const TWEAK_GROUPS: [(&str, &str, Icon, &str); 7] = [
+    ("privacy", "Privacy", Icon::Shield, "tweaks-privacy"),
+    ("performance", "Performance", Icon::Power, "tweaks-performance"),
+    ("updates", "Updates", Icon::Update, "tweaks-updates"),
+    ("network", "Network", Icon::Globe, "tweaks-network"),
+    ("services", "Services", Icon::System, "tweaks-services"),
+    ("startup", "Startup", Icon::Clock, "tweaks-startup"),
+    ("desktop", "Desktop", Icon::Display, "tweaks-desktop"),
+];
+
+impl Page {
+    /// Sub-pages shown when the Windows 11 left menu opens this page:
+    /// every Windows 10 navigation item that belongs to it, in order.
+    pub fn sub_items(self) -> Vec<(&'static str, Icon, View)> {
+        let mut out: Vec<(&'static str, Icon, View)> = Vec::new();
+        for cat in Cat10::ALL {
+            for item in cat.items() {
+                if item.2.page() == self && !out.iter().any(|o| o.2 == item.2) {
+                    out.push(*item);
+                }
+            }
+        }
+        out
     }
 }
 
@@ -456,11 +490,16 @@ impl Cat10 {
                 Icon::Shield,
                 View::Page(Page::Privacy),
             )],
-            Cat10::Advanced => &[(
-                "Advanced settings",
-                Icon::Sparkle,
-                View::Page(Page::Advanced),
-            )],
+            Cat10::Advanced => &[
+                ("Overview", Icon::Sparkle, View::Page(Page::Advanced)),
+                ("Privacy", Icon::Shield, View::Detail(Page::Advanced, Detail::TweakGroup(0))),
+                ("Performance", Icon::Power, View::Detail(Page::Advanced, Detail::TweakGroup(1))),
+                ("Updates", Icon::Update, View::Detail(Page::Advanced, Detail::TweakGroup(2))),
+                ("Network", Icon::Globe, View::Detail(Page::Advanced, Detail::TweakGroup(3))),
+                ("Services", Icon::System, View::Detail(Page::Advanced, Detail::TweakGroup(4))),
+                ("Startup", Icon::Clock, View::Detail(Page::Advanced, Detail::TweakGroup(5))),
+                ("Desktop", Icon::Display, View::Detail(Page::Advanced, Detail::TweakGroup(6))),
+            ],
             Cat10::Update => &[("Software Update", Icon::Update, View::Page(Page::Updates))],
         }
     }
@@ -472,6 +511,7 @@ impl Cat10 {
             View::Detail(_, Detail::Pointer | Detail::Keyboard) => Cat10::Devices,
             View::Detail(_, Detail::DefaultApps) => Cat10::Apps,
             View::Detail(_, Detail::AdvancedNetwork) => Cat10::Network,
+            View::Detail(_, Detail::TweakGroup(_)) => Cat10::Advanced,
             View::Detail(_, Detail::Desk(i)) if i >= 8 => Cat10::Fusion,
             View::Detail(_, Detail::Desk(_)) => Cat10::Desktop,
             View::Detail(_, _) => Cat10::System,
@@ -580,6 +620,9 @@ impl View {
             View::Detail(_, Detail::Keyboard) => "keyboard",
             View::Detail(_, Detail::DefaultApps) => "default-apps",
             View::Detail(_, Detail::AdvancedNetwork) => "advanced-network",
+            View::Detail(_, Detail::TweakGroup(i)) => {
+                TWEAK_GROUPS.get(i as usize).map_or("tweaks", |g| g.3)
+            }
             View::Detail(_, Detail::Desk(i)) => crate::desktop::section_key(i),
         }
     }

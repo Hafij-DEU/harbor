@@ -201,8 +201,25 @@ fn apply_tweaks(state: Arc<Mutex<TweakState>>, ctx: egui::Context) {
 }
 
 pub fn advanced(app: &mut App, ui: &mut Ui) {
+    advanced_group(app, ui, None);
+}
+
+/// Advanced settings overview (`None`: one row per group) or one group's
+/// tweaks. Pending switches are shared, so Apply works from any of them.
+pub fn advanced_group(app: &mut App, ui: &mut Ui, group: Option<u8>) {
+    use crate::app::{Detail, Page, View, TWEAK_GROUPS};
     let pal = app.pal();
-    widgets::h1(ui, &pal, "Advanced settings");
+    let wanted = group.and_then(|i| TWEAK_GROUPS.get(i as usize));
+    match wanted {
+        Some(g) => {
+            if widgets::h1_back(ui, &pal, g.1) {
+                app.go(View::Page(Page::Advanced));
+                return;
+            }
+        }
+        None => widgets::h1(ui, &pal, "Advanced settings"),
+    }
+    let mut open_group: Option<u8> = None;
     let state = shared::<TweakState>(ui, "harbor-advanced-tweaks");
     {
         let mut st = state.lock().unwrap();
@@ -259,14 +276,47 @@ pub fn advanced(app: &mut App, ui: &mut Ui) {
         widgets::card(ui, &pal, |ui| widgets::empty_note(ui, &pal, &err));
     }
     let cats = st.cats.clone();
+    if wanted.is_none() && st.error.is_none() {
+        // Overview: one row per group instead of every switch at once.
+        widgets::section_label(ui, &pal, "Groups");
+        widgets::card(ui, &pal, |ui| {
+            let mut first = true;
+            for (i, g) in TWEAK_GROUPS.iter().enumerate() {
+                let rows: Vec<&Tweak> = st.tweaks.iter().filter(|t| t.cat == g.0).collect();
+                if rows.is_empty() {
+                    continue;
+                }
+                if !first {
+                    widgets::divider(ui, &pal);
+                }
+                first = false;
+                let on = rows.iter().filter(|t| t.applied).count();
+                let pending = rows.iter().filter(|t| t.want != t.applied).count();
+                let desc = cats
+                    .iter()
+                    .find(|c| c.0 == g.0)
+                    .map_or(String::new(), |c| c.2.clone());
+                let mut sub = format!("{desc} · {on} of {} on", rows.len());
+                if pending > 0 {
+                    sub = format!("{sub} · {pending} not applied yet");
+                }
+                if widgets::row(ui, &pal, pal.accent, g.2, g.1, &sub, Right::Chevron).clicked() {
+                    open_group = Some(i as u8);
+                }
+            }
+        });
+    }
     for (cid, title, desc) in &cats {
+        if wanted.map(|g| g.0) != Some(cid.as_str()) {
+            continue;
+        }
         let idx: Vec<usize> = (0..st.tweaks.len())
             .filter(|&i| &st.tweaks[i].cat == cid)
             .collect();
         if idx.is_empty() {
             continue;
         }
-        widgets::section_label(ui, &pal, title);
+        let _ = title;
         faint(ui, &pal, desc);
         ui.add_space(4.0);
         widgets::card(ui, &pal, |ui| {
@@ -301,6 +351,9 @@ pub fn advanced(app: &mut App, ui: &mut Ui) {
     let log = st.log.clone();
     drop(st);
     log_card(ui, &pal, &log);
+    if let Some(i) = open_group {
+        app.go(View::Detail(Page::Advanced, Detail::TweakGroup(i)));
+    }
     if apply {
         apply_tweaks(state.clone(), ui.ctx().clone());
     } else if reload {

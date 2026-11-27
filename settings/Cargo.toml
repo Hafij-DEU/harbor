@@ -1,6 +1,6 @@
 [package]
 name = "win11-settings"
-version = "0.5.40"
+version = "0.5.41"
 edition = "2021"
 description = "A Windows 11 style Settings app for Ubuntu, written in Rust"
 license = "MIT"
