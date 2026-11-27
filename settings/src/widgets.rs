@@ -487,7 +487,7 @@ pub fn row(
     subtitle: &str,
     right: Right<'_>,
 ) -> RowOutcome {
-    row_impl(ui, pal, accent, Some(icon), None, title, subtitle, right)
+    row_impl(ui, pal, accent, Some(icon), None, title, subtitle, right, None)
 }
 
 /// A row whose leading tile is the application's real icon when one is
@@ -511,6 +511,7 @@ pub fn app_row(
         title,
         subtitle,
         right,
+        None,
     )
 }
 
@@ -521,7 +522,59 @@ pub fn info_row(
     subtitle: &str,
     right: Right<'_>,
 ) -> RowOutcome {
-    row_impl(ui, pal, pal.accent, None, None, title, subtitle, right)
+    row_impl(ui, pal, pal.accent, None, None, title, subtitle, right, None)
+}
+
+/// Risk level of a setting: green safe, orange warning, red critical.
+pub fn risk_color(level: &str) -> Color32 {
+    match level {
+        "critical" => Color32::from_rgb(0xD1, 0x34, 0x38),
+        "warning" => Color32::from_rgb(0xE0, 0x86, 0x00),
+        _ => Color32::from_rgb(0x2E, 0x9E, 0x4F),
+    }
+}
+
+pub fn risk_label(level: &str) -> &'static str {
+    match level {
+        "critical" => "Critical",
+        "warning" => "Warning",
+        _ => "Safe",
+    }
+}
+
+/// A row with a coloured risk pill after the title and, for warning and
+/// critical, a third line in that colour saying what can go wrong.
+pub fn risk_row(
+    ui: &mut Ui,
+    pal: &Palette,
+    icon: Option<Icon>,
+    title: &str,
+    subtitle: &str,
+    level: &str,
+    why: &str,
+    right: Right<'_>,
+) -> RowOutcome {
+    row_impl(
+        ui,
+        pal,
+        pal.accent,
+        icon,
+        None,
+        title,
+        subtitle,
+        right,
+        Some((level, why)),
+    )
+}
+
+/// A small coloured dot + word, e.g. for a legend.
+pub fn risk_chip(ui: &mut Ui, level: &str, text: &str) {
+    let color = risk_color(level);
+    ui.horizontal(|ui| {
+        let (r, _) = ui.allocate_exact_size(Vec2::splat(12.0), Sense::hover());
+        ui.painter().circle_filled(r.center(), 5.0, color);
+        ui.label(egui::RichText::new(text).font(regular(12.0)).color(color));
+    });
 }
 
 fn row_impl(
@@ -533,6 +586,7 @@ fn row_impl(
     title: &str,
     subtitle: &str,
     mut right: Right<'_>,
+    risk: Option<(&str, &str)>,
 ) -> RowOutcome {
     // Colourful look: each row's icon and switch take a colour of their own.
     let accent = pal.tint(accent, title);
@@ -542,6 +596,8 @@ fn row_impl(
     } else {
         ROW_H
     };
+    let note = risk.filter(|r| !r.1.is_empty());
+    let row_h = row_h + if note.is_some() { 18.0 } else { 0.0 };
     let (rect, response) = ui.allocate_exact_size(Vec2::new(width, row_h), Sense::click());
     let hovered = response.hovered();
     let is_switch = matches!(&right, Right::Switch(_));
@@ -597,23 +653,54 @@ fn row_impl(
     );
     let text_painter = ui.painter().with_clip_rect(clip.intersect(ui.clip_rect()));
     let has_subtitle = !subtitle.is_empty();
-    let title_y = if has_subtitle {
-        rect.center().y - 8.5
-    } else {
-        rect.center().y
-    };
+    // With a risk note the title and subtitle move up one line.
+    let mid = rect.center().y - if note.is_some() { 9.0 } else { 0.0 };
+    let title_y = if has_subtitle { mid - 8.5 } else { mid };
     let title_font = regular(14.0);
     let title_color = pal.text;
-    text_painter.text(
+    let title_rect = text_painter.text(
         Pos2::new(text_x, title_y),
         Align2::LEFT_CENTER,
         title,
         title_font,
         title_color,
     );
+    if let Some((level, why)) = risk {
+        let color = risk_color(level);
+        let word = risk_label(level);
+        let galley = ui.painter().layout_no_wrap(word.to_owned(), regular(10.5), color);
+        let pill = Rect::from_min_size(
+            Pos2::new(title_rect.right() + 8.0, title_y - 8.0),
+            Vec2::new(galley.size().x + 16.0, 16.0),
+        );
+        let fill = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 38);
+        text_painter.rect_filled(pill, 8, fill);
+        text_painter.circle_filled(Pos2::new(pill.left() + 7.0, pill.center().y), 3.0, color);
+        text_painter.galley(
+            Pos2::new(pill.left() + 12.0, pill.center().y - galley.size().y / 2.0),
+            galley,
+            color,
+        );
+        if let Some((_, _)) = note {
+            text_painter.text(
+                Pos2::new(text_x, mid + 28.5),
+                Align2::LEFT_CENTER,
+                format!(
+                    "{} {why}",
+                    match level {
+                        "critical" => "✖",
+                        "warning" => "⚠",
+                        _ => "✔",
+                    }
+                ),
+                regular(12.0),
+                color,
+            );
+        }
+    }
     if has_subtitle {
         text_painter.text(
-            Pos2::new(text_x, rect.center().y + 10.5),
+            Pos2::new(text_x, mid + 10.5),
             Align2::LEFT_CENTER,
             subtitle,
             regular(12.0),

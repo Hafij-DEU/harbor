@@ -26,6 +26,41 @@ mode = sys.argv[3]
 args = sys.argv[4:]
 
 
+# Risk of turning a tweak ON: "safe" (green), "warning" (orange) or
+# "critical" (red), with what can go wrong. Unlisted tweaks are safe.
+RISK = {
+    "unattended": ("critical", "Security fixes stop installing by themselves; you must update by hand or stay exposed."),
+    "firewall": ("warning", "Blocks incoming connections: MeshDrop, Wi-Fi file sharing and other LAN apps need their ports opened."),
+    "grub-timeout": ("warning", "Only 1 s to pick another kernel or recovery mode if a boot goes wrong (hold Shift/Esc)."),
+    "nmi-watchdog": ("warning", "Hard system freezes are no longer detected and logged."),
+    "bluetooth": ("warning", "Bluetooth headphones, mice and keyboards stop working."),
+    "apt-timers": ("warning", "Updates are no longer downloaded daily, so update notices come late."),
+    "snap-hold": ("warning", "Snap apps get no updates, including security fixes, until you update them."),
+    "pro-services": ("warning", "With Ubuntu Pro attached, ESM security updates and Livepatch notices stop."),
+    "fwupd-timer": ("warning", "You are no longer told about new firmware (BIOS, SSD, dock) updates."),
+    "connectivity": ("warning", "Hotel and café Wi-Fi sign-in pages no longer open by themselves."),
+    "dot": ("warning", "Some networks block encrypted DNS; name lookups can get slower there."),
+    "cups": ("warning", "You can no longer print or scan to network printers."),
+    "avahi": ("warning", "Network printers, Chromecasts and .local names are no longer found; some LAN apps may not see this PC."),
+    "cups-browsed": ("warning", "New network printers are not added automatically."),
+    "indexer": ("warning", "Search in Files and Activities only finds file names, not file contents."),
+    "wait-online": ("warning", "Network drives mounted at boot may fail if the network is not up yet."),
+    "fast-shutdown": ("warning", "Slow services get only 10 s to save their data before they are stopped."),
+    "geoclue": ("warning", "Automatic time zone, weather and maps location stop working."),
+    "as-geoclue": ("warning", "Apps that ask for your location get no answer."),
+    "as-update-notifier": ("warning", "You are no longer reminded to install updates."),
+    "as-dejadup": ("warning", "Scheduled Déjà Dup backups no longer run by themselves."),
+    "as-evolution": ("warning", "Calendar and task reminders no longer pop up."),
+    "overamp": ("warning", "Sound above 100% can distort and strain small laptop speakers."),
+    "recent-files": ("safe", "File pickers stop showing recent files; nothing is deleted."),
+    "wifi-powersave": ("safe", "Wi-Fi uses a little more battery."),
+    "modemmanager": ("safe", "Only matters if you use a USB or built-in mobile modem."),
+    "as-orca": ("safe", "Only matters if you use the Orca screen reader."),
+    "animations": ("safe", "Windows open and close without motion."),
+}
+SAFE_REASON = ""  # plain safe rows get only the green pill
+
+
 def out(obj):
     print(json.dumps(obj), flush=True)
 
@@ -37,7 +72,9 @@ def tweak_list():
                 return None
             return {"id": t.id, "cat": t.cat, "title": t.title, "desc": t.desc,
                     "warn": t.warn, "rec": t.rec, "root": t.root,
-                    "applied": bool(core.tweak_applied(t))}
+                    "applied": bool(core.tweak_applied(t)),
+                    "risk": RISK.get(t.id, ("safe", SAFE_REASON))[0],
+                    "why": RISK.get(t.id, ("safe", SAFE_REASON))[1]}
         except Exception:
             return None
     with ThreadPoolExecutor(8) as ex:

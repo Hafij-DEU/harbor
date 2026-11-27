@@ -91,6 +91,8 @@ struct Tweak {
     title: String,
     desc: String,
     warn: String,
+    risk: String,
+    why: String,
     rec: bool,
     root: bool,
     applied: bool,
@@ -105,6 +107,8 @@ struct TweakState {
     cats: Vec<(String, String, String)>,
     tweaks: Vec<Tweak>,
     log: Vec<String>,
+    /// Apply was pressed with a critical tweak turning on: ask once more.
+    confirm: bool,
 }
 
 fn s(v: &serde_json::Value, k: &str) -> String {
@@ -145,6 +149,8 @@ fn load_tweaks(state: Arc<Mutex<TweakState>>, ctx: egui::Context) {
                         title: s(t, "title"),
                         desc: s(t, "desc"),
                         warn: s(t, "warn"),
+                        risk: s(t, "risk"),
+                        why: s(t, "why"),
                         rec: b(t, "rec"),
                         root: b(t, "root"),
                         applied: b(t, "applied"),
@@ -236,6 +242,14 @@ pub fn advanced_group(app: &mut App, ui: &mut Ui, group: Option<u8>) {
         "System tweaks for privacy, speed and comfort. Turn switches on or off, then Apply. \
          Rows marked admin ask for your password once. Every tweak can be turned back off.",
     );
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        widgets::risk_chip(ui, "safe", "Safe: no side effects worth worrying about");
+        ui.add_space(10.0);
+        widgets::risk_chip(ui, "warning", "Warning: a feature stops working");
+        ui.add_space(10.0);
+        widgets::risk_chip(ui, "critical", "Critical: weakens security");
+    });
     ui.add_space(8.0);
 
     let pending = st.tweaks.iter().filter(|t| t.want != t.applied).count();
@@ -251,7 +265,15 @@ pub fn advanced_group(app: &mut App, ui: &mut Ui, group: Option<u8>) {
             && pending > 0
             && !st.busy
         {
-            apply = true;
+            let critical = st
+                .tweaks
+                .iter()
+                .any(|t| t.want && !t.applied && t.risk == "critical");
+            if critical {
+                st.confirm = true;
+            } else {
+                apply = true;
+            }
         }
         if widgets::ghost_button(ui, &pal, "Select recommended", Some(Icon::Sparkle)).clicked() {
             for t in st.tweaks.iter_mut().filter(|t| t.rec) {
@@ -271,6 +293,41 @@ pub fn advanced_group(app: &mut App, ui: &mut Ui, group: Option<u8>) {
         }
     });
     ui.add_space(10.0);
+
+    if st.confirm {
+        let names: Vec<String> = st
+            .tweaks
+            .iter()
+            .filter(|t| t.want && !t.applied && t.risk == "critical")
+            .map(|t| format!("{}: {}", t.title, t.why))
+            .collect();
+        let red = widgets::risk_color("critical");
+        widgets::card(ui, &pal, |ui| {
+            ui.add_space(8.0);
+            ui.label(
+                egui::RichText::new("✖ Critical changes")
+                    .font(regular(14.0))
+                    .color(red),
+            );
+            for n in &names {
+                ui.label(egui::RichText::new(n).font(regular(12.0)).color(pal.text));
+            }
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                if widgets::button(ui, &pal, red, "Apply anyway", None).clicked() {
+                    apply = true;
+                }
+                if widgets::ghost_button(ui, &pal, "Cancel", None).clicked() {
+                    st.confirm = false;
+                }
+            });
+            ui.add_space(8.0);
+        });
+        if apply {
+            st.confirm = false;
+        }
+        ui.add_space(10.0);
+    }
 
     if let Some(err) = st.error.clone() {
         widgets::card(ui, &pal, |ui| widgets::empty_note(ui, &pal, &err));
@@ -300,7 +357,25 @@ pub fn advanced_group(app: &mut App, ui: &mut Ui, group: Option<u8>) {
                 if pending > 0 {
                     sub = format!("{sub} · {pending} not applied yet");
                 }
-                if widgets::row(ui, &pal, pal.accent, g.2, g.1, &sub, Right::Chevron).clicked() {
+                // A group is as risky as its riskiest tweak.
+                let worst = if rows.iter().any(|t| t.risk == "critical") {
+                    "critical"
+                } else if rows.iter().any(|t| t.risk == "warning") {
+                    "warning"
+                } else {
+                    "safe"
+                };
+                let nw = rows.iter().filter(|t| t.risk != "safe").count();
+                let why = match worst {
+                    "safe" => String::new(),
+                    _ => format!(
+                        "{nw} setting{} here can break something; open to see what",
+                        if nw == 1 { "" } else { "s" }
+                    ),
+                };
+                if widgets::risk_row(ui, &pal, Some(g.2), g.1, &sub, worst, &why, Right::Chevron)
+                    .clicked()
+                {
                     open_group = Some(i as u8);
                 }
             }
@@ -339,11 +414,9 @@ pub fn advanced_group(app: &mut App, ui: &mut Ui, group: Option<u8>) {
                 if !tags.is_empty() {
                     sub = format!("{sub} · {}", tags.join(" · "));
                 }
-                if !t.warn.is_empty() {
-                    sub = format!("{sub}\n⚠ {}", t.warn);
-                }
                 let title = t.title.clone();
-                widgets::info_row(ui, &pal, &title, &sub, Right::Switch(&mut t.want));
+                let (risk, why) = (t.risk.clone(), t.why.clone());
+                widgets::risk_row(ui, &pal, None, &title, &sub, &risk, &why, Right::Switch(&mut t.want));
             }
         });
         ui.add_space(12.0);
