@@ -365,7 +365,7 @@ pub(crate) enum Choice {
 /// whole desktop ("Global"), for every Harbor app, and for each app. A
 /// scope can follow the one above it or have its own values.
 /// Ready-made glass looks (Settings › Personalisation › Glass effects).
-pub(crate) const GLASS_PRESETS: [(&str, &str); 12] = [
+pub(crate) const GLASS_PRESETS: [(&str, &str); 13] = [
     // The owner's Fusion Desk setup of 2026-11-19.
     ("Fusion Desk", "effect=SOFT,material=GLOSS,style=FROSTED,opacity=40,rim=true,glare=true,shadow=false,light-follows=false,style-strength=100,shine-strength=100,rim-strength=100,glare-strength=100,shadow-strength=100,light-strength=100"),
     ("Liquid", "effect=STRONG,material=GLOSS,style=CLEAR,opacity=55,rim=true,glare=true,shadow=true,light-follows=true,style-strength=100,shine-strength=80,rim-strength=160,glare-strength=120,shadow-strength=70,light-strength=130"),
@@ -379,6 +379,9 @@ pub(crate) const GLASS_PRESETS: [(&str, &str); 12] = [
     ("Aero", "effect=STRONG,material=GLOSS,style=TINTED,opacity=65,rim=true,glare=true,shadow=true,light-follows=false,style-strength=130,shine-strength=150,rim-strength=140,glare-strength=150,shadow-strength=100,light-strength=100"),
     ("Glassmorphism", "effect=STRONG,material=GLASS,style=CLEAR,opacity=40,rim=true,glare=false,shadow=true,light-follows=false,style-strength=100,shine-strength=100,rim-strength=120,glare-strength=100,shadow-strength=110,light-strength=100"),
     ("Vision", "effect=STRONG,material=GLASS,style=SMOKE,opacity=60,rim=true,glare=true,shadow=true,light-follows=true,style-strength=80,shine-strength=100,rim-strength=170,glare-strength=90,shadow-strength=60,light-strength=110"),
+    // Daily Routine Planner look (PLANNER-SPEC.md): solid planner gradient,
+    // white/80 cards, indigo accent; opacity 100 keeps windows solid.
+    ("Planner", "effect=STRONG,material=GLASS,style=PLANNER,opacity=100,rim=true,glare=false,shadow=true,light-follows=false,style-strength=100,shine-strength=60,rim-strength=100,glare-strength=100,shadow-strength=100,light-strength=100"),
 ];
 
 pub(crate) fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
@@ -403,9 +406,23 @@ pub(crate) fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
             "Apply to",
             "Global is the desktop: the same settings as Fusion Desk › Appearance",
             |ui| {
-                for s in GlassScope::ALL {
-                    if segment(ui, pal, s.label(), s == scope) {
-                        pick_scope = Some(s);
+                for s in &GlassScope::ALL[..5] {
+                    if segment(ui, pal, s.label(), *s == scope) {
+                        pick_scope = Some(*s);
+                    }
+                }
+            },
+        );
+        widgets::divider(ui, pal);
+        glass_row(
+            ui,
+            pal,
+            "Other apps",
+            "App Hub, Draco, Astra Player, SysMic Recorder and Extendo read the same glass",
+            |ui| {
+                for s in &GlassScope::ALL[5..] {
+                    if segment(ui, pal, s.label(), *s == scope) {
+                        pick_scope = Some(*s);
                     }
                 }
             },

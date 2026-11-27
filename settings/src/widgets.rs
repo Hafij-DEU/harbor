@@ -171,7 +171,7 @@ pub fn glass_fill(pal: &Palette, rect: Rect, corner: u8, color: Color32) -> egui
             rect,
             r,
         ),
-        GlassStyle::Clear | GlassStyle::Glow => full(&[
+        GlassStyle::Clear | GlassStyle::Glow | GlassStyle::Planner => full(&[
             (0.0, white(0.18 * wk)),
             (0.7, white(0.03 * wk)),
             (1.0, white(0.0)),
@@ -371,7 +371,11 @@ fn rounded_rows(rect: Rect, r: f32, y0: f32, y1: f32, stops: &[(f32, Color32)]) 
 
 /// The Glow style's backdrop: soft coloured light behind the page, which
 /// the translucent cards let through.
-pub fn glow_backdrop(painter: &egui::Painter, rect: Rect, pal: &Palette) {
+pub fn glow_backdrop(painter: &egui::Painter, rect: Rect, pal: &Palette, corner: f32) {
+    if pal.glass.on() && pal.glass.style == crate::theme::GlassStyle::Planner {
+        planner_backdrop(painter, rect, pal, corner);
+        return;
+    }
     if !pal.glass.on() || pal.glass.style != crate::theme::GlassStyle::Glow {
         return;
     }
@@ -395,6 +399,26 @@ pub fn glow_backdrop(painter: &egui::Painter, rect: Rect, pal: &Palette) {
             0.0,
         ));
     }
+}
+
+/// The Planner style's backdrop: the planner gradient (light lavender to sky,
+/// dark navy) behind the page. `corner` keeps it inside a rounded frame.
+/// In a see-through window it thins with the opacity so Fusion Desk's blur
+/// shows behind it.
+pub fn planner_backdrop(painter: &egui::Painter, rect: Rect, pal: &Palette, corner: f32) {
+    let dark = pal.bg.r() < 128;
+    let a = if crate::system::glass_window() {
+        (pal.glass.opacity as f32 / 100.0).max(0.35)
+    } else {
+        1.0
+    };
+    let c = |r: u8, g: u8, b: u8| Color32::from_rgba_unmultiplied(r, g, b, (a * 255.0) as u8);
+    let stops: Vec<(f32, Color32)> = if dark {
+        vec![(0.0, c(0x1a, 0x1a, 0x2e)), (0.5, c(0x16, 0x21, 0x3e)), (1.0, c(0x0f, 0x34, 0x60))]
+    } else {
+        vec![(0.0, c(0xe0, 0xc3, 0xfc)), (1.0, c(0x8e, 0xc5, 0xfc))]
+    };
+    painter.add(rounded_rows(rect, corner, rect.top(), rect.bottom(), &stops));
 }
 
 /// True when a glass style is on.

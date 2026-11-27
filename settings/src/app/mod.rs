@@ -58,7 +58,7 @@ pub struct App {
     pub recent: Vec<View>,
     /// Glass values per scope (`system::GlassScope::ALL` order); `None`
     /// follows the scope above.
-    pub glass_scopes: [Option<crate::theme::Glass>; 5],
+    pub glass_scopes: [Option<crate::theme::Glass>; 10],
     /// The scope Personalisation › Glass effects is editing.
     pub glass_edit: system::GlassScope,
     /// The window was created see-through (glass opacity below 100).
@@ -477,7 +477,7 @@ impl eframe::App for App {
             root.painter().add(shadow.as_shape(full, self.frame_r));
         }
         root.painter().rect_filled(full, self.frame_r, pal.bg);
-        widgets::glow_backdrop(root.painter(), full, &pal);
+        widgets::glow_backdrop(root.painter(), full, &pal, self.frame_r as f32);
 
         let title_h = title_height(self.design);
         let title_rect = Rect::from_min_size(full.min, Vec2::new(full.width(), title_h));

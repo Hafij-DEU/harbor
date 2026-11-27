@@ -151,7 +151,23 @@ GLASS_KEYS = ("effect", "material", "style", "opacity", "rim", "glare", "shadow"
               "light-follows") + GLASS_STRENGTHS
 GLASS_EFFECTS = ("OFF", "SOFT", "STRONG")
 GLASS_MATERIALS = ("GLASS", "GLOSS")
-GLASS_STYLES = ("CLEAR", "FROSTED", "GEL", "TINTED", "SMOKE", "HALO", "GLOW")
+GLASS_STYLES = ("CLEAR", "FROSTED", "GEL", "TINTED", "SMOKE", "HALO", "GLOW", "PLANNER")
+# PLANNER = the Daily Routine Planner look: a lavender/sky (dark: navy)
+# gradient behind white/80 cards, an indigo->purple accent, 24/16/12 px
+# corners, a white rim and indigo-tinted shadows. Spec:
+# ~/Music/apps/glass-theme/PLANNER-SPEC.md
+PLANNER = {
+    False: {"backdrop": "linear-gradient(135deg, #e0c3fc, #8ec5fc)",
+            "card": "#ffffff", "surface": "#ffffff", "entry": "#ffffff",
+            "window": "rgba(255,255,255,0.35)", "sidebar": "rgba(255,255,255,0.20)",
+            "nav_hover": "rgba(255,255,255,0.45)", "rim": 0.20, "accent_text": "#4f46e5"},
+    True: {"backdrop": "linear-gradient(135deg, #1a1a2e, #16213e, #0f3460)",
+           "card": "#18181b", "surface": "#18181b", "entry": "#27272a",
+           "window": "rgba(9,9,11,0.35)", "sidebar": "rgba(9,9,11,0.25)",
+           "nav_hover": "rgba(255,255,255,0.06)", "rim": 0.10, "accent_text": "#a5b4fc"},
+}
+PLANNER_ACCENT = "linear-gradient(135deg, #6366f1, #8b5cf6)"
+PLANNER_SHADOW_ACCENT = "0 10px 15px -3px rgba(99,102,241,0.30), 0 4px 6px -4px rgba(99,102,241,0.30)"
 GLASS_DEFAULT = {"effect": "STRONG", "material": "GLASS", "style": "FROSTED", "opacity": 75,
                  "rim": True, "glare": True, "shadow": False, "light-follows": False,
                  **{k: 100 for k in GLASS_STRENGTHS}}
@@ -364,6 +380,8 @@ def glass_palette(pal, spec, dark, see_through=None):
         return pal
     pal = dict(pal)
     style = spec["style"]
+    if style == "PLANNER":
+        return _planner_palette(pal, spec, dark, see_through)
     a = spec["opacity"] / 100
     if style == "CLEAR":
         a *= 0.7
@@ -393,6 +411,71 @@ def glass_palette(pal, spec, dark, see_through=None):
         pal["window"] = _alpha(pal["window"], page)
         pal["sidebar"] = _alpha(pal["sidebar"], page * 0.8)
     return pal
+
+
+def _planner_palette(pal, spec, dark, see_through):
+    """PLANNER colours. The window paints the planner gradient (see
+    _planner_css), so window/sidebar colours are thin veils over it and the
+    cards are white/80 (dark: zinc/80) glass on top."""
+    p = PLANNER[bool(dark)]
+    card_a = 0.90 if spec["effect"] == "SOFT" else 0.80
+    pal["card"] = _alpha(p["card"], card_a)
+    pal["card_hover"] = _alpha(p["card"], min(1.0, card_a + 0.12))
+    pal["card_active"] = _alpha(p["card"], min(1.0, card_a + 0.06))
+    pal["surface"] = _alpha(p["surface"], 0.60)
+    pal["entry"] = _alpha(p["entry"], 0.50)
+    pal["entry_border"] = white(p["rim"])
+    pal["window"] = p["window"]
+    pal["sidebar"] = p["sidebar"]
+    pal["nav_hover"] = p["nav_hover"]
+    pal["nav_sel"] = "rgba(99,102,241,%.2f)" % (0.22 if dark else 0.14)
+    if spec["rim"]:
+        pal["border"] = white(p["rim"])
+    return pal
+
+
+def _planner_css(spec, dark, see_through):
+    """PLANNER shapes: the gradient backdrop, planner corner scale, indigo
+    accent and gradient buttons. Added after the shared glass layers."""
+    p = PLANNER[bool(dark)]
+    rim = white(p["rim"])
+    backdrop = p["backdrop"]
+    if see_through:   # thin the gradient so Fusion Desk's blur shows behind it
+        a = max(0.35, spec["opacity"] / 100)
+        stops = (((26, 26, 46), (22, 33, 62), (15, 52, 96)) if dark
+                 else ((224, 195, 252), (142, 197, 252)))
+        backdrop = "linear-gradient(135deg, %s)" % ", ".join(
+            "rgba(%d,%d,%d,%.2f)" % (*c, a) for c in stops)
+    ds = spec["shadow-strength"] / 100
+    card_shadow = "0 1px 2px rgba(0,0,0,%.2f)" % (0.05 * ds * (3 if dark else 1))
+    lg = 0.10 * ds * (2 if dark else 1)
+    tile_shadow = f"0 10px 15px -3px rgba(0,0,0,{lg:.2f}), 0 4px 6px -4px rgba(0,0,0,{lg:.2f})"
+    inset = f"inset 0 1px {white(0.08 if dark else 0.5)}" if spec["rim"] else ""
+
+    def sh(*parts):
+        return ", ".join(x for x in (inset,) + parts if x) or "none"
+    return f"""
+:root {{ --accent-bg-color: #6366f1; --accent-fg-color: #ffffff; --accent-color: {p["accent_text"]}; }}
+window.hb-window {{ background-image: {backdrop}; }}
+.hb-surface {{ border-top-left-radius: 24px; border-color: {rim}; }}
+.hb-card, .hb-card-group {{ border-radius: 16px; box-shadow: {sh(card_shadow)}; }}
+.hb-tile, flowbox.hbf-cards > flowboxchild, .hb-tm-mem-card, .hb-tm-sweep-tile {{
+    border-radius: 16px; box-shadow: {sh(tile_shadow)}; }}
+.hb-tm-sweep-hero {{ border-radius: 24px; box-shadow: {sh(tile_shadow)}; }}
+list.hb-nav > row {{ border-radius: 12px; }}
+list.hb-nav > row:selected {{ background-image: linear-gradient(to right, rgba(99,102,241,0.16), rgba(168,85,247,0.16)); }}
+list.hb-nav > row:selected .hb-nav-pill {{ background-image: linear-gradient(to bottom, #6366f1, #9333ea); }}
+entry.hb-search, searchentry.hb-search {{ border-radius: 12px; border-bottom-color: {rim}; }}
+entry.hb-search:focus-within, searchentry.hb-search:focus-within {{ box-shadow: 0 0 0 2px #6366f1; }}
+button.hb-accent {{ background-image: {PLANNER_ACCENT}; color: #ffffff; border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.20); box-shadow: {sh(PLANNER_SHADOW_ACCENT)}; font-weight: 600; }}
+button.hb-accent:hover {{ filter: none; opacity: 0.9; }}
+button.hb-accent:active, button.hb-plain:active {{ transform: scale(0.95); }}
+button.hb-plain, button.hb-tool {{ border-radius: 12px; }}
+.hb-badge {{ background-image: {PLANNER_ACCENT}; border-radius: 9999px; }}
+.hb-badge.hb-badge-big {{ border-radius: 9999px; }}
+.hb-title, .hb-subtitle {{ font-weight: 700; }}
+"""
 
 
 def glass_css(spec, dark, see_through=None):
@@ -485,6 +568,8 @@ def glass_css(spec, dark, see_through=None):
                 ".hb-window overlay-split-view, .hb-window list.navigation-sidebar, "
                 ".hb-window .hb-tm-navcol "
                 "{ background-color: transparent; }\n")
+    if spec["style"] == "PLANNER":
+        css += _planner_css(spec, dark, see_through)
     return css
 
 

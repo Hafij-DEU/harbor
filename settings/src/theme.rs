@@ -63,6 +63,7 @@ glass_choice!(GlassStyle {
     Smoke = "SMOKE", "Smoke";
     Halo = "HALO", "Halo";
     Glow = "GLOW", "Glow";
+    Planner = "PLANNER", "Planner";
 });
 
 /// Glass styling shared by every Harbor app and Fusion Desk. The fields are
@@ -424,9 +425,9 @@ impl Palette {
             return color;
         }
         // FNV-1a: stable between runs, unlike the std hasher.
-        let hash = seed
-            .bytes()
-            .fold(0x811c_9dc5u32, |h, b| (h ^ b as u32).wrapping_mul(0x0100_0193));
+        let hash = seed.bytes().fold(0x811c_9dc5u32, |h, b| {
+            (h ^ b as u32).wrapping_mul(0x0100_0193)
+        });
         COLOURFUL[hash as usize % COLOURFUL.len()]
     }
 
@@ -436,6 +437,9 @@ impl Palette {
             return self;
         }
         let dark = self.bg.r() < 128;
+        if glass.style == GlassStyle::Planner {
+            return self.planner(glass, dark, see_through);
+        }
         let accent = self.accent;
         let mix = |a: Color32, b: Color32, t: f32| {
             let m = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
@@ -482,11 +486,52 @@ impl Palette {
         self
     }
 
+    /// The Daily Routine Planner look (spec: ~/Music/apps/glass-theme/PLANNER-SPEC.md):
+    /// indigo accent, white/80 (dark zinc/80) cards with a white rim over the
+    /// lavender/sky (dark navy) gradient that `widgets::glow_backdrop` paints.
+    fn planner(mut self, glass: Glass, dark: bool, see_through: bool) -> Self {
+        let rgba = |r, g, b, a: f32| Color32::from_rgba_unmultiplied(r, g, b, (a * 255.0) as u8);
+        let card_a = if glass.effect == GlassEffect::Strong { 0.80 } else { 0.90 };
+        self.accent = Color32::from_rgb(0x63, 0x66, 0xf1);
+        if dark {
+            self.card = rgba(0x18, 0x18, 0x1b, card_a);
+            self.card_hover = rgba(0x27, 0x27, 0x2a, card_a + 0.08);
+            self.input_bg = rgba(0x27, 0x27, 0x2a, 0.50);
+            self.card_border = Color32::from_white_alpha(26);
+            // Opaque on purpose: code tells dark from light by bg.r(), and
+            // egui stores colours premultiplied. The backdrop paints over it.
+            self.bg = Color32::from_rgb(0x16, 0x21, 0x3e);
+            self.nav_bg = rgba(0x09, 0x09, 0x0b, 0.25);
+        } else {
+            self.card = rgba(0xff, 0xff, 0xff, card_a);
+            self.card_hover = rgba(0xff, 0xff, 0xff, (card_a + 0.12).min(1.0));
+            self.input_bg = rgba(0xff, 0xff, 0xff, 0.50);
+            self.card_border = Color32::from_white_alpha(51);
+            self.bg = Color32::from_rgb(0xc9, 0xc5, 0xfb);
+            self.nav_bg = rgba(0xff, 0xff, 0xff, 0.20);
+        }
+        if !glass.rim {
+            self.card_border = if dark { Color32::from_rgb(0x27, 0x27, 0x2a) } else { Color32::from_rgb(0xf3, 0xf4, 0xf6) };
+        }
+        let _ = see_through; // the backdrop thins itself when see-through
+        self
+    }
+
     /// Corner radius for this design: Windows 11 rounds, Windows 10 is square.
     pub fn corner(&self, radius: u8) -> u8 {
         if self.design == Design::Win10 {
             // Windows 10 with a modern touch: small, soft corners (max 4 px).
             radius.min(4)
+        } else if self.glass.on() && self.glass.style == GlassStyle::Planner {
+            // Planner corner scale: 8 -> 16 px cards, 6 -> 12 px controls,
+            // larger panels to 24 px.
+            match radius {
+                0 => 0,
+                1..=4 => 8,
+                5..=6 => 12,
+                7..=10 => 16,
+                _ => 24,
+            }
         } else {
             radius
         }

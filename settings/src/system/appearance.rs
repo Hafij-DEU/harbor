@@ -118,15 +118,26 @@ pub enum GlassScope {
     Settings,
     Files,
     TaskManager,
+    // The user's other apps read the same files (PLANNER-SPEC.md).
+    AppHub,
+    Draco,
+    Astra,
+    SysMic,
+    Extendo,
 }
 
 impl GlassScope {
-    pub const ALL: [GlassScope; 5] = [
+    pub const ALL: [GlassScope; 10] = [
         GlassScope::Global,
         GlassScope::Harbor,
         GlassScope::Settings,
         GlassScope::Files,
         GlassScope::TaskManager,
+        GlassScope::AppHub,
+        GlassScope::Draco,
+        GlassScope::Astra,
+        GlassScope::SysMic,
+        GlassScope::Extendo,
     ];
 
     pub fn label(self) -> &'static str {
@@ -136,6 +147,11 @@ impl GlassScope {
             GlassScope::Settings => "Settings",
             GlassScope::Files => "Files",
             GlassScope::TaskManager => "Task Manager",
+            GlassScope::AppHub => "App Hub",
+            GlassScope::Draco => "Draco",
+            GlassScope::Astra => "Astra Player",
+            GlassScope::SysMic => "SysMic Recorder",
+            GlassScope::Extendo => "Extendo",
         }
     }
 
@@ -156,6 +172,11 @@ impl GlassScope {
             GlassScope::Settings => "glass-settings",
             GlassScope::Files => "glass-files",
             GlassScope::TaskManager => "glass-taskmgr",
+            GlassScope::AppHub => "glass-apphub",
+            GlassScope::Draco => "glass-draco",
+            GlassScope::Astra => "glass-astra",
+            GlassScope::SysMic => "glass-sysmic",
+            GlassScope::Extendo => "glass-extendo",
         }
     }
 }
@@ -272,7 +293,11 @@ pub fn save_home_links(on: bool) {
 pub fn saved_recent() -> Vec<crate::app::View> {
     design_path()
         .and_then(|p| fs::read_to_string(p.with_file_name("recent")).ok())
-        .map(|text| text.lines().filter_map(crate::app::View::from_key).collect())
+        .map(|text| {
+            text.lines()
+                .filter_map(crate::app::View::from_key)
+                .collect()
+        })
         .unwrap_or_default()
 }
 
