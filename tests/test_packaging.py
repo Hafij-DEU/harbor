@@ -12,7 +12,7 @@ EXTRA = {"files": ["qr", "taskmgr_ui"], "taskmgr": []}
 
 
 def package_modules(app):
-    mods = {"__init__", "common", app} | set(EXTRA[app])
+    mods = {"__init__", "common", "planner_glass", app} | set(EXTRA[app])
     mods |= {os.path.basename(f)[:-3] for f in glob.glob(os.path.join(SRC, app + "_*.py"))}
     return mods
 

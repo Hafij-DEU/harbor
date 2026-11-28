@@ -99,14 +99,23 @@ pub(crate) fn harbor_path(name: &str) -> Option<PathBuf> {
     design_path().and_then(|p| p.parent()?.parent().map(|c| c.join("harbor").join(name)))
 }
 
-pub(crate) fn write_config(path: Option<PathBuf>, text: &str) {
+/// Write a shared config file atomically (temp file + rename), so the Python
+/// apps never read half a file. A failure is logged and returns false.
+pub(crate) fn write_config(path: Option<PathBuf>, text: &str) -> bool {
     let Some(path) = path else {
-        return;
+        return false;
     };
-    if let Some(dir) = path.parent() {
-        let _ = fs::create_dir_all(dir);
+    let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
+    let result = path
+        .parent()
+        .map_or(Ok(()), fs::create_dir_all)
+        .and_then(|_| fs::write(&tmp, text))
+        .and_then(|_| fs::rename(&tmp, &path));
+    if let Err(e) = &result {
+        eprintln!("harbor-settings: cannot write {}: {e}", path.display());
+        let _ = fs::remove_file(&tmp);
     }
-    let _ = fs::write(path, text);
+    result.is_ok()
 }
 
 /// Where a glass style is set: the desktop (Fusion Desk, "global"), every
@@ -194,10 +203,25 @@ pub fn scope_glass(scope: GlassScope) -> Option<crate::theme::Glass> {
         // 0.5.18 previews kept this app's choice next to its design file.
         text = design_path().and_then(|p| fs::read_to_string(p.with_file_name("glass")).ok());
     }
-    match text.as_deref().map(str::trim) {
-        None | Some("") | Some("global") | Some("harbor") => None,
-        Some(t) => Some(Glass::from_text(t)),
+    let text = text.as_deref().map(str::trim)?;
+    if ["", "global", "harbor"]
+        .iter()
+        .any(|w| text.eq_ignore_ascii_case(w))
+    {
+        return None;
     }
+    let (glass, ignored, used) = Glass::parse_checked(text);
+    for line in &ignored {
+        eprintln!("harbor-settings: {}: ignored line {line:?}", scope.file());
+    }
+    if !used {
+        eprintln!(
+            "harbor-settings: {} has no usable line: following Global",
+            scope.file()
+        );
+        return None;
+    }
+    Some(glass)
 }
 
 /// Save a scope's values, or make it follow its parent (`None`). The global
@@ -252,20 +276,35 @@ pub fn harbor_scope_follows_global() {
 
 /// The desktop's glass: Fusion Desk's settings, or Harbor's copy of them
 /// when Fusion Desk is not installed.
+/// A Fusion Desk older than v49 has no Lumina keys: those come from
+/// `glass-global` then (same rule as planner_glass.py and Extendo).
 pub fn global_glass() -> crate::theme::Glass {
-    crate::desktop::fusion_glass().unwrap_or_else(|| {
-        harbor_path(GlassScope::Global.file())
-            .and_then(|p| fs::read_to_string(p).ok())
-            .map(|t| crate::theme::Glass::from_text(&t))
-            .unwrap_or_default()
-    })
+    let file = harbor_path(GlassScope::Global.file())
+        .and_then(|p| fs::read_to_string(p).ok())
+        .map(|t| crate::theme::Glass::from_text(&t));
+    match crate::desktop::fusion_glass() {
+        Some((mut glass, has_lumina)) => {
+            if let (false, Some(f)) = (has_lumina, file) {
+                glass.lumina = f.lumina;
+                glass.lumina_colours = f.lumina_colours;
+                glass.lumina_colour = f.lumina_colour;
+                glass.lumina_intensity = f.lumina_intensity;
+            }
+            glass
+        }
+        None => file.unwrap_or_default(),
+    }
 }
 
-/// The values a scope paints with, after following its parents.
-pub fn resolve_glass(scope: GlassScope) -> crate::theme::Glass {
+/// The values a scope paints with: its own, else its parent's, and so on.
+/// `own` gives a scope's own values (the files, or App's cached copy).
+pub fn resolve_from(
+    scope: GlassScope,
+    own: impl Fn(GlassScope) -> Option<crate::theme::Glass>,
+) -> crate::theme::Glass {
     let mut at = scope;
     loop {
-        if let Some(g) = scope_glass(at) {
+        if let Some(g) = own(at) {
             return g;
         }
         match at.parent() {
@@ -281,7 +320,7 @@ pub fn effective_glass() -> crate::theme::Glass {
     if let Ok(v) = std::env::var("WIN11_SETTINGS_GLASS") {
         return crate::theme::Glass::from_text(&v);
     }
-    resolve_glass(GlassScope::Settings)
+    resolve_from(GlassScope::Settings, scope_glass)
 }
 
 /// Whether the Settings window opens see-through. By default it is solid,

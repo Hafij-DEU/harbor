@@ -400,16 +400,7 @@ The network will not reconnect automatically."
 
     /// The values a scope paints with, after following its parents.
     pub fn resolved_glass(&self, scope: system::GlassScope) -> crate::theme::Glass {
-        let mut at = scope;
-        loop {
-            if let Some(g) = self.scope_glass(at) {
-                return g;
-            }
-            match at.parent() {
-                Some(p) => at = p,
-                None => return crate::theme::Glass::OFF,
-            }
-        }
+        system::resolve_from(scope, |s| self.scope_glass(s))
     }
 
     /// Change a scope's glass (`None` = follow the scope above). The global
@@ -431,9 +422,15 @@ The network will not reconnect automatically."
         }
     }
 
-    /// Read the global glass again (Fusion Desk may have changed it).
-    pub fn reload_global_glass(&mut self) {
-        self.glass_scopes[0] = Some(system::global_glass());
+    /// Read every scope again: Fusion Desk, Astra's or App Hub's own Look
+    /// menu may have changed them, and a change here writes a scope's whole
+    /// set of values. A scope with an unsaved slider drag keeps its values.
+    pub fn reload_glass_scopes(&mut self) {
+        for (i, scope) in system::GlassScope::ALL.into_iter().enumerate() {
+            if self.glass_dirty != Some(scope) {
+                self.glass_scopes[i] = system::scope_glass(scope);
+            }
+        }
     }
 
     pub fn set_look(&mut self, look: crate::theme::Look) {

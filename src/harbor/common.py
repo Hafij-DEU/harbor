@@ -144,15 +144,12 @@ columnview.hb-table > header > button { background: transparent; border: none; b
 # Desk), "glass-files" / "glass-taskmgr" / "glass-settings" (one app, or
 # "harbor" = follow all Harbor apps) and "glass-global" (a copy of the
 # desktop values, used when Fusion Desk is not installed).
-FUSION_SCHEMA = "org.gnome.shell.extensions.fusion-desk"
-FUSION_UUID = "fusion-desk@hafij-deu.github.io"
-GLASS_STRENGTHS = ("style-strength", "shine-strength", "rim-strength", "glare-strength",
-                   "shadow-strength", "light-strength")   # percent, 0-200, 100 = normal
-GLASS_KEYS = ("effect", "material", "style", "opacity", "rim", "glare", "shadow",
-              "light-follows") + GLASS_STRENGTHS + pg.LUMINA_KEYS
-GLASS_EFFECTS = ("OFF", "SOFT", "STRONG")
-GLASS_MATERIALS = ("GLASS", "GLOSS")
-GLASS_STYLES = ("CLEAR", "FROSTED", "GEL", "TINTED", "SMOKE", "HALO", "GLOW", "PLANNER")
+# The file, parse and resolve layers live in planner_glass.py (shared with
+# App Hub, Astra and SysMic); these names are kept for Harbor's own code.
+FUSION_SCHEMA, FUSION_UUID = pg.FUSION_SCHEMA, pg.FUSION_UUID
+GLASS_STRENGTHS = pg.STRENGTHS        # percent, 0-200, 100 = normal
+GLASS_KEYS = pg.KEYS
+GLASS_EFFECTS, GLASS_MATERIALS, GLASS_STYLES = pg.EFFECTS, pg.MATERIALS, pg.STYLES
 # PLANNER = the Daily Routine Planner look, palette v3 ("Planner Glass"): one
 # violet-indigo hue family. A soft lavender -> periwinkle backdrop (dark: ink
 # indigo) with real glass cards on it: translucent white (dark: smoky violet)
@@ -192,11 +189,8 @@ def _planner_backdrop(dark, alpha=1.0):
         "rgba(%d,%d,%d,%.2f)" % (*c, alpha) for c in PLANNER[bool(dark)]["stops"])
 
 
-GLASS_DEFAULT = {"effect": "STRONG", "material": "GLASS", "style": "FROSTED", "opacity": 75,
-                 "rim": True, "glare": True, "shadow": False, "light-follows": False,
-                 **{k: 100 for k in GLASS_STRENGTHS},
-                 **{k: pg.DEFAULT[k] for k in pg.LUMINA_KEYS}}
-GLASS_OFF = dict(GLASS_DEFAULT, effect="OFF", opacity=100)
+GLASS_DEFAULT = pg.DEFAULT
+GLASS_OFF = pg.OFF
 # An app's own quick choice (Files > Options, Task Manager > Settings);
 # "custom" means Harbor Settings gave it its own full set of values.
 GLASS_APP_CHOICES = ("harbor", "off", "soft", "strong", "planner", "custom")
@@ -205,88 +199,13 @@ GLASS_APP_LABELS = (("harbor", "Same as global"), ("off", "Off"), ("soft", "Soft
                     ("custom", "Custom (Harbor Settings)"))
 
 
-def harbor_config_path(name):
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
-    return os.path.join(base, "harbor", name)
-
-
-def _read_config(name):
-    try:
-        with open(harbor_config_path(name), encoding="utf-8") as fh:
-            return fh.read().strip()
-    except OSError:
-        return None
-
-
-def _write_config(name, text):
-    path = harbor_config_path(name)
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(text)
-    except OSError:
-        pass
-
-
-def glass_set(spec, key, value):
-    """Set one glass value from text ('STRONG', '75', 'true'); bad values are ignored."""
-    key = key.strip().removeprefix("glass-")
-    value = str(value).strip().strip("'")
-    if key == "effect" and value.upper() in GLASS_EFFECTS:
-        spec[key] = value.upper()
-    elif key == "material" and value.upper() in GLASS_MATERIALS:
-        spec[key] = value.upper()
-    elif key == "style" and value.upper() in GLASS_STYLES:
-        spec[key] = value.upper()
-    elif key == "opacity" and value.isdigit():
-        spec[key] = max(10, min(100, int(value)))
-    elif key in GLASS_STRENGTHS and value.isdigit():
-        spec[key] = min(200, int(value))
-    elif key in ("rim", "glare", "shadow", "light-follows"):
-        spec[key] = value == "true"
-    elif key in pg.LUMINA_KEYS:  # Lumina options (see planner_glass.py)
-        pg._set(spec, key, value)
-
-
-def parse_glass(text):
-    """`key=value` pairs (lines or commas) into a glass dict. The old one-word
-    styles off / glossy / liquid still work."""
-    text = (text or "").strip()
-    if text == "off":
-        return dict(GLASS_OFF)
-    if text == "glossy":
-        return dict(GLASS_DEFAULT, effect="SOFT", material="GLOSS", style="GEL", opacity=100)
-    if text == "liquid":
-        return dict(GLASS_DEFAULT, style="CLEAR", opacity=80)
-    spec = dict(GLASS_DEFAULT)
-    for pair in text.replace(",", "\n").splitlines():
-        if "=" in pair:
-            glass_set(spec, *pair.split("=", 1))
-    return spec
-
-
-def glass_text(spec):
-    def show(v):
-        return ("true" if v else "false") if isinstance(v, bool) else str(v)
-    return "".join(f"{k}={show(spec[k])}\n" for k in GLASS_KEYS)
-
-
-def fusion_settings():
-    """Fusion Desk's Gio.Settings, or None when it is not installed."""
-    for base in (os.path.join(GLib.get_user_data_dir(), "gnome-shell", "extensions"),
-                 "/usr/share/gnome-shell/extensions", "/usr/local/share/gnome-shell/extensions"):
-        folder = os.path.join(base, FUSION_UUID, "schemas")
-        if not os.path.exists(os.path.join(folder, "gschemas.compiled")):
-            continue
-        try:
-            source = Gio.SettingsSchemaSource.new_from_directory(
-                folder, Gio.SettingsSchemaSource.get_default(), False)
-            schema = source.lookup(FUSION_SCHEMA, False)
-        except GLib.Error:
-            continue
-        if schema is not None:
-            return Gio.Settings.new_full(schema, None, None)
-    return None
+harbor_config_path = pg.config_path
+_read_config = pg.read_file
+_write_config = pg.write_file
+glass_set = pg.set_value      # one value from text; False (unchanged) when it is bad
+parse_glass = pg.parse        # key=value lines/commas, or the old off / glossy / liquid
+glass_text = pg.to_text
+fusion_settings = pg.fusion_settings   # Fusion Desk's Gio.Settings, or None
 
 
 def fusion_blurs_windows(fusion=None):
@@ -312,38 +231,9 @@ def fusion_blurs_windows(fusion=None):
         return False
 
 
-def global_glass(fusion=None):
-    """The desktop's glass: Fusion Desk's settings, or Harbor's copy of them."""
-    fusion = fusion or fusion_settings()
-    if fusion is not None:
-        spec = dict(GLASS_DEFAULT)
-        keys = fusion.props.settings_schema.list_keys()
-        for key in GLASS_KEYS:
-            if "glass-" + key in keys:
-                glass_set(spec, key, fusion.get_value("glass-" + key).print_(False))
-        return spec
-    text = _read_config("glass-global")
-    return parse_glass(text) if text else dict(GLASS_DEFAULT)
-
-
-def scope_glass(scope):
-    """A scope's own values ("harbor" or an app name), or None to follow."""
-    text = _read_config("glass" if scope == "harbor" else "glass-" + scope)
-    if text is None:  # missing: follow (the All Harbor apps scope is gone; it follows Global)
-        return None
-    if text in ("", "global", "harbor"):
-        return None
-    return parse_glass(text)
-
-
-def resolve_glass(app, fusion=None):
-    """The glass `app` paints with, following its scope chain."""
-    spec = scope_glass(app)
-    if spec is None:
-        spec = scope_glass("harbor")
-    if spec is None:
-        spec = global_glass(fusion)
-    return spec
+global_glass = pg.global_glass   # Fusion Desk's settings, or Harbor's copy of them
+scope_glass = pg.scope_glass     # a scope's own values, or None to follow
+resolve_glass = pg.resolve       # the glass an app paints with (python3 planner_glass.py --check)
 
 
 def app_glass_choice(app):
@@ -368,9 +258,9 @@ def set_app_glass_choice(app, choice):
     elif choice in ("off", "soft", "strong"):
         base = resolve_glass("harbor") if scope_glass("harbor") is not None else global_glass()
         _write_config("glass-" + app, glass_text(dict(base, effect=choice.upper())))
-    elif choice == "planner":   # the Daily Routine Planner glass, this app only
-        _write_config("glass-" + app, glass_text(dict(
-            GLASS_DEFAULT, effect="STRONG", style="PLANNER", opacity=100, glare=False, shadow=True)))
+    elif choice == "planner":   # Lumina Glass for this app only, keeping its Lumina options
+        lumina = {k: resolve_glass(app)[k] for k in pg.LUMINA_KEYS}
+        _write_config("glass-" + app, glass_text(dict(pg.PLANNER_SPEC, **lumina)))
 
 
 def _rgb(value):
@@ -537,11 +427,11 @@ def _files_ribbon_css(t, dark):
     """Files' ribbon under Lumina: a solid, calm panel (white, or the usual dark)
     with only a hint of the hue; the glass and tint stay on the rest of the window."""
     if dark:
-        rib = pg._hex(pg._mix(t["a2"], (40, 38, 50), 0.05))
+        rib = pg.to_hex(pg.mix(t["a2"], (40, 38, 50), 0.05))
         line, shadow = "rgba(255,255,255,0.07)", "0 2px 8px -4px rgba(0,0,0,0.45)"
     else:
-        rib = pg._hex(pg._mix(t["a2"], (255, 255, 255), 0.025))
-        line, shadow = pg._rgba(t["a2"], 0.10), "0 2px 8px -5px rgba(40,30,90,0.16)"
+        rib = pg.to_hex(pg.mix(t["a2"], (255, 255, 255), 0.025))
+        line, shadow = pg.rgba(t["a2"], 0.10), "0 2px 8px -5px rgba(40,30,90,0.16)"
     return f"""
 window.hb-window.hbf-custom .hbf-top {{ background-color: transparent; background-image: none; }}
 window.hb-window .hbf-ribbon, window.hb-window.hbf-custom .hbf-ribbon {{ background-color: {rib};
@@ -600,7 +490,7 @@ def glass_css(spec, dark, see_through=None):
             out.append(f"linear-gradient(to bottom, {black(0.06 * k)}, {black(0.24 * k)})")
         elif style == "HALO":
             out.append(f"radial-gradient(ellipse at 50% 45%, {white(0.26 * wk)}, {white(0)} 65%)")
-        else:  # CLEAR, GLOW
+        else:  # CLEAR, GLOW; PLANNER's cards get this base, _planner_css adds its glass
             out.append(f"linear-gradient(to bottom, {white(0.18 * wk)}, {white(0.03 * wk)} 70%, "
                        f"{white(0)})")
         if gloss and dark:
@@ -720,8 +610,8 @@ class _Theme:
                 mon = Gio.File.new_for_path(path).monitor_file(Gio.FileMonitorFlags.NONE, None)
                 mon.connect("changed", lambda *_: self.reload())
                 self._monitors.append(mon)
-            except GLib.Error:
-                pass
+            except (GLib.Error, OSError) as e:
+                pg.log(f"{self.app}: live updates of {path} are off: {e}")
         self._fusion = fusion_settings()
         if self._fusion is not None:
             self._fusion.connect(

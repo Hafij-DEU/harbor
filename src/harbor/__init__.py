@@ -4,6 +4,6 @@ Each app ships as its own package with its own version; build-deb.sh
 writes that app's version into VERSION of the packaged copy.
 """
 
-FILES_VERSION = "0.5.58"
-TASKMGR_VERSION = "0.3.7"
+FILES_VERSION = "0.5.59"
+TASKMGR_VERSION = "0.3.8"
 VERSION = FILES_VERSION

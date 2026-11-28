@@ -402,7 +402,7 @@ pub(crate) fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
     let mut values = shown;
     widgets::card(ui, pal, |ui| {
         // Two choices only: the desktop-wide glass, or one app's own glass.
-        // "Per app" opens a second line with the apps (All Harbor apps first).
+        // "Per app" opens a second line with the apps.
         let per_app = scope != GlassScope::Global;
         glass_row(
             ui,
@@ -436,19 +436,16 @@ pub(crate) fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
         if let Some(parent) = scope.parent() {
             widgets::divider(ui, pal);
             let mut follow = own.is_none();
+            // every app's parent is Global (GlassScope::parent)
             let title = format!("Use the {} glass", parent.label().to_lowercase());
-            let sub = if parent == GlassScope::Global {
-                "Look like the taskbar and menus".to_owned()
-            } else {
-                format!("Turn off to give {} its own glass", scope.label())
-            };
+            let sub = "Look like the taskbar and menus";
             if widgets::row(
                 ui,
                 pal,
                 pal.accent,
                 Icon::Personalise,
                 &title,
-                &sub,
+                sub,
                 Right::Switch(&mut follow),
             )
             .toggled
@@ -701,9 +698,7 @@ pub(crate) fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
     );
     spacer(ui, 18.0);
     if let Some(s) = pick_scope {
-        if s == GlassScope::Global {
-            app.reload_global_glass();
-        }
+        app.reload_glass_scopes();
         app.glass_edit = s;
     } else if let Some(follow) = follow_change {
         app.set_scope_glass(scope, if follow { None } else { Some(shown) }, true);

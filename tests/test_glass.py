@@ -26,9 +26,9 @@ def test_old_words_and_bad_values():
 def test_scope_chain_and_quick_choice(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     # GLib caches the data folder, so keep the real Fusion Desk out directly.
-    monkeypatch.setattr(common, "fusion_settings", lambda: None)
-    # Nothing saved: Harbor apps off, each app follows them.
-    assert common.resolve_glass("files")["effect"] == "OFF"
+    monkeypatch.setattr(common.pg, "fusion_settings", lambda: None)
+    # Nothing saved: every app follows the desktop (Fusion defaults without Fusion Desk).
+    assert common.resolve_glass("files") == common.GLASS_DEFAULT
     assert common.app_glass_choice("files") == "harbor"
     # All Harbor apps follow the desktop: Fusion defaults without Fusion Desk.
     (tmp_path / "harbor").mkdir()
@@ -49,3 +49,28 @@ def test_css_layers():
     assert "radial-gradient" in css and "0 4px 14px" in css and "transparent;" in css
     pal = common.glass_palette(common.PALETTES["dark"], common.parse_glass("opacity=60"), True)
     assert pal["card"].startswith("rgba(") and pal["window"].startswith("rgba(")
+
+
+def test_unusable_file_follows_global(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr(common.pg, "fusion_settings", lambda: None)
+    (tmp_path / "harbor").mkdir()
+    (tmp_path / "harbor" / "glass-global").write_text("style=GEL\n")
+    (tmp_path / "harbor" / "glass-files").write_bytes(b"\xff\xfe not text")
+    (tmp_path / "harbor" / "glass-taskmgr").write_text("nonsense")
+    assert common.resolve_glass("files")["style"] == "GEL"     # unreadable: follows, logged
+    assert common.resolve_glass("taskmgr")["style"] == "GEL"   # no usable line: follows, logged
+    err = capsys.readouterr().err
+    assert "cannot read" in err and "no usable line" in err
+
+
+def test_planner_choice_keeps_lumina_options(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr(common.pg, "fusion_settings", lambda: None)
+    (tmp_path / "harbor").mkdir()
+    (tmp_path / "harbor" / "glass-global").write_text("lumina=COLOURFUL\nlumina-colours=OCEAN\n")
+    common.set_app_glass_choice("files", "planner")
+    spec = common.resolve_glass("files")
+    assert spec["style"] == "PLANNER" and spec["lumina"] == "COLOURFUL"
+    assert spec["lumina-colours"] == "OCEAN"
+    assert not list((tmp_path / "harbor").glob("*.tmp"))       # atomic write left no temp file

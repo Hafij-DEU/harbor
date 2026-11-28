@@ -22,8 +22,9 @@ pub fn fusion_installed() -> bool {
     !schema_args(FUSION_SCHEMA).is_empty()
 }
 
-/// Fusion Desk's glass settings, or `None` when it is not installed.
-pub fn fusion_glass() -> Option<crate::theme::Glass> {
+/// Fusion Desk's glass and whether it has the Lumina keys (v49+), or
+/// `None` when it is not installed.
+pub fn fusion_glass() -> Option<(crate::theme::Glass, bool)> {
     if !fusion_installed() {
         return None;
     }
@@ -33,11 +34,11 @@ pub fn fusion_glass() -> Option<crate::theme::Glass> {
     }
     let mut glass = crate::theme::Glass::default();
     for (key, value) in &values {
-        if key.starts_with("glass-") {
-            glass.set(key, &plain(value));
+        if key.starts_with("glass-") && !glass.set(key, &plain(value)) {
+            eprintln!("harbor-settings: Fusion Desk {key}={value} not understood");
         }
     }
-    Some(glass)
+    Some((glass, values.iter().any(|(k, _)| k == "glass-lumina")))
 }
 
 /// Whether Fusion Desk is running and blurs the desktop behind Harbor
@@ -65,26 +66,67 @@ pub fn fusion_blurs_windows() -> bool {
         && get("disable-user-extensions").trim() != "true"
 }
 
-/// Write every glass setting to Fusion Desk.
+/// Write every glass setting to Fusion Desk: one `dconf load`, so the shell
+/// restyles once; without the dconf tool, one `gsettings set` per key.
 pub fn set_fusion_glass(glass: &crate::theme::Glass) -> bool {
+    use crate::theme::Glass;
     let extra = schema_args(FUSION_SCHEMA);
     if extra.is_empty() {
         return false;
     }
+    let keys = || Glass::KEYS.iter().chain(Glass::LUMINA_KEYS.iter());
+    let batch: String = std::iter::once("[/]\n".to_owned())
+        .chain(keys().map(|k| format!("{k}={}\n", glass.get(k))))
+        .collect();
+    if dconf_load("/org/gnome/shell/extensions/fusion-desk/", &batch) {
+        return true;
+    }
     let set = |key: &str| {
-        Command::new("gsettings")
+        let ok = Command::new("gsettings")
             .args(&extra)
             .args(["set", FUSION_SCHEMA, key, &glass.get(key)])
             .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+            .is_ok_and(|s| s.success());
+        if !ok {
+            eprintln!("harbor-settings: gsettings set {key} failed");
+        }
+        ok
     };
-    let ok = crate::theme::Glass::KEYS.iter().all(|key| set(key));
-    // best effort: Fusion Desk before v49 has no Lumina settings
-    for key in crate::theme::Glass::LUMINA_KEYS {
+    let ok = Glass::KEYS.iter().all(|key| set(key));
+    // Fusion Desk before v49 has no Lumina settings: those may fail
+    for key in Glass::LUMINA_KEYS {
         set(key);
     }
     ok
+}
+
+/// `dconf load <dir>` with `keyfile` on stdin; false when dconf is missing
+/// or fails (the caller falls back to gsettings).
+fn dconf_load(dir: &str, keyfile: &str) -> bool {
+    use std::io::Write;
+    let Ok(mut child) = Command::new("dconf")
+        .args(["load", dir])
+        .stdin(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+    else {
+        return false;
+    };
+    let wrote = child
+        .stdin
+        .take()
+        .is_some_and(|mut s| s.write_all(keyfile.as_bytes()).is_ok());
+    match child.wait_with_output() {
+        Ok(out) if wrote && out.status.success() => true,
+        Ok(out) => {
+            eprintln!(
+                "harbor-settings: dconf load failed: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            );
+            false
+        }
+        Err(_) => false,
+    }
 }
 
 /// Fusion Desk status: install it when missing, turn it on or off, open its

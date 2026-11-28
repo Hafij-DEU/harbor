@@ -71,6 +71,8 @@ pub struct App {
     pub pointer: Option<Pos2>,
     /// A scope changed while a slider was dragged; saved on release.
     pub glass_dirty: Option<system::GlassScope>,
+    /// The window had focus last frame (glass scopes reload on focus).
+    had_focus: bool,
     last_mode: Mode,
     last_accent: Color32,
     last_design: crate::theme::Design,
@@ -300,6 +302,7 @@ impl App {
             keyboard: Default::default(),
             pointer: None,
             glass_dirty: None,
+            had_focus: true,
             last_mode: mode,
             last_accent: accent,
             last_design: design,
@@ -410,7 +413,9 @@ impl App {
         let glass = self.glass();
         // A window created opaque cannot turn see-through until reopened.
         let see = self.glass_window && glass.see_through();
-        let mut pal = Palette::new(self.mode, self.accent, self.design).with_glass(glass, see);
+        let system_accent = crate::theme::gnome_accent(&self.system_accent_name);
+        let mut pal =
+            Palette::new(self.mode, self.accent, self.design).with_glass(glass, see, system_accent);
         pal.pointer = self.pointer;
         pal.look = self.look;
         pal
@@ -433,6 +438,11 @@ impl eframe::App for App {
         let ctx = root.ctx().clone();
         self.poll_background(&ctx);
         self.handle_shortcuts(&ctx);
+        let focus = ctx.input(|i| i.viewport().focused.unwrap_or(true));
+        if focus && !self.had_focus {
+            self.reload_glass_scopes(); // other apps may have changed the glass meanwhile
+        }
+        self.had_focus = focus;
 
         if self.mode != self.last_mode
             || self.accent != self.last_accent

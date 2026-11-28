@@ -259,74 +259,49 @@ impl Glass {
         }
     }
 
-    /// Set one setting from Fusion Desk text; unknown keys and values are ignored.
-    pub fn set(&mut self, key: &str, value: &str) {
-        let value = value.trim();
-        let flag = |v: &str| v.trim_matches('\'') == "true";
+    /// Set one setting from Fusion Desk text (`'STRONG'`, `75`, `true`).
+    /// Same rules as planner_glass.py `set_value`: numbers clamp, flags and
+    /// names in any case, a colour needs `#rrggbb`. Returns false (and
+    /// changes nothing) for an unknown key or a bad value.
+    pub fn set(&mut self, key: &str, value: &str) -> bool {
+        let value = value.trim().trim_matches('\'');
+        let number = |lo: u16, hi: u16| value.parse::<u16>().ok().map(|n| n.clamp(lo, hi) as u8);
+        let flag = || {
+            ["true", "false"]
+                .iter()
+                .find(|f| value.eq_ignore_ascii_case(f))
+                .map(|f| *f == "true")
+        };
+        fn put<T>(slot: &mut T, v: Option<T>) -> bool {
+            v.map(|v| *slot = v).is_some()
+        }
         match key.trim().trim_start_matches("glass-") {
-            "effect" => {
-                if let Some(v) = GlassEffect::from_key(value) {
-                    self.effect = v;
-                }
-            }
-            "material" => {
-                if let Some(v) = GlassMaterial::from_key(value) {
-                    self.material = v;
-                }
-            }
-            "style" => {
-                if let Some(v) = GlassStyle::from_key(value) {
-                    self.style = v;
-                }
-            }
-            "opacity" => {
-                if let Ok(v) = value.trim_matches('\'').parse::<u8>() {
-                    self.opacity = v.clamp(10, 100);
-                }
-            }
-            "rim" => self.rim = flag(value),
-            "glare" => self.glare = flag(value),
-            "shadow" => self.shadow = flag(value),
-            "light-follows" => self.light_follows = flag(value),
-            "lumina" => {
-                if let Some(v) = LuminaStyle::from_key(value) {
-                    self.lumina = v;
-                }
-            }
-            "lumina-colours" => {
-                if let Some(v) = LuminaColours::from_key(value) {
-                    self.lumina_colours = v;
-                }
-            }
-            "lumina-colour" => {
-                let v = value.trim_matches('\'').trim_start_matches('#');
-                if v.len() == 6 {
-                    if let Ok(n) = u32::from_str_radix(v, 16) {
-                        self.lumina_colour = [(n >> 16) as u8, (n >> 8) as u8, n as u8];
-                    }
-                }
-            }
-            "lumina-intensity" => {
-                if let Ok(v) = value.trim_matches('\'').parse::<u8>() {
-                    self.lumina_intensity = v.clamp(20, 100);
-                }
-            }
-            name if name.ends_with("-strength") => {
-                let Ok(v) = value.trim_matches('\'').parse::<u16>() else {
-                    return;
-                };
-                let v = v.min(200) as u8;
-                match name {
-                    "style-strength" => self.style_strength = v,
-                    "shine-strength" => self.shine_strength = v,
-                    "rim-strength" => self.rim_strength = v,
-                    "glare-strength" => self.glare_strength = v,
-                    "shadow-strength" => self.shadow_strength = v,
-                    "light-strength" => self.light_strength = v,
-                    _ => {}
-                }
-            }
-            _ => {}
+            "effect" => put(&mut self.effect, GlassEffect::from_key(value)),
+            "material" => put(&mut self.material, GlassMaterial::from_key(value)),
+            "style" => put(&mut self.style, GlassStyle::from_key(value)),
+            "opacity" => put(&mut self.opacity, number(10, 100)),
+            "rim" => put(&mut self.rim, flag()),
+            "glare" => put(&mut self.glare, flag()),
+            "shadow" => put(&mut self.shadow, flag()),
+            "light-follows" => put(&mut self.light_follows, flag()),
+            "lumina" => put(&mut self.lumina, LuminaStyle::from_key(value)),
+            "lumina-colours" => put(&mut self.lumina_colours, LuminaColours::from_key(value)),
+            "lumina-colour" => put(
+                &mut self.lumina_colour,
+                value
+                    .strip_prefix('#')
+                    .filter(|h| h.len() == 6 && h.is_ascii())
+                    .and_then(|h| u32::from_str_radix(h, 16).ok())
+                    .map(|n| [(n >> 16) as u8, (n >> 8) as u8, n as u8]),
+            ),
+            "lumina-intensity" => put(&mut self.lumina_intensity, number(20, 100)),
+            "style-strength" => put(&mut self.style_strength, number(0, 200)),
+            "shine-strength" => put(&mut self.shine_strength, number(0, 200)),
+            "rim-strength" => put(&mut self.rim_strength, number(0, 200)),
+            "glare-strength" => put(&mut self.glare_strength, number(0, 200)),
+            "shadow-strength" => put(&mut self.shadow_strength, number(0, 200)),
+            "light-strength" => put(&mut self.light_strength, number(0, 200)),
+            _ => false,
         }
     }
 
@@ -346,35 +321,50 @@ impl Glass {
     }
 
     /// Parse `key=value` pairs (lines or commas). The old one-word styles
-    /// (`off`, `glossy`, `liquid`) still work.
+    /// (`off`, `glossy`, `liquid`, any case) still work.
     pub fn from_text(text: &str) -> Glass {
-        match text.trim() {
-            "off" => return Glass::OFF,
+        Self::parse_checked(text).0
+    }
+
+    /// The glass plus the lines that were ignored, and whether any line was
+    /// used at all (a file with none follows the scope above, like the
+    /// Python apps do).
+    pub fn parse_checked(text: &str) -> (Glass, Vec<String>, bool) {
+        match text.trim().to_ascii_lowercase().as_str() {
+            "off" => return (Glass::OFF, Vec::new(), true),
             "glossy" => {
-                return Glass {
+                let g = Glass {
                     effect: GlassEffect::Soft,
                     material: GlassMaterial::Gloss,
                     style: GlassStyle::Gel,
                     opacity: 100,
                     ..Glass::default()
-                }
+                };
+                return (g, Vec::new(), true);
             }
             "liquid" => {
-                return Glass {
+                let g = Glass {
                     style: GlassStyle::Clear,
                     opacity: 80,
                     ..Glass::default()
-                }
+                };
+                return (g, Vec::new(), true);
             }
             _ => {}
         }
         let mut glass = Glass::default();
-        for pair in text.split([',', '\n']) {
-            if let Some((k, v)) = pair.split_once('=') {
-                glass.set(k, v);
+        let (mut used, mut ignored) = (false, Vec::new());
+        for pair in text
+            .split([',', '\n'])
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+        {
+            match pair.split_once('=') {
+                Some((k, v)) if glass.set(k, v) => used = true,
+                _ => ignored.push(pair.to_owned()),
             }
         }
-        glass
+        (glass, ignored, used)
     }
 }
 
@@ -554,6 +544,11 @@ pub struct Palette {
     pub look: Look,
     /// The pointer, for "Light follows pointer".
     pub pointer: Option<egui::Pos2>,
+    /// Lumina Colourful's three colours (None = not Colourful); the backdrop
+    /// tints with them, so it matches the accent picked here.
+    pub lumina: Option<[[u8; 3]; 3]>,
+    /// The window is see-through: the Lumina backdrop thins with the opacity.
+    pub see_through: bool,
 }
 
 impl Palette {
@@ -582,14 +577,17 @@ impl Palette {
         COLOURFUL[hash as usize % COLOURFUL.len()]
     }
 
-    pub fn with_glass(mut self, glass: Glass, see_through: bool) -> Self {
+    /// Apply the glass. `system_accent` is GNOME's accent colour, used by
+    /// Lumina Colourful's "System accent" (the same colour the Python apps use).
+    pub fn with_glass(mut self, glass: Glass, see_through: bool, system_accent: [u8; 3]) -> Self {
         self.glass = glass;
+        self.see_through = see_through;
         if !glass.on() {
             return self;
         }
         let dark = self.bg.r() < 128;
         if glass.style == GlassStyle::Planner {
-            return self.planner(glass, dark, see_through);
+            return self.planner(glass, dark, system_accent);
         }
         let accent = self.accent;
         let mix = |a: Color32, b: Color32, t: f32| {
@@ -644,10 +642,9 @@ impl Palette {
     /// Mist backdrop (dark: ink-violet), solid cards (slightly see-through
     /// only while Fusion Desk blurs behind the window), indigo-tinted ink
     /// text, hovers and inputs. Spec: ~/Music/apps/glass-theme/PLANNER-SPEC.md
-    fn planner(mut self, glass: Glass, dark: bool, see_through: bool) -> Self {
+    fn planner(mut self, glass: Glass, dark: bool, system_accent: [u8; 3]) -> Self {
         let rgba = |r, g, b, a: f32| Color32::from_rgba_unmultiplied(r, g, b, (a * 255.0) as u8);
         let rgb = Color32::from_rgb;
-        let system = [self.accent.r(), self.accent.g(), self.accent.b()];
         self.accent = rgb(0x63, 0x66, 0xf1);
         self.on_accent = Color32::WHITE;
         if dark {
@@ -689,11 +686,11 @@ impl Palette {
         }
         // Lumina Colourful: the main hue becomes the accent (icons, switches,
         // selection); the backdrop tint is painted by widgets::planner_backdrop
-        if let Some([_, [r, g, b], _]) = glass.lumina_rgb(system) {
+        self.lumina = glass.lumina_rgb(system_accent);
+        if let Some([_, [r, g, b], _]) = self.lumina {
             self.accent = rgb(r, g, b);
             self.nav_selected = rgba(r, g, b, if dark { 0.24 } else { 0.14 });
         }
-        let _ = see_through; // the backdrop thins itself when see-through
         self
     }
 
@@ -750,6 +747,8 @@ impl Palette {
                 tooltip: Color32::from_rgb(0x2B, 0x2B, 0x2B),
                 design,
                 glass: Glass::OFF,
+                lumina: None,
+                see_through: false,
                 look: Look::Accent,
                 pointer: None,
             },
@@ -775,6 +774,8 @@ impl Palette {
                 tooltip: Color32::from_rgb(0xF2, 0xF2, 0xF2),
                 design,
                 glass: Glass::OFF,
+                lumina: None,
+                see_through: false,
                 look: Look::Accent,
                 pointer: None,
             },
@@ -806,6 +807,8 @@ impl Palette {
                 tooltip: Color32::from_rgb(0x2D, 0x2D, 0x2D),
                 design,
                 glass: Glass::OFF,
+                lumina: None,
+                see_through: false,
                 look: Look::Accent,
                 pointer: None,
             },
@@ -831,6 +834,8 @@ impl Palette {
                 tooltip: Color32::from_rgb(0xF0, 0xF0, 0xF0),
                 design,
                 glass: Glass::OFF,
+                lumina: None,
+                see_through: false,
                 look: Look::Accent,
                 pointer: None,
             },
@@ -1021,5 +1026,48 @@ mod tests {
         assert_eq!(g.style, GlassStyle::Frosted);
         assert_eq!(g.opacity, 10);
         assert_eq!(g.effect, GlassEffect::Strong);
+    }
+}
+
+#[cfg(test)]
+mod glass_parse_tests {
+    use super::*;
+
+    // Same rules as planner_glass.py: a file written by one app reads the same in all.
+    #[test]
+    fn values_clamp_and_check() {
+        let (g, ignored, used) = Glass::parse_checked(
+            "opacity=300\nrim=True\nlumina-colour=8b5cf6\nlumina-colour=#+0_1_2\nstyle=planner\nbogus",
+        );
+        assert!(used);
+        assert_eq!(g.opacity, 100);
+        assert!(g.rim);
+        assert_eq!(g.style, GlassStyle::Planner);
+        assert_eq!(g.lumina_colour, Glass::default().lumina_colour);
+        assert_eq!(ignored.len(), 3);
+    }
+
+    #[test]
+    fn legacy_words_any_case() {
+        assert_eq!(Glass::from_text("GLOSSY").material, GlassMaterial::Gloss);
+        assert_eq!(Glass::from_text("Off"), Glass::OFF);
+    }
+
+    #[test]
+    fn garbage_is_not_used() {
+        let (_, ignored, used) = Glass::parse_checked("nonsense words");
+        assert!(!used);
+        assert_eq!(ignored, vec!["nonsense words".to_owned()]);
+    }
+
+    #[test]
+    fn text_round_trip() {
+        let g = Glass {
+            style: GlassStyle::Planner,
+            lumina: LuminaStyle::Colourful,
+            lumina_colour: [0x12, 0xab, 0xef],
+            ..Glass::default()
+        };
+        assert_eq!(Glass::from_text(&g.to_text()), g);
     }
 }

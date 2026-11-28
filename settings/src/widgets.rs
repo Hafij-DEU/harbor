@@ -476,14 +476,13 @@ fn planner_card(pal: &Palette, rect: Rect, corner: u8, color: Color32) -> egui::
 /// shows behind it.
 pub fn planner_backdrop(painter: &egui::Painter, rect: Rect, pal: &Palette, corner: f32) {
     let dark = pal.bg.r() < 128;
-    let a = if crate::system::glass_window() {
+    let a = if pal.see_through {
         (pal.glass.opacity as f32 / 100.0).max(0.35)
     } else {
         1.0
     };
     let c = |r: u8, g: u8, b: u8| Color32::from_rgba_unmultiplied(r, g, b, (a * 255.0) as u8);
-    let accent = [pal.accent.r(), pal.accent.g(), pal.accent.b()];
-    let stops: Vec<(f32, Color32)> = if let Some(cols) = pal.glass.lumina_rgb(accent) {
+    let stops: Vec<(f32, Color32)> = if let Some(cols) = pal.lumina {
         // Lumina Colourful: only a faint tint of the colours (same as planner_glass.py)
         let k = pal.glass.lumina_intensity as f32 / 100.0;
         let (base, amt) = if dark {
