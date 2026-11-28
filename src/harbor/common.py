@@ -505,6 +505,9 @@ window.hb-window .hb-statusbar, window.hb-window .hbf-statusbar {{ {glass} margi
 .hb-card, .hb-card-group, .hb-tile, flowbox.hbf-cards > flowboxchild, .hb-tm-mem-card, .hb-tm-sweep-tile {{
     {glass} border-radius: 16px; box-shadow: {p["spec"]}, {card_shadow}; }}
 .hb-tile:hover, flowbox.hbf-cards > flowboxchild:hover {{ background-color: {p["btn_hover"]}; }}
+window.hb-window .hbf-pane, window.hb-window.hbf-custom .hbf-pane,
+window.hb-window.hbf-custom .hbf-sidebar {{ {glass} border-radius: 16px;
+    box-shadow: {p["spec"]}, {card_shadow}; }}
 .hb-tm-sweep-hero {{ border-radius: 24px; box-shadow: {p["spec"]}, {big_shadow}; }}
 list.hb-nav > row {{ border-radius: 12px; }}
 list.hb-nav > row:selected {{ background-image: none; color: {p["accent_text"]};
