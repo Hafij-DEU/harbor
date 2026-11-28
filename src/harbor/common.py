@@ -153,13 +153,13 @@ GLASS_EFFECTS = ("OFF", "SOFT", "STRONG")
 GLASS_MATERIALS = ("GLASS", "GLOSS")
 GLASS_STYLES = ("CLEAR", "FROSTED", "GEL", "TINTED", "SMOKE", "HALO", "GLOW", "PLANNER")
 # PLANNER = the Daily Routine Planner look, palette v3 ("Planner Glass"): one
-# violet-indigo hue family. A soft lavender -> periwinkle backdrop (dark: ink
+# violet-indigo hue family. An aurora backdrop (pink -> violet -> sky) (dark: ink
 # indigo) with real glass cards on it: translucent white (dark: smoky violet)
 # with a top-to-bottom sheen, a white rim, a bright top edge and a soft
 # coloured shadow. Header = near-solid bar; footer = floating glass card.
 # Spec: ~/Music/apps/glass-theme/PLANNER-SPEC.md
 PLANNER = {
-    False: {"stops": ((232, 218, 255), (220, 224, 255), (203, 220, 255)),
+    False: {"stops": ((255, 214, 236), (226, 214, 255), (200, 226, 255)),
             "card": "rgba(255,255,255,0.30)",
             "card_img": "linear-gradient(to bottom, rgba(255,255,255,0.72), rgba(255,255,255,0.40))",
             "surface": "rgba(255,255,255,0.0)", "entry": "rgba(255,255,255,0.55)",
@@ -170,7 +170,7 @@ PLANNER = {
             "btn": "rgba(255,255,255,0.50)", "btn_hover": "rgba(255,255,255,0.80)",
             "btn_text": "#4338ca", "btn_line": "rgba(255,255,255,0.90)",
             "bar": "rgba(255,255,255,0.90)", "hair": "rgba(99,102,241,0.10)", "shade": "76,61,180"},
-    True: {"stops": ((26, 21, 51), (27, 31, 69), (20, 26, 58)),
+    True: {"stops": ((48, 20, 60), (30, 24, 74), (14, 34, 70)),
            "card": "rgba(40,35,76,0.55)",
            "card_img": "linear-gradient(to bottom, rgba(255,255,255,0.10), rgba(255,255,255,0.03))",
            "surface": "rgba(20,17,40,0.25)", "entry": "rgba(255,255,255,0.06)",

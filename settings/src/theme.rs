@@ -514,7 +514,7 @@ impl Palette {
             self.nav_selected = rgba(0x81, 0x8c, 0xf8, 0.22);
             // Opaque on purpose: code tells dark from light by bg.r(), and
             // egui stores colours premultiplied. The backdrop paints over it.
-            self.bg = rgb(27, 31, 69);
+            self.bg = rgb(30, 24, 74);
             self.nav_bg = rgba(20, 17, 40, 0.40);
             self.tooltip = rgb(0x24, 0x21, 0x3a);
         } else {
@@ -531,7 +531,7 @@ impl Palette {
             self.input_border = rgba(0xff, 0xff, 0xff, 0.90);
             self.track = rgb(0xe4, 0xe0, 0xff);
             self.nav_selected = rgba(0x63, 0x66, 0xf1, 0.12);
-            self.bg = rgb(220, 224, 255);
+            self.bg = rgb(226, 214, 255);
             self.nav_bg = rgba(0xff, 0xff, 0xff, 0.30);
             self.tooltip = Color32::WHITE;
         }
