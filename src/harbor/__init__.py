@@ -5,5 +5,5 @@ writes that app's version into VERSION of the packaged copy.
 """
 
 FILES_VERSION = "0.5.58"
-TASKMGR_VERSION = "0.3.6"
+TASKMGR_VERSION = "0.3.7"
 VERSION = FILES_VERSION
