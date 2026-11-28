@@ -411,7 +411,9 @@ pub fn glow_backdrop(painter: &egui::Painter, rect: Rect, pal: &Palette, corner:
 fn planner_card(pal: &Palette, rect: Rect, corner: u8, color: Color32) -> egui::Shape {
     let dark = pal.bg.r() < 128;
     let wa = |a: f32| Color32::from_white_alpha((a.clamp(0.0, 1.0) * 255.0) as u8);
-    let ds = crate::theme::Glass::scale(pal.glass.shadow_strength);
+    // Glass effect Soft: flat frosted glass, faint rim, almost no shadow (planner_glass.soften)
+    let soft = pal.glass.effect != crate::theme::GlassEffect::Strong;
+    let ds = crate::theme::Glass::scale(pal.glass.shadow_strength) * if soft { 0.30 } else { 1.0 };
     let r = (corner as f32).min(rect.height() / 2.0);
     let colourful = color.r().abs_diff(color.b()) > 60 || color.g().abs_diff(color.b()) > 60;
     let flat_control = rect.height() < 44.0; // buttons, chips, inputs: no shadow
@@ -432,12 +434,22 @@ fn planner_card(pal: &Palette, rect: Rect, corner: u8, color: Color32) -> egui::
     }
     shapes.push(egui::Shape::rect_filled(rect, corner, color));
     if !colourful {
-        let (t, b) = if dark { (0.10, 0.03) } else { (0.62, 0.30) };
+        let (t, b) = match (dark, soft) {
+            (true, false) => (0.10, 0.03),
+            (true, true) => (0.03, 0.03),
+            (false, false) => (0.62, 0.30),
+            (false, true) => (0.42, 0.42),
+        };
         shapes.push(rounded_rows(rect, r, rect.top(), rect.bottom(), &[(0.0, wa(t)), (1.0, wa(b))]));
         shapes.push(egui::Shape::rect_stroke(
             rect.shrink(0.5),
             corner,
-            egui::Stroke::new(1.0, wa(if dark { 0.13 } else { 0.85 })),
+            egui::Stroke::new(1.0, wa(match (dark, soft) {
+                (true, false) => 0.13,
+                (true, true) => 0.06,
+                (false, false) => 0.85,
+                (false, true) => 0.40,
+            })),
             egui::StrokeKind::Inside,
         ));
     }
@@ -446,7 +458,13 @@ fn planner_card(pal: &Palette, rect: Rect, corner: u8, color: Color32) -> egui::
     if rect.width() > inset * 2.0 + 4.0 {
         shapes.push(egui::Shape::line_segment(
             [egui::pos2(rect.left() + inset, rect.top() + 1.0), egui::pos2(rect.right() - inset, rect.top() + 1.0)],
-            egui::Stroke::new(1.0, wa(if colourful { 0.30 } else if dark { 0.18 } else { 0.95 })),
+            egui::Stroke::new(1.0, wa(match (colourful, dark, soft) {
+                (true, _, _) => 0.30,
+                (false, true, false) => 0.18,
+                (false, true, true) => 0.0,
+                (false, false, false) => 0.95,
+                (false, false, true) => 0.0,
+            })),
         ));
     }
     egui::Shape::Vec(shapes)
@@ -469,9 +487,9 @@ pub fn planner_backdrop(painter: &egui::Painter, rect: Rect, pal: &Palette, corn
         // Lumina Colourful: only a faint tint of the colours (same as planner_glass.py)
         let k = pal.glass.lumina_intensity as f32 / 100.0;
         let (base, amt) = if dark {
-            ([20.0, 16.0, 40.0], [0.13, 0.12, 0.11])
+            ([20.0, 16.0, 40.0], [0.09, 0.08, 0.07])
         } else {
-            ([250.0, 248.0, 255.0], [0.11, 0.09, 0.10])
+            ([250.0, 248.0, 255.0], [0.06, 0.045, 0.055])
         };
         let mix = |col: [u8; 3], t: f32| {
             let m = |i: usize| (base[i] + (col[i] as f32 - base[i]) * t * k).round() as u8;

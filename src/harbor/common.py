@@ -476,10 +476,15 @@ def _planner_css(spec, dark, see_through):
         backdrop = t["backdrop"]
         p.update(accent_text=t["accent_text"], btn_text=t["btn_text"], hair=t["hair"], shade=t["shade"]
                  if not dark else p["shade"])
+        if not dark:  # plain buttons get the hue's faint wash so they show on white glass
+            p.update(btn=t["btn"], btn_hover=t["btn_hover"], btn_line=t["btn_line"])
+    soft = spec.get("effect") == "SOFT"
+    if soft:  # Glass effect Soft: quieter sheen, rim, top edge and shadow
+        p.update({k: v for k, v in pg.soften(dark).items() if k in p})
     accent_grad = t["accent"] if colourful else PLANNER_ACCENT
     accent_shadow = t["accent_shadow"] if colourful else PLANNER_SHADOW_ACCENT
     a1, a2 = t["a1"], t["a2"]
-    ds = spec["shadow-strength"] / 100
+    ds = spec["shadow-strength"] / 100 * (0.30 if soft else 1.0)
     k = 1.8 if dark else 1.0
     card_shadow = (f"0 10px 24px -12px rgba({p['shade']},{min(1, 0.30 * ds * k):.2f}), "
                    f"0 2px 6px -2px rgba({p['shade']},{min(1, 0.10 * ds * k):.2f})")
@@ -518,6 +523,8 @@ button.hb-plain {{ background: {p["btn"]}; color: {p["btn_text"]}; border: 1px s
 button.hb-plain:hover {{ background: {p["btn_hover"]}; }}
 button.hb-tool {{ border-radius: 12px; }}
 .hb-badge {{ background-image: {accent_grad}; border-radius: 9999px; }}
+progressbar.hbf-bar:not(.hbf-bar-mid):not(.hbf-bar-warn) progress {{ background-color: transparent;
+    background-image: {accent_grad}; }}
 .hb-badge.hb-badge-big {{ border-radius: 9999px; }}
 .hb-title, .hb-subtitle {{ font-weight: 700; }}
 """ + (_lumina_colour_css(t) if colourful else "")
