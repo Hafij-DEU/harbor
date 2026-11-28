@@ -16,9 +16,13 @@ use std::time::{Duration, Instant};
 
 use crate::keyboard::config::StuckAction;
 
+// Default times; the real ones come from the config's `stuck-time` line.
+#[cfg(test)]
 pub const LIMIT_LAPTOP: Duration = Duration::from_secs(4);
+#[cfg(test)]
 pub const LIMIT_OTHER: Duration = Duration::from_secs(30);
 /// A key stuck again this soon after a restart gets disabled instead.
+#[cfg(test)]
 pub const AGAIN_WITHIN: Duration = Duration::from_secs(60);
 
 /// What to do about a stuck key now.
@@ -96,15 +100,16 @@ impl Watch {
     }
 
     /// Turn the keyboard's stuck-key action into what to do now.
-    /// `Nothing` never reaches here.
-    pub fn decide(&mut self, action: StuckAction, now: Instant) -> Decision {
+    /// `Nothing` never reaches here. Stuck again within `again` of a restart
+    /// disables the key; a zero `again` never does.
+    pub fn decide(&mut self, action: StuckAction, now: Instant, again: Duration) -> Decision {
         match action {
             StuckAction::DisableKey => Decision::DisableKey,
             _ => {
-                let again = self
+                let soon = self
                     .last_restart
-                    .is_some_and(|t| now.duration_since(t) < AGAIN_WITHIN);
-                if again {
+                    .is_some_and(|t| now.duration_since(t) < again);
+                if soon {
                     self.last_restart = None;
                     Decision::DisableKey
                 } else {
@@ -160,19 +165,51 @@ mod tests {
     fn restart_then_disable_when_it_sticks_again() {
         let t0 = Instant::now();
         let mut w = Watch::default();
-        assert_eq!(w.decide(StuckAction::Restart, t0), Decision::Restart);
         assert_eq!(
-            w.decide(StuckAction::Restart, t0 + Duration::from_secs(10)),
+            w.decide(StuckAction::Restart, t0, AGAIN_WITHIN),
+            Decision::Restart
+        );
+        assert_eq!(
+            w.decide(
+                StuckAction::Restart,
+                t0 + Duration::from_secs(10),
+                AGAIN_WITHIN
+            ),
             Decision::DisableKey
         );
         assert_eq!(
-            w.decide(StuckAction::Restart, t0 + Duration::from_secs(20)),
+            w.decide(
+                StuckAction::Restart,
+                t0 + Duration::from_secs(20),
+                AGAIN_WITHIN
+            ),
             Decision::Restart
         );
         assert_eq!(
-            w.decide(StuckAction::Restart, t0 + Duration::from_secs(200)),
+            w.decide(
+                StuckAction::Restart,
+                t0 + Duration::from_secs(200),
+                AGAIN_WITHIN
+            ),
             Decision::Restart
         );
-        assert_eq!(w.decide(StuckAction::DisableKey, t0), Decision::DisableKey);
+        assert_eq!(
+            w.decide(StuckAction::DisableKey, t0, AGAIN_WITHIN),
+            Decision::DisableKey
+        );
+        // A zero window never disables: every stuck key only restarts.
+        let mut n = Watch::default();
+        assert_eq!(
+            n.decide(StuckAction::Restart, t0, Duration::ZERO),
+            Decision::Restart
+        );
+        assert_eq!(
+            n.decide(
+                StuckAction::Restart,
+                t0 + Duration::from_secs(1),
+                Duration::ZERO
+            ),
+            Decision::Restart
+        );
     }
 }

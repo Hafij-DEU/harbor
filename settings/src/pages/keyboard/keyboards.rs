@@ -6,7 +6,7 @@ use eframe::egui::{self, Ui};
 use super::state;
 use crate::app::App;
 use crate::icons::Icon;
-use crate::keyboard::config::{Config, KeyFilter, StuckAction};
+use crate::keyboard::config::{self, Config, KeyFilter, StuckAction, StuckTime};
 use crate::keyboard::devices::Target;
 use crate::keyboard::keys;
 use crate::system;
@@ -22,33 +22,6 @@ pub fn show(app: &mut App, ui: &mut Ui, pal: &Palette) {
     let mut stop_watchdog = false;
 
     widgets::card(ui, pal, |ui| {
-        // Default stuck-key action.
-        let options: Vec<(String, String)> = StuckAction::ALL
-            .iter()
-            .map(|a| (a.word().to_owned(), a.label().to_owned()))
-            .collect();
-        let picked = super::super::combo_row(
-            ui,
-            pal,
-            Icon::Keyboard,
-            "When a key gets stuck",
-            "Default for every keyboard",
-            "kb-stuck-default",
-            &options,
-            saved.stuck.word(),
-            190.0,
-        );
-        if let Some(a) = picked.as_deref().and_then(StuckAction::parse) {
-            let mut cfg = saved.clone();
-            cfg.stuck = a;
-            change = Some((cfg, "Stuck-key setting saved"));
-        }
-
-        // Which keys may trigger the guard.
-        if let Some(cfg) = key_filter(ui, pal, &saved, busy) {
-            change = Some((cfg, "Stuck-key filter saved"));
-        }
-
         // Plugged-in keyboards, then unplugged ones that have settings.
         let mut targets: Vec<Target> = app.keyboard.boards.iter().map(|k| k.target()).collect();
         targets.dedup();
@@ -58,7 +31,9 @@ pub fn show(app: &mut App, ui: &mut Ui, pal: &Palette) {
             }
         }
         for (i, target) in targets.iter().enumerate() {
-            widgets::divider(ui, pal);
+            if i > 0 {
+                widgets::divider(ui, pal);
+            }
             let board = saved.board(target);
             let mut on = !board.is_some_and(|b| b.off);
             let plugged = app.keyboard.boards.iter().find(|k| &k.target() == target);
@@ -199,14 +174,79 @@ pub fn show(app: &mut App, ui: &mut Ui, pal: &Palette) {
         ui.add_space(6.0);
     });
 
+    // Stuck-key guard: the default action up front, the rest under Advanced.
+    widgets::section_label(ui, pal, "Stuck keys");
+    let mut open = app.keyboard.guard_advanced;
+    widgets::card(ui, pal, |ui| {
+        let options: Vec<(String, String)> = StuckAction::ALL
+            .iter()
+            .map(|a| (a.word().to_owned(), a.label().to_owned()))
+            .collect();
+        let picked = super::super::combo_row(
+            ui,
+            pal,
+            Icon::Keyboard,
+            "When a key gets stuck",
+            "Default for every keyboard",
+            "kb-stuck-default",
+            &options,
+            saved.stuck.word(),
+            190.0,
+        );
+        if let Some(a) = picked.as_deref().and_then(StuckAction::parse) {
+            let mut cfg = saved.clone();
+            cfg.stuck = a;
+            change = Some((cfg, "Stuck-key setting saved"));
+        }
+        widgets::divider(ui, pal);
+        let sub = if open {
+            "Hide keys and times".to_owned()
+        } else {
+            guard_summary(&saved)
+        };
+        let row = widgets::row(
+            ui,
+            pal,
+            pal.accent,
+            Icon::Keyboard,
+            "Advanced",
+            &sub,
+            Right::Chevron,
+        );
+        if row.clicked() {
+            open = !open;
+        }
+        if open {
+            if let Some(cfg) = key_filter(ui, pal, &saved, busy) {
+                change = Some((cfg, "Stuck-key filter saved"));
+            }
+            if let Some(cfg) = stuck_times(ui, pal, &saved, busy) {
+                change = Some((cfg, "Stuck-key times saved"));
+            }
+        }
+        ui.add_space(6.0);
+    });
+    app.keyboard.guard_advanced = open;
+
+    let t = saved.stuck_time;
+    let disable = if t.again == 0 {
+        "A key is never disabled for sticking again: the keyboard is only restarted.".to_owned()
+    } else {
+        format!(
+            "If the key sticks again within {}, it is disabled until you turn it back on here.",
+            config::seconds_label(t.again)
+        )
+    };
     super::super::note(
         ui,
         pal,
-        "Restart resets the keyboard so it lets go of the key. If the key sticks again \
-         within a minute, it is disabled until you turn it back on here. The laptop \
-         keyboard counts as stuck after 4 silent seconds, other keyboards after 30. \
-         \"Keys that count\" picks which keys can restart a keyboard or get disabled: \
-         leave out Ctrl, Shift, Alt and Super if you hold them long while using the mouse.",
+        &format!(
+            "Restart resets the keyboard so it lets go of the key. {disable} A key counts as \
+             stuck when held {} on the laptop keyboard or {} on others while the keyboard \
+             sends nothing. Pick the keys and times under Advanced.",
+            config::seconds_label(t.laptop),
+            config::seconds_label(t.other)
+        ),
     );
 
     if let Some((cfg, done)) = change {
@@ -226,6 +266,102 @@ pub fn show(app: &mut App, ui: &mut Ui, pal: &Palette) {
             system::stop_toggle_watchdog,
         );
     }
+}
+
+/// One line for the closed Advanced row: "All keys · Laptop 4 s · Others 30 s · Disable within 1 min".
+fn guard_summary(cfg: &Config) -> String {
+    let names = |k: &[u16]| match k.len() {
+        0 => "none".to_owned(),
+        1..=2 => k.iter().map(|&c| keys::any_label(c)).collect::<Vec<_>>().join(", "),
+        n => format!("{n} keys"),
+    };
+    let keys = match &cfg.stuck_keys {
+        KeyFilter::All => "All keys".to_owned(),
+        KeyFilter::Except(k) => format!("All keys except {}", names(k)),
+        KeyFilter::Only(k) => format!("Only {}", names(k)),
+    };
+    let t = cfg.stuck_time;
+    let disable = if t.again == 0 {
+        "Never disable".to_owned()
+    } else {
+        format!("Disable within {}", config::seconds_label(t.again))
+    };
+    format!(
+        "{keys} · Laptop {} · Others {} · {disable}",
+        config::seconds_label(t.laptop),
+        config::seconds_label(t.other)
+    )
+}
+
+/// Three time rows: laptop limit, other-keyboard limit, disable window.
+/// Returns the config to save.
+fn stuck_times(ui: &mut Ui, pal: &Palette, saved: &Config, busy: bool) -> Option<Config> {
+    let t = saved.stuck_time;
+    let choices = |list: &[u16], current: u16, fmt: &dyn Fn(u16) -> String| {
+        let mut list = list.to_vec();
+        if !list.contains(&current) {
+            list.push(current);
+            list.sort_unstable();
+        }
+        list.into_iter()
+            .map(|s| (s.to_string(), fmt(s)))
+            .collect::<Vec<_>>()
+    };
+    let held = |s: u16| format!("Held {}", config::seconds_label(s));
+    let mut next = t;
+    let rows: [(&str, &str, &str, Vec<(String, String)>, u16, u8); 3] = [
+        (
+            "Laptop keyboard: stuck after",
+            "A key held this long while the keyboard sends nothing",
+            "kb-stuck-laptop",
+            choices(&StuckTime::LAPTOP_CHOICES, t.laptop, &held),
+            t.laptop,
+            0,
+        ),
+        (
+            "Other keyboards: stuck after",
+            "USB and Bluetooth keyboards stay silent while a key is held",
+            "kb-stuck-other",
+            choices(&StuckTime::OTHER_CHOICES, t.other, &held),
+            t.other,
+            1,
+        ),
+        (
+            "Disable the key if it sticks again within",
+            "After a restart; Never only restarts the keyboard",
+            "kb-stuck-again",
+            choices(&StuckTime::AGAIN_CHOICES, t.again, &config::seconds_label),
+            t.again,
+            2,
+        ),
+    ];
+    for (title, sub, id, options, current, which) in &rows {
+        widgets::divider(ui, pal);
+        let picked = super::super::combo_row(
+            ui,
+            pal,
+            Icon::Keyboard,
+            title,
+            sub,
+            id,
+            options,
+            &current.to_string(),
+            190.0,
+        );
+        if let Some(v) = picked.and_then(|p| p.parse::<u16>().ok()) {
+            match which {
+                0 => next.laptop = v,
+                1 => next.other = v,
+                _ => next.again = v,
+            }
+        }
+    }
+    if next == t || busy {
+        return None;
+    }
+    let mut cfg = saved.clone();
+    cfg.stuck_time = next;
+    Some(cfg)
 }
 
 /// Left and right Ctrl, Shift, Alt and Super.
