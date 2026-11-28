@@ -9,6 +9,7 @@
 //! keyboard 046d:c31c stuck disable-key  this keyboard: own stuck-key action
 //! stuck-keys except LEFTCTRL RIGHTCTRL  the guard never acts on these keys
 //! stuck-keys only LEFTSHIFT             ... or acts on these keys only
+//! stuck-time 4 30 60                    seconds: laptop, other keyboards, disable window
 //! ```
 //!
 //! Unknown or broken lines are skipped, so an old or hand-edited file never
@@ -151,6 +152,61 @@ impl KeyFilter {
     }
 }
 
+/// How long the stuck-key guard waits, in seconds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct StuckTime {
+    /// Laptop keyboard: held this long with the keyboard silent = stuck.
+    pub laptop: u16,
+    /// USB / Bluetooth keyboards: the same, longer because they stay silent
+    /// while a key is really held.
+    pub other: u16,
+    /// Stuck again this soon after a restart: disable the key. 0 = never
+    /// disable, only restart.
+    pub again: u16,
+}
+
+impl Default for StuckTime {
+    fn default() -> Self {
+        StuckTime {
+            laptop: 4,
+            other: 30,
+            again: 60,
+        }
+    }
+}
+
+impl StuckTime {
+    /// Choices shown in Settings (seconds).
+    pub const LAPTOP_CHOICES: [u16; 10] = [2, 3, 4, 5, 8, 10, 15, 20, 30, 60];
+    pub const OTHER_CHOICES: [u16; 8] = [10, 20, 30, 45, 60, 120, 180, 300];
+    pub const AGAIN_CHOICES: [u16; 7] = [0, 15, 30, 60, 120, 300, 600];
+
+    /// `stuck-time LAPTOP OTHER AGAIN`; out-of-range values reject the line.
+    fn parse(laptop: &str, other: &str, again: &str) -> Option<StuckTime> {
+        let (laptop, other, again) = (
+            laptop.parse().ok()?,
+            other.parse().ok()?,
+            again.parse().ok()?,
+        );
+        let ok = (1..=600).contains(&laptop) && (1..=600).contains(&other) && again <= 600;
+        ok.then_some(StuckTime {
+            laptop,
+            other,
+            again,
+        })
+    }
+}
+
+/// "4 s", "1 min", "2 min 30 s"; 0 reads "Never".
+pub fn seconds_label(s: u16) -> String {
+    match (s / 60, s % 60) {
+        (0, 0) => "Never".to_owned(),
+        (0, s) => format!("{s} s"),
+        (m, 0) => format!("{m} min"),
+        (m, s) => format!("{m} min {s} s"),
+    }
+}
+
 /// Settings for one keyboard. Only written when something differs from the default.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BoardSettings {
@@ -170,6 +226,8 @@ pub struct Config {
     pub stuck: StuckAction,
     /// Keys the stuck-key guard acts on (every keyboard).
     pub stuck_keys: KeyFilter,
+    /// How long before a held key counts as stuck, and the disable window.
+    pub stuck_time: StuckTime,
     pub boards: Vec<BoardSettings>,
 }
 
@@ -180,6 +238,7 @@ impl Default for Config {
             rules: Vec::new(),
             stuck: StuckAction::Nothing,
             stuck_keys: KeyFilter::All,
+            stuck_time: StuckTime::default(),
             boards: Vec::new(),
         }
     }
@@ -201,6 +260,11 @@ impl Config {
                 ["stuck-keys", mode, names @ ..] => {
                     if let Some(f) = KeyFilter::parse(mode, names) {
                         cfg.stuck_keys = f;
+                    }
+                }
+                ["stuck-time", laptop, other, again] => {
+                    if let Some(t) = StuckTime::parse(laptop, other, again) {
+                        cfg.stuck_time = t;
                     }
                 }
                 ["keyboard", dev, rest @ ..] => {
@@ -238,6 +302,13 @@ impl Config {
                 out.push_str(&format!(" {}", keys::name(c)));
             }
             out.push('\n');
+        }
+        if self.stuck_time != StuckTime::default() {
+            let t = self.stuck_time;
+            out.push_str(&format!(
+                "stuck-time {} {} {}\n",
+                t.laptop, t.other, t.again
+            ));
         }
         for b in &self.boards {
             let Some(dev) = b.target.word() else { continue };
@@ -410,6 +481,34 @@ mod tests {
             KeyFilter::Only(vec![29])
         );
         assert_eq!(KeyFilter::Except(vec![29]).with_mode("all"), KeyFilter::All);
+    }
+
+    #[test]
+    fn stuck_time() {
+        assert!(!Config::default().text().contains("stuck-time"));
+        let cfg = Config::parse("stuck restart\nstuck-time 8 60 0\n");
+        assert_eq!(
+            cfg.stuck_time,
+            StuckTime {
+                laptop: 8,
+                other: 60,
+                again: 0
+            }
+        );
+        assert!(cfg.text().contains("stuck-time 8 60 0\n"));
+        assert_eq!(Config::parse(&cfg.text()), cfg);
+        for bad in [
+            "stuck-time 0 30 60",
+            "stuck-time 4 30 601",
+            "stuck-time 4 x 60",
+            "stuck-time 4 30",
+        ] {
+            assert_eq!(Config::parse(bad).stuck_time, StuckTime::default(), "{bad}");
+        }
+        assert_eq!(seconds_label(0), "Never");
+        assert_eq!(seconds_label(4), "4 s");
+        assert_eq!(seconds_label(120), "2 min");
+        assert_eq!(seconds_label(150), "2 min 30 s");
     }
 
     #[test]

@@ -41,6 +41,8 @@ pub struct KeyboardUi {
     pub status: Option<Status>,
     pub service_running: bool,
     pub toggle_watchdog: bool,
+    /// Stuck keys card: Advanced (keys that count, times) shown.
+    pub guard_advanced: bool,
     refreshed: Option<Instant>,
 }
 
