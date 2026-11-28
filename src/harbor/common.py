@@ -527,7 +527,26 @@ progressbar.hbf-bar:not(.hbf-bar-mid):not(.hbf-bar-warn) progress {{ background-
     background-image: {accent_grad}; }}
 .hb-badge.hb-badge-big {{ border-radius: 9999px; }}
 .hb-title, .hb-subtitle {{ font-weight: 700; }}
-""" + (_lumina_colour_css(t) if colourful else "")
+""" + _files_ribbon_css(t, dark) + (_lumina_colour_css(t) if colourful else "")
+
+
+def _files_ribbon_css(t, dark):
+    """Files' ribbon under Lumina: a solid, calm panel (white, or the usual dark)
+    with only a hint of the hue; the glass and tint stay on the rest of the window."""
+    if dark:
+        rib = pg._hex(pg._mix(t["a2"], (40, 38, 50), 0.05))
+        line, shadow = "rgba(255,255,255,0.07)", "0 2px 8px -4px rgba(0,0,0,0.45)"
+    else:
+        rib = pg._hex(pg._mix(t["a2"], (255, 255, 255), 0.025))
+        line, shadow = pg._rgba(t["a2"], 0.10), "0 2px 8px -5px rgba(40,30,90,0.16)"
+    return f"""
+window.hb-window.hbf-custom .hbf-top {{ background-color: transparent; background-image: none; }}
+window.hb-window .hbf-ribbon, window.hb-window.hbf-custom .hbf-ribbon {{ background-color: {rib};
+    background-image: none; box-shadow: {shadow}, 0 0 0 1px {line}; }}
+window.hb-window.hbf-custom .hbf-cluster, window.hb-window.hbf-custom .hbf-cluster-end {{
+    background-color: alpha(currentColor, 0.035); background-image: none;
+    box-shadow: inset 0 0 0 1px alpha(currentColor, 0.05); }}
+"""
 
 
 def _lumina_colour_css(t):
