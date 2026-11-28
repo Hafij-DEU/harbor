@@ -3171,7 +3171,7 @@ dependencies = [
 
 [[package]]
 name = "win11-settings"
-version = "0.5.44"
+version = "0.5.45"
 dependencies = [
  "eframe",
  "image",

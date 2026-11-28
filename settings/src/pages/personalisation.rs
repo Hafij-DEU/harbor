@@ -366,6 +366,9 @@ pub(crate) enum Choice {
 /// scope can follow the one above it or have its own values.
 /// Ready-made glass looks (Settings › Personalisation › Glass effects).
 pub(crate) const GLASS_PRESETS: [(&str, &str); 13] = [
+    // Daily Routine Planner look (PLANNER-SPEC.md): violet glass cards on a
+    // lavender backdrop, indigo accent; opacity 100 keeps windows solid.
+    ("Lumina Glass", "effect=STRONG,material=GLASS,style=PLANNER,opacity=100,rim=true,glare=false,shadow=true,light-follows=false,style-strength=100,shine-strength=60,rim-strength=100,glare-strength=100,shadow-strength=100,light-strength=100"),
     // The owner's Fusion Desk setup of 2026-11-19.
     ("Fusion Desk", "effect=SOFT,material=GLOSS,style=FROSTED,opacity=40,rim=true,glare=true,shadow=false,light-follows=false,style-strength=100,shine-strength=100,rim-strength=100,glare-strength=100,shadow-strength=100,light-strength=100"),
     ("Liquid", "effect=STRONG,material=GLOSS,style=CLEAR,opacity=55,rim=true,glare=true,shadow=true,light-follows=true,style-strength=100,shine-strength=80,rim-strength=160,glare-strength=120,shadow-strength=70,light-strength=130"),
@@ -379,9 +382,7 @@ pub(crate) const GLASS_PRESETS: [(&str, &str); 13] = [
     ("Aero", "effect=STRONG,material=GLOSS,style=TINTED,opacity=65,rim=true,glare=true,shadow=true,light-follows=false,style-strength=130,shine-strength=150,rim-strength=140,glare-strength=150,shadow-strength=100,light-strength=100"),
     ("Glassmorphism", "effect=STRONG,material=GLASS,style=CLEAR,opacity=40,rim=true,glare=false,shadow=true,light-follows=false,style-strength=100,shine-strength=100,rim-strength=120,glare-strength=100,shadow-strength=110,light-strength=100"),
     ("Vision", "effect=STRONG,material=GLASS,style=SMOKE,opacity=60,rim=true,glare=true,shadow=true,light-follows=true,style-strength=80,shine-strength=100,rim-strength=170,glare-strength=90,shadow-strength=60,light-strength=110"),
-    // Daily Routine Planner look (PLANNER-SPEC.md): solid planner gradient,
-    // white/80 cards, indigo accent; opacity 100 keeps windows solid.
-    ("Lumina Glass", "effect=STRONG,material=GLASS,style=PLANNER,opacity=100,rim=true,glare=false,shadow=true,light-follows=false,style-strength=100,shine-strength=60,rim-strength=100,glare-strength=100,shadow-strength=100,light-strength=100"),
+
 ];
 
 pub(crate) fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
@@ -450,136 +451,160 @@ pub(crate) fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
                 follow_change = Some(follow);
             }
         }
-        if own.is_none() {
-            return;
-        }
-        widgets::divider(ui, pal);
-        glass_row(
-            ui,
-            pal,
-            "Presets",
-            "Start from a ready-made look, then fine-tune it below",
-            |ui| {
-                for (name, text) in GLASS_PRESETS {
-                    let preset = crate::theme::Glass::from_text(text);
-                    if segment(ui, pal, name, values.to_text() == preset.to_text()) {
-                        values = preset;
-                    }
-                }
-            },
-        );
-        widgets::divider(ui, pal);
-        glass_row(
-            ui,
-            pal,
-            "Glass effect",
-            "Blur, lighter top and a bright edge",
-            |ui| {
-                for e in GlassEffect::ALL {
-                    if segment(ui, pal, e.label(), values.effect == *e) {
-                        values.effect = *e;
-                    }
-                }
-            },
-        );
-        if !values.on() {
-            return;
-        }
-        widgets::divider(ui, pal);
-        glass_row(
-            ui,
-            pal,
-            "Material",
-            "Subtle shine, or strong polished shine and bevel",
-            |ui| {
-                for m in GlassMaterial::ALL {
-                    if segment(ui, pal, m.label(), values.material == *m) {
-                        values.material = *m;
-                    }
-                }
-            },
-        );
-        if values.material == GlassMaterial::Gloss {
-            widgets::divider(ui, pal);
-            strength_row(ui, pal, "Shine strength", &mut values.shine_strength);
-        }
-        widgets::divider(ui, pal);
-        glass_row(
-            ui,
-            pal,
-            "Glass style",
-            "Frosted is milky, Gel has a candy top, Glow lets coloured light through",
-            |ui| {
-                for st in GlassStyle::ALL {
-                    if segment(ui, pal, st.label(), values.style == *st) {
-                        values.style = *st;
-                    }
-                }
-            },
-        );
-        widgets::divider(ui, pal);
-        strength_row(ui, pal, "Style strength", &mut values.style_strength);
-        widgets::divider(ui, pal);
-        let mut t = (values.opacity as f32 - 10.0) / 90.0;
-        if slider_row(
-            ui,
-            pal,
-            Icon::Sparkle,
-            "Opacity",
-            format!(
-                "{} % · below 100 the window shows the desktop through it",
-                values.opacity
-            ),
-            &mut t,
-        ) {
-            values.opacity = ((10.0 + t * 90.0) / 5.0).round() as u8 * 5;
-        }
-        for (title, sub, flag, scale_title, scale) in [
-            (
-                "Rim highlight",
-                "Thin light edge; a sharp bevel with gloss",
-                &mut values.rim,
-                "Rim strength",
-                &mut values.rim_strength,
-            ),
-            (
-                "Corner glare",
-                "Light reflections in the corners",
-                &mut values.glare,
-                "Glare strength",
-                &mut values.glare_strength,
-            ),
-            (
-                "Soft shadow",
-                "Diffused shadow for depth",
-                &mut values.shadow,
-                "Shadow strength",
-                &mut values.shadow_strength,
-            ),
-            (
-                "Light follows pointer",
-                "A soft light spot moves with the pointer",
-                &mut values.light_follows,
-                "Light strength",
-                &mut values.light_strength,
-            ),
-        ] {
-            widgets::divider(ui, pal);
-            widgets::row(
+    });
+    if own.is_some() {
+        // Presets and the on/off switch first; the fine-tuning lives in a
+        // collapsed Advanced card so the page reads top to bottom.
+        spacer(ui, 10.0);
+        widgets::card(ui, pal, |ui| {
+            glass_row(
                 ui,
                 pal,
-                pal.accent,
-                Icon::Sparkle,
-                title,
-                sub,
-                Right::Switch(flag),
+                "Presets",
+                "Start from a ready-made look; fine-tune it in Advanced settings",
+                |ui| {
+                    for (name, text) in GLASS_PRESETS {
+                        let preset = crate::theme::Glass::from_text(text);
+                        if segment(ui, pal, name, values.to_text() == preset.to_text()) {
+                            values = preset;
+                        }
+                    }
+                },
             );
-            if *flag {
+            widgets::divider(ui, pal);
+            glass_row(
+                ui,
+                pal,
+                "Glass effect",
+                "Blur, lighter top and a bright edge",
+                |ui| {
+                    for e in GlassEffect::ALL {
+                        if segment(ui, pal, e.label(), values.effect == *e) {
+                            values.effect = *e;
+                        }
+                    }
+                },
+            );
+        });
+        if values.on() {
+            let id = egui::Id::new("hb-glass-advanced");
+            let mut open = ui.ctx().data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
+            spacer(ui, 10.0);
+            widgets::card(ui, pal, |ui| {
+                if widgets::row(
+                    ui,
+                    pal,
+                    pal.accent,
+                    Icon::Sparkle,
+                    "Advanced settings",
+                    "Material, style, opacity, rim, glare, shadow and pointer light",
+                    Right::AccentText(if open { "Hide" } else { "Show" }),
+                )
+                .clicked
+                {
+                    open = !open;
+                }
+                if !open {
+                    return;
+                }
                 widgets::divider(ui, pal);
-                strength_row(ui, pal, scale_title, scale);
-            }
+                glass_row(
+                    ui,
+                    pal,
+                    "Material",
+                    "Subtle shine, or strong polished shine and bevel",
+                    |ui| {
+                        for m in GlassMaterial::ALL {
+                            if segment(ui, pal, m.label(), values.material == *m) {
+                                values.material = *m;
+                            }
+                        }
+                    },
+                );
+                if values.material == GlassMaterial::Gloss {
+                    widgets::divider(ui, pal);
+                    strength_row(ui, pal, "Shine strength", &mut values.shine_strength);
+                }
+                widgets::divider(ui, pal);
+                glass_row(
+                    ui,
+                    pal,
+                    "Glass style",
+                    "Frosted is milky, Gel has a candy top, Glow lets coloured light through",
+                    |ui| {
+                        for st in GlassStyle::ALL {
+                            if segment(ui, pal, st.label(), values.style == *st) {
+                                values.style = *st;
+                            }
+                        }
+                    },
+                );
+                widgets::divider(ui, pal);
+                strength_row(ui, pal, "Style strength", &mut values.style_strength);
+                widgets::divider(ui, pal);
+                let mut t = (values.opacity as f32 - 10.0) / 90.0;
+                if slider_row(
+                    ui,
+                    pal,
+                    Icon::Sparkle,
+                    "Opacity",
+                    format!(
+                        "{} % · below 100 the window shows the desktop through it",
+                        values.opacity
+                    ),
+                    &mut t,
+                ) {
+                    values.opacity = ((10.0 + t * 90.0) / 5.0).round() as u8 * 5;
+                }
+                for (title, sub, flag, scale_title, scale) in [
+                    (
+                        "Rim highlight",
+                        "Thin light edge; a sharp bevel with gloss",
+                        &mut values.rim,
+                        "Rim strength",
+                        &mut values.rim_strength,
+                    ),
+                    (
+                        "Corner glare",
+                        "Light reflections in the corners",
+                        &mut values.glare,
+                        "Glare strength",
+                        &mut values.glare_strength,
+                    ),
+                    (
+                        "Soft shadow",
+                        "Diffused shadow for depth",
+                        &mut values.shadow,
+                        "Shadow strength",
+                        &mut values.shadow_strength,
+                    ),
+                    (
+                        "Light follows pointer",
+                        "A soft light spot moves with the pointer",
+                        &mut values.light_follows,
+                        "Light strength",
+                        &mut values.light_strength,
+                    ),
+                ] {
+                    widgets::divider(ui, pal);
+                    widgets::row(
+                        ui,
+                        pal,
+                        pal.accent,
+                        Icon::Sparkle,
+                        title,
+                        sub,
+                        Right::Switch(flag),
+                    );
+                    if *flag {
+                        widgets::divider(ui, pal);
+                        strength_row(ui, pal, scale_title, scale);
+                    }
+                }
+            });
+            ui.ctx().data_mut(|d| d.insert_temp(id, open));
         }
-    });
+    }
     let fusion = crate::desktop::fusion_installed();
     note(
         ui,
