@@ -155,12 +155,13 @@ impl GlassScope {
         }
     }
 
-    /// The scope this one follows when it has no values of its own.
+    /// The scope this one follows when it has no values of its own. Every
+    /// app follows Global: the "All Harbor apps" scope is no longer offered
+    /// and always follows Global (see `harbor_scope_follows_global`).
     pub fn parent(self) -> Option<GlassScope> {
         match self {
             GlassScope::Global => None,
-            GlassScope::Harbor => Some(GlassScope::Global),
-            _ => Some(GlassScope::Harbor),
+            _ => Some(GlassScope::Global),
         }
     }
 
@@ -208,16 +209,46 @@ pub fn save_scope_glass(scope: GlassScope, glass: Option<crate::theme::Glass>) -
         write_config(harbor_path(scope.file()), &glass.to_text());
         return !crate::desktop::fusion_installed() || crate::desktop::set_fusion_glass(&glass);
     }
-    let follow = if scope == GlassScope::Harbor {
-        "global"
-    } else {
-        "harbor"
-    };
+    // every scope follows Global now; "global" in an app file reads the
+    // Harbor scope file, which harbor_scope_follows_global keeps at "global"
+    let follow = "global";
     let text = glass
         .map(|g| g.to_text())
         .unwrap_or_else(|| follow.to_owned());
     write_config(harbor_path(scope.file()), &text);
     true
+}
+
+/// The apps read `glass-<app>` first and fall back to the "All Harbor apps"
+/// file `glass`. Settings no longer offers that scope, so make it follow
+/// Global. Own values found there are copied into every app that followed
+/// them first, so no app changes look. A missing file (glass off for the
+/// apps that followed it) simply becomes "follow Global".
+pub fn harbor_scope_follows_global() {
+    let Some(path) = harbor_path(GlassScope::Harbor.file()) else {
+        return;
+    };
+    let text = fs::read_to_string(&path).ok();
+    let own = match text.as_deref().map(str::trim) {
+        Some("global") => return,
+        None | Some("") | Some("harbor") => None,
+        Some(t) => Some(t.to_owned()),
+    };
+    if let Some(values) = own {
+        for scope in &GlassScope::ALL[2..] {
+            let Some(p) = harbor_path(scope.file()) else {
+                continue;
+            };
+            let follows = matches!(
+                fs::read_to_string(&p).ok().as_deref().map(str::trim),
+                None | Some("") | Some("global") | Some("harbor")
+            );
+            if follows {
+                write_config(Some(p), &values);
+            }
+        }
+    }
+    write_config(Some(path), "global");
 }
 
 /// The desktop's glass: Fusion Desk's settings, or Harbor's copy of them

@@ -414,7 +414,7 @@ pub(crate) fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
                     pick_scope = Some(GlassScope::Global);
                 }
                 if segment(ui, pal, "Per app", per_app) && !per_app {
-                    pick_scope = Some(GlassScope::ALL[1]);
+                    pick_scope = Some(GlassScope::ALL[2]);
                 }
             },
         );
@@ -425,7 +425,7 @@ pub(crate) fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
                 "App",
                 "Each app follows the glass above it or gets its own",
                 |ui| {
-                    for s in &GlassScope::ALL[1..] {
+                    for s in &GlassScope::ALL[2..] {
                         if segment(ui, pal, s.label(), *s == scope) {
                             pick_scope = Some(*s);
                         }

@@ -285,7 +285,10 @@ impl App {
             home_links: system::saved_home_links(),
             look: system::saved_look(),
             recent: system::saved_recent(),
-            glass_scopes: system::GlassScope::ALL.map(system::scope_glass),
+            glass_scopes: {
+                system::harbor_scope_follows_global();
+                system::GlassScope::ALL.map(system::scope_glass)
+            },
             // the desktop-wide glass opens first; WIN11_SETTINGS_GLASS_SCOPE=<index> for screenshots
             glass_edit: std::env::var("WIN11_SETTINGS_GLASS_SCOPE")
                 .ok()
