@@ -465,9 +465,9 @@ pub fn planner_backdrop(painter: &egui::Painter, rect: Rect, pal: &Palette, corn
     };
     let c = |r: u8, g: u8, b: u8| Color32::from_rgba_unmultiplied(r, g, b, (a * 255.0) as u8);
     let stops: Vec<(f32, Color32)> = if dark {
-        vec![(0.0, c(48, 20, 60)), (0.5, c(30, 24, 74)), (1.0, c(14, 34, 70))]
+        vec![(0.0, c(26, 21, 51)), (0.5, c(27, 31, 69)), (1.0, c(20, 26, 58))]
     } else {
-        vec![(0.0, c(255, 214, 236)), (0.5, c(226, 214, 255)), (1.0, c(200, 226, 255))]
+        vec![(0.0, c(232, 218, 255)), (0.5, c(220, 224, 255)), (1.0, c(203, 220, 255))]
     };
     painter.add(rounded_rows(rect, corner, rect.top(), rect.bottom(), &stops));
 }
