@@ -70,7 +70,7 @@ build() {
     stage=$(mktemp -d)       # dpkg rejects the 777 dirs of the NTFS checkout
     chmod 755 "$stage"
     lib="$stage/usr/lib/harbor-$a/harbor"
-    for f in src/harbor/common.py src/harbor/"$a".py src/harbor/"$a"_*.py; do
+    for f in src/harbor/common.py src/harbor/planner_glass.py src/harbor/"$a".py src/harbor/"$a"_*.py; do
         [ -f "$f" ] && install -Dm644 "$f" "$lib/$(basename "$f")"
     done
     # this package's version becomes VERSION (About dialogs)

@@ -17,6 +17,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk  # noqa: E402
 
 from . import VERSION  # noqa: E402
+from . import planner_glass as pg  # noqa: E402  shared Lumina colour logic (vendored)
 
 # HARBOR_DRY_RUN=1: never run commands that change the system. run_cmd() and
 # spawn() only log them to stderr (and to DRY_RUN_LOG for tests).
@@ -148,7 +149,7 @@ FUSION_UUID = "fusion-desk@hafij-deu.github.io"
 GLASS_STRENGTHS = ("style-strength", "shine-strength", "rim-strength", "glare-strength",
                    "shadow-strength", "light-strength")   # percent, 0-200, 100 = normal
 GLASS_KEYS = ("effect", "material", "style", "opacity", "rim", "glare", "shadow",
-              "light-follows") + GLASS_STRENGTHS
+              "light-follows") + GLASS_STRENGTHS + pg.LUMINA_KEYS
 GLASS_EFFECTS = ("OFF", "SOFT", "STRONG")
 GLASS_MATERIALS = ("GLASS", "GLOSS")
 GLASS_STYLES = ("CLEAR", "FROSTED", "GEL", "TINTED", "SMOKE", "HALO", "GLOW", "PLANNER")
@@ -193,12 +194,13 @@ def _planner_backdrop(dark, alpha=1.0):
 
 GLASS_DEFAULT = {"effect": "STRONG", "material": "GLASS", "style": "FROSTED", "opacity": 75,
                  "rim": True, "glare": True, "shadow": False, "light-follows": False,
-                 **{k: 100 for k in GLASS_STRENGTHS}}
+                 **{k: 100 for k in GLASS_STRENGTHS},
+                 **{k: pg.DEFAULT[k] for k in pg.LUMINA_KEYS}}
 GLASS_OFF = dict(GLASS_DEFAULT, effect="OFF", opacity=100)
 # An app's own quick choice (Files > Options, Task Manager > Settings);
 # "custom" means Harbor Settings gave it its own full set of values.
 GLASS_APP_CHOICES = ("harbor", "off", "soft", "strong", "planner", "custom")
-GLASS_APP_LABELS = (("harbor", "Same as all Harbor apps"), ("off", "Off"), ("soft", "Soft"),
+GLASS_APP_LABELS = (("harbor", "Same as global"), ("off", "Off"), ("soft", "Soft"),
                     ("strong", "Strong"), ("planner", "Lumina Glass"),
                     ("custom", "Custom (Harbor Settings)"))
 
@@ -242,6 +244,8 @@ def glass_set(spec, key, value):
         spec[key] = min(200, int(value))
     elif key in ("rim", "glare", "shadow", "light-follows"):
         spec[key] = value == "true"
+    elif key in pg.LUMINA_KEYS:  # Lumina options (see planner_glass.py)
+        pg._set(spec, key, value)
 
 
 def parse_glass(text):
@@ -325,8 +329,8 @@ def global_glass(fusion=None):
 def scope_glass(scope):
     """A scope's own values ("harbor" or an app name), or None to follow."""
     text = _read_config("glass" if scope == "harbor" else "glass-" + scope)
-    if text is None:
-        return dict(GLASS_OFF) if scope == "harbor" else None
+    if text is None:  # missing: follow (the All Harbor apps scope is gone; it follows Global)
+        return None
     if text in ("", "global", "harbor"):
         return None
     return parse_glass(text)
@@ -455,7 +459,7 @@ def _planner_palette(pal, spec, dark, see_through):
     pal["window"] = p["window"]
     pal["sidebar"] = p["sidebar"]
     pal["nav_hover"] = p["nav_hover"]
-    pal["nav_sel"] = "rgba(99,102,241,%.2f)" % (0.24 if dark else 0.14)
+    pal["nav_sel"] = pg.tokens(dark, spec=spec)["sel"]
     pal["border"] = p["rim"]
     return pal
 
@@ -464,8 +468,17 @@ def _planner_css(spec, dark, see_through):
     """PLANNER shapes and colours: the planner gradient, glass cards (sheen,
     white rim, bright top edge, coloured shadow), planner corner scale,
     indigo accent, a near-solid header and a floating glass footer card."""
-    p = PLANNER[bool(dark)]
+    p = dict(PLANNER[bool(dark)])
     backdrop = _planner_backdrop(dark, max(0.35, spec["opacity"] / 100) if see_through else 1.0)
+    t = pg.tokens(dark, see_through, spec["opacity"], spec)
+    colourful = bool(t.get("colourful"))
+    if colourful:  # Lumina Colourful: faint colour backdrop, colour accents, neutral text
+        backdrop = t["backdrop"]
+        p.update(accent_text=t["accent_text"], btn_text=t["btn_text"], hair=t["hair"], shade=t["shade"]
+                 if not dark else p["shade"])
+    accent_grad = t["accent"] if colourful else PLANNER_ACCENT
+    accent_shadow = t["accent_shadow"] if colourful else PLANNER_SHADOW_ACCENT
+    a1, a2 = t["a1"], t["a2"]
     ds = spec["shadow-strength"] / 100
     k = 1.8 if dark else 1.0
     card_shadow = (f"0 10px 24px -12px rgba({p['shade']},{min(1, 0.30 * ds * k):.2f}), "
@@ -474,7 +487,7 @@ def _planner_css(spec, dark, see_through):
     glass = (f"background-color: {p['card']}; background-image: {p['card_img']}; "
              f"border: 1px solid {p['rim']};")
     return f"""
-:root {{ --accent-bg-color: #6366f1; --accent-fg-color: #ffffff; --accent-color: {p["accent_text"]};
+:root {{ --accent-bg-color: {a1}; --accent-fg-color: #ffffff; --accent-color: {p["accent_text"]};
     --window-fg-color: {p["text"]}; --view-fg-color: {p["text"]}; }}
 window.hb-window {{ background-image: {backdrop}; color: {p["text"]}; }}
 window.hb-window .dim-label {{ color: {p["soft"]}; }}
@@ -491,12 +504,12 @@ window.hb-window .hb-statusbar, window.hb-window .hbf-statusbar {{ {glass} margi
 list.hb-nav > row {{ border-radius: 12px; }}
 list.hb-nav > row:selected {{ background-image: none; color: {p["accent_text"]};
     box-shadow: {p["spec"]}; }}
-list.hb-nav > row:selected .hb-nav-pill {{ background-image: linear-gradient(to bottom, #6366f1, #8b5cf6); }}
+list.hb-nav > row:selected .hb-nav-pill {{ background-image: linear-gradient(to bottom, {a1}, {a2}); }}
 entry.hb-search, searchentry.hb-search {{ border-radius: 12px; border: 1px solid {p["line"]};
     background-color: {p["entry"]}; color: {p["text"]}; box-shadow: {p["spec"]}; }}
-entry.hb-search:focus-within, searchentry.hb-search:focus-within {{ box-shadow: 0 0 0 2px #6366f1; }}
-button.hb-accent {{ background-image: {PLANNER_ACCENT}; color: #ffffff; border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.25); box-shadow: inset 0 1px rgba(255,255,255,0.30), {PLANNER_SHADOW_ACCENT};
+entry.hb-search:focus-within, searchentry.hb-search:focus-within {{ box-shadow: 0 0 0 2px {a1}; }}
+button.hb-accent {{ background-image: {accent_grad}; color: #ffffff; border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.25); box-shadow: inset 0 1px rgba(255,255,255,0.30), {accent_shadow};
     font-weight: 600; }}
 button.hb-accent:hover {{ filter: none; opacity: 0.92; }}
 button.hb-accent:active, button.hb-plain:active {{ transform: scale(0.95); }}
@@ -504,10 +517,24 @@ button.hb-plain {{ background: {p["btn"]}; color: {p["btn_text"]}; border: 1px s
     border-radius: 12px; box-shadow: {p["spec"]}; }}
 button.hb-plain:hover {{ background: {p["btn_hover"]}; }}
 button.hb-tool {{ border-radius: 12px; }}
-.hb-badge {{ background-image: {PLANNER_ACCENT}; border-radius: 9999px; }}
+.hb-badge {{ background-image: {accent_grad}; border-radius: 9999px; }}
 .hb-badge.hb-badge-big {{ border-radius: 9999px; }}
 .hb-title, .hb-subtitle {{ font-weight: 700; }}
+""" + (_lumina_colour_css(t) if colourful else "")
+
+
+def _lumina_colour_css(t):
+    """Harbor's parts in Lumina Colourful, used with care: page titles and the
+    selected sidebar row in colour, sidebar icons in the one main hue."""
+    gloss = "linear-gradient(to bottom, rgba(255,255,255,0.30), rgba(255,255,255,0.0) 60%)"
+    css = f"""
+window.hb-window .hb-title {{ color: {t["title"]}; }}
+list.hb-nav > row:selected {{ background-image: {gloss}; }}
+list.hb-nav > row:selected label {{ color: {t["title"]}; }}
 """
+    css += f"""list.hb-nav > row image {{ color: {t["i2"]}; }}
+"""
+    return css
 
 
 def glass_css(spec, dark, see_through=None):

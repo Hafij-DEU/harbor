@@ -29,7 +29,7 @@ APPEARANCE_CHOICES = (
     ("theme", "Theme", "Light or dark for Harbor only; Follow system uses GNOME's setting",
      (("follow", "Follow system"), ("light", "Light"), ("dark", "Dark"))),
     ("glass", "Glass effect", "Style, opacity, rim and glare: Harbor Settings > Personalisation",
-     (("harbor", "Same as all Harbor apps"), ("off", "Off"), ("soft", "Soft"),
+     (("harbor", "Same as global"), ("off", "Off"), ("soft", "Soft"),
       ("strong", "Strong"), ("planner", "Lumina Glass"), ("custom", "Custom (Harbor Settings)"))),
     ("icons", "Icons", "Modern uses Harbor's own icon set (glossy with Lumina Glass)",
      (("modern", "Modern"), ("glossy", "Glossy"), ("system", "System icon theme"))),
