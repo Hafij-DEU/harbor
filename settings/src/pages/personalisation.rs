@@ -477,7 +477,14 @@ pub(crate) fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
                             lumina_intensity: values.lumina_intensity,
                             ..crate::theme::Glass::from_text(text)
                         };
-                        if segment(ui, pal, name, values.to_text() == preset.to_text()) {
+                        // Lumina Glass stays lit while its style is on, even
+                        // after fine-tuning, so its options card below has a parent
+                        let on = if preset.style == GlassStyle::Planner {
+                            values.on() && values.style == GlassStyle::Planner
+                        } else {
+                            values.to_text() == preset.to_text()
+                        };
+                        if segment(ui, pal, name, on) {
                             values = preset;
                         }
                     }
@@ -505,8 +512,8 @@ pub(crate) fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
                 glass_row(
                     ui,
                     pal,
-                    "Lumina style",
-                    "Calm: the indigo glass. Colourful: a few headings, icons and selections in colour",
+                    "Lumina Glass look",
+                    "Part of the Lumina Glass preset. Calm: the indigo glass. Colourful: a few headings, icons and selections in colour",
                     |ui| {
                         for l in crate::theme::LuminaStyle::ALL {
                             if segment(ui, pal, l.label(), values.lumina == *l) {
