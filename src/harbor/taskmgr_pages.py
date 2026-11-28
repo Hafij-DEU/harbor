@@ -325,6 +325,11 @@ class MemoryDevice(Device):
               ("zused", "zram RAM used"), ("zdisk", "zram disk size"),
               ("zshare", "zram share of RAM"))
     ZRAM_KEYS = ("zcompr", "zused", "zdisk", "zshare")
+    # RAM hardware card: two label/value columns, filled once (it never changes)
+    HW_L = (("speed", "Speed"), ("type", "Type"), ("form", "Form factor"),
+            ("slots", "Slots used"), ("maker", "Maker"))
+    HW_R = (("rated", "Rated speed"), ("installed", "Installed"),
+            ("reserved", "Hardware reserved"), ("voltage", "Voltage"), ("part", "Part number"))
 
     def __init__(self, page):
         super().__init__(page, "memory", "Memory")
@@ -410,6 +415,8 @@ class MemoryDevice(Device):
         self.zram_box.set_visible(False)
         v.append(self.zram_box)
 
+        v.append(self._build_hardware())
+
         # everything else, collapsed
         self.more_vals = {}
         cols = Gtk.Box(spacing=40, margin_top=10, margin_start=16, homogeneous=True)
@@ -431,6 +438,47 @@ class MemoryDevice(Device):
                        css_classes=["hb-tm-mem-card", "hb-tm-more-card"])
         card.append(self.more)
         v.append(card)
+
+    def _build_hardware(self):
+        """The "RAM hardware" card: speed, type, slots, from tp.memory_hardware."""
+        self.hw, why = tp.memory_hardware()
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, margin_top=14,
+                      css_classes=["hb-tm-mem-card"])
+        box.append(label("RAM hardware", "hb-tm-mem-card-title"))
+        self.hw_vals = {}
+        if self.hw is None:
+            box.append(label("Speed and slots are not available. " + why + ".",
+                             "hb-tm-stat-hint", wrap=True, xalign=0))
+            return box
+        hw = self.hw
+        mts = "%d MT/s"
+        text = {"speed": mts % hw["speed"] if hw["speed"] else "—",
+                "rated": mts % hw["rated"] if hw["rated"] else "—",
+                "type": hw["type"] or "—",
+                "form": hw["form"] or "—",
+                "slots": "%d of %d" % (hw["used"], hw["slots"]),
+                "installed": gb(hw["installed"]),
+                "reserved": "—",   # needs MemTotal; set in update_view
+                "maker": hw["maker"] or "—",
+                "voltage": hw["voltage"] + " V" if hw["voltage"] else "—",
+                "part": hw["part"] or "—"}
+        cols = Gtk.Box(spacing=40, margin_top=6, homogeneous=True)
+        for spec in (self.HW_L, self.HW_R):
+            g = Gtk.Grid(column_spacing=20, row_spacing=5, valign=Gtk.Align.START)
+            for i, (key, title) in enumerate(spec):
+                val = label(text[key], "hb-tm-kv-value", xalign=0, hexpand=True,
+                            ellipsize=Pango.EllipsizeMode.END, selectable=True)
+                g.attach(label(title, "hb-tm-kv-label"), 0, i, 1, 1)
+                g.attach(val, 1, i, 1, 1)
+                self.hw_vals[key] = (title, val)
+            cols.append(g)
+        box.append(cols)
+        if hw["speed"] and hw["rated"] > hw["speed"]:
+            box.append(label("Runs at %d of its rated %d MT/s: the processor's memory "
+                             "controller or the firmware sets this limit."
+                             % (hw["speed"], hw["rated"]),
+                             "hb-tm-stat-hint", wrap=True, xalign=0, margin_top=6))
+        return box
 
     def _set(self, lbl, text):
         if lbl.get_label() != text:
@@ -484,6 +532,7 @@ class MemoryDevice(Device):
         if zram:
             lines += ["Compressed memory: " + self.zram_line.get_label(),
                       "Compressed memory: " + self.zram_meta.get_label()]
+        lines += ["%s: %s" % (t, v.get_label()) for t, v in self.hw_vals.values()]
         for key, (t, v) in self.more_vals.items():
             if zram or key not in self.ZRAM_KEYS:
                 lines.append("%s: %s" % (t, v.get_label()))
@@ -499,7 +548,12 @@ class MemoryDevice(Device):
     def update_view(self):
         m = self.sys.mem_summary()
         tot = m["total"] or 1
-        self.model.set_label(gb(tot))
+        hw = self.hw
+        self.model.set_label(" ".join(x for x in (gb(hw["installed"] if hw else tot),
+                                                   hw and hw["type"]) if x))
+        if hw and "reserved" in self.hw_vals:
+            self._set(self.hw_vals["reserved"][1],
+                      human_size(max(0, hw["installed"] - m["total"])))
         self.top_r.set_label(gb(tot))
         self.graph.set_series(self.sys.mem_hist)
         self.bar.set_parts(m["used"] / tot, m["cached"] / tot)

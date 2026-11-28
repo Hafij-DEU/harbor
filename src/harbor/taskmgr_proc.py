@@ -11,6 +11,7 @@ import os
 import pwd
 import re
 import signal
+import subprocess
 import time
 
 CLK_TCK = os.sysconf("SC_CLK_TCK")
@@ -65,6 +66,79 @@ def read_int(path, default=None):
         return int(data.split()[0])
     except (ValueError, IndexError):
         return default
+
+
+# ------------------------------------------------------------------ RAM hardware
+#
+# Speed, type and slots come from the SMBIOS memory tables. Reading those
+# directly (dmidecode, /sys/firmware/dmi) needs root, but systemd's udev
+# copies them at boot into the record of /sys/devices/virtual/dmi/id
+# (MEMORY_DEVICE_<n>_* keys, systemd 247+), which anyone can read.
+
+UDEV_DMI = "/run/udev/data/+dmi:id"
+FORM_FACTORS = {"Row Of Chips": "Soldered chips", "SODIMM": "SO-DIMM"}
+
+
+def parse_udev_memory(text):
+    """RAM details from a udev DMI record ("E:KEY=VALUE" lines, or the
+    "KEY=VALUE" lines of udevadm info). None when it has no memory device."""
+    keys = {}
+    for line in text.splitlines():
+        line = line[2:] if line.startswith("E:") else line
+        k, sep, v = line.partition("=")
+        if sep and k.startswith("MEMORY_"):
+            keys[k] = v.strip()
+    devs = {}
+    for k, v in keys.items():
+        m = re.match(r"MEMORY_DEVICE_(\d+)_(.+)", k)
+        if m:
+            devs.setdefault(int(m.group(1)), {})[m.group(2)] = v
+
+    def num(d, key):
+        try:
+            return int(float(d.get(key, "")))
+        except ValueError:
+            return 0
+
+    # an empty slot has PRESENT=0 or no size
+    used = [d for _i, d in sorted(devs.items())
+            if d.get("PRESENT", "1") != "0" and num(d, "SIZE") > 0]
+    if not used:
+        return None
+
+    def one(key):
+        vals = sorted({d.get(key, "") for d in used} - {"", "Unknown", "Not Specified"})
+        return " / ".join(vals)
+
+    form = one("FORM_FACTOR")
+    return {"speed": max(num(d, "CONFIGURED_SPEED_MTS") for d in used),
+            "rated": max(num(d, "SPEED_MTS") for d in used),
+            "type": one("TYPE"),
+            "form": FORM_FACTORS.get(form, form),
+            "used": len(used),
+            "slots": int(keys.get("MEMORY_ARRAY_NUM_DEVICES") or 0) or len(devs),
+            "installed": sum(num(d, "SIZE") for d in used),
+            "maker": one("MANUFACTURER"),
+            "part": one("PART_NUMBER"),
+            "voltage": one("CONFIGURED_VOLTAGE")}
+
+
+def memory_hardware(path=UDEV_DMI):
+    """(details or None, why) for the Memory page. The udev record is tried
+    first; udevadm is the fallback for systems that keep it elsewhere."""
+    text = read_text(path)
+    if "MEMORY_DEVICE_" not in text:
+        try:
+            text = subprocess.run(["udevadm", "info", "-q", "property",
+                                   "/sys/devices/virtual/dmi/id"], capture_output=True,
+                                  text=True, timeout=3).stdout
+        except (OSError, subprocess.SubprocessError):
+            text = ""
+    hw = parse_udev_memory(text)
+    if hw:
+        return hw, ""
+    return None, ("The firmware memory table is not in udev "
+                  "(needs systemd 247 or newer, not available in containers)")
 
 
 # ------------------------------------------------------------------ parsers

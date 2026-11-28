@@ -600,3 +600,47 @@ def test_guarded_term_checks_start_time_before_kill():
         if p.poll() is None:
             p.kill()
             p.wait()
+
+
+UDEV_DMI = """E:MEMORY_ARRAY_NUM_DEVICES=4
+E:MEMORY_DEVICE_0_SIZE=8589934592
+E:MEMORY_DEVICE_0_FORM_FACTOR=SODIMM
+E:MEMORY_DEVICE_0_TYPE=DDR4
+E:MEMORY_DEVICE_0_SPEED_MTS=3200
+E:MEMORY_DEVICE_0_CONFIGURED_SPEED_MTS=2933
+E:MEMORY_DEVICE_0_MANUFACTURER=Samsung
+E:MEMORY_DEVICE_0_PART_NUMBER=M471A1K43DB1
+E:MEMORY_DEVICE_1_PRESENT=0
+E:MEMORY_DEVICE_2_SIZE=8589934592
+E:MEMORY_DEVICE_2_FORM_FACTOR=SODIMM
+E:MEMORY_DEVICE_2_TYPE=DDR4
+E:MEMORY_DEVICE_2_SPEED_MTS=3200
+E:MEMORY_DEVICE_2_CONFIGURED_SPEED_MTS=2933
+E:MEMORY_DEVICE_2_MANUFACTURER=Samsung
+E:MEMORY_DEVICE_2_PART_NUMBER=M471A1K43DB1
+E:ID_FOR_SEAT=x
+"""
+
+
+def test_parse_udev_memory():
+    from harbor import taskmgr_proc as tp
+    hw = tp.parse_udev_memory(UDEV_DMI)
+    assert hw["speed"] == 2933 and hw["rated"] == 3200
+    assert hw["type"] == "DDR4" and hw["form"] == "SO-DIMM"
+    assert (hw["used"], hw["slots"]) == (2, 4)       # empty slot is not counted
+    assert hw["installed"] == 16 * 1024 ** 3
+    assert hw["maker"] == "Samsung" and hw["part"] == "M471A1K43DB1"
+    # udevadm info prints the same keys without the "E:" prefix
+    plain = UDEV_DMI.replace("E:", "")
+    assert tp.parse_udev_memory(plain) == hw
+
+
+def test_memory_hardware_missing(tmp_path, monkeypatch):
+    from harbor import taskmgr_proc as tp
+    f = tmp_path / "dmi"
+    f.write_text("E:ID_FOR_SEAT=x\n")
+    monkeypatch.setattr(tp.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(OSError()))
+    hw, why = tp.memory_hardware(str(f))
+    assert hw is None and "udev" in why
+    f.write_text(UDEV_DMI)
+    assert tp.memory_hardware(str(f))[0]["used"] == 2
