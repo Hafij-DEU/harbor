@@ -286,7 +286,7 @@ impl App {
             look: system::saved_look(),
             recent: system::saved_recent(),
             glass_scopes: system::GlassScope::ALL.map(system::scope_glass),
-            glass_edit: system::GlassScope::Harbor,
+            glass_edit: system::GlassScope::Global, // the desktop-wide glass opens first
             glass_window: system::glass_window(),
             frame_r: 0,
             keyboard: Default::default(),
