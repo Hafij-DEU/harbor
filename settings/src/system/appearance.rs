@@ -195,7 +195,6 @@ pub fn scope_glass(scope: GlassScope) -> Option<crate::theme::Glass> {
         text = design_path().and_then(|p| fs::read_to_string(p.with_file_name("glass")).ok());
     }
     match text.as_deref().map(str::trim) {
-        None if scope == GlassScope::Harbor => Some(Glass::OFF),
         None | Some("") | Some("global") | Some("harbor") => None,
         Some(t) => Some(Glass::from_text(t)),
     }

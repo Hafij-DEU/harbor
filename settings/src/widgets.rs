@@ -464,7 +464,21 @@ pub fn planner_backdrop(painter: &egui::Painter, rect: Rect, pal: &Palette, corn
         1.0
     };
     let c = |r: u8, g: u8, b: u8| Color32::from_rgba_unmultiplied(r, g, b, (a * 255.0) as u8);
-    let stops: Vec<(f32, Color32)> = if dark {
+    let accent = [pal.accent.r(), pal.accent.g(), pal.accent.b()];
+    let stops: Vec<(f32, Color32)> = if let Some(cols) = pal.glass.lumina_rgb(accent) {
+        // Lumina Colourful: only a faint tint of the colours (same as planner_glass.py)
+        let k = pal.glass.lumina_intensity as f32 / 100.0;
+        let (base, amt) = if dark {
+            ([20.0, 16.0, 40.0], [0.13, 0.12, 0.11])
+        } else {
+            ([250.0, 248.0, 255.0], [0.11, 0.09, 0.10])
+        };
+        let mix = |col: [u8; 3], t: f32| {
+            let m = |i: usize| (base[i] + (col[i] as f32 - base[i]) * t * k).round() as u8;
+            c(m(0), m(1), m(2))
+        };
+        vec![(0.0, mix(cols[0], amt[0])), (0.5, mix(cols[1], amt[1])), (1.0, mix(cols[2], amt[2]))]
+    } else if dark {
         vec![(0.0, c(26, 21, 51)), (0.5, c(27, 31, 69)), (1.0, c(20, 26, 58))]
     } else {
         vec![(0.0, c(232, 218, 255)), (0.5, c(220, 224, 255)), (1.0, c(203, 220, 255))]

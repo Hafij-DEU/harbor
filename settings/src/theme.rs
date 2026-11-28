@@ -66,6 +66,35 @@ glass_choice!(GlassStyle {
     Planner = "PLANNER", "Lumina Glass";
 });
 
+glass_choice!(LuminaStyle {
+    Calm = "CALM", "Calm glass";
+    Colourful = "COLOURFUL", "Colourful";
+});
+
+glass_choice!(LuminaColours {
+    Aurora = "AURORA", "Aurora";
+    Sunset = "SUNSET", "Sunset";
+    Ocean = "OCEAN", "Ocean";
+    Candy = "CANDY", "Candy";
+    Forest = "FOREST", "Forest";
+    Accent = "ACCENT", "System accent";
+    Custom = "CUSTOM", "Custom";
+});
+
+impl LuminaColours {
+    /// The three colours of a fixed set (same values as planner_glass.py).
+    pub fn set(self) -> Option<[[u8; 3]; 3]> {
+        Some(match self {
+            LuminaColours::Aurora => [[0xec, 0x48, 0x99], [0x8b, 0x5c, 0xf6], [0x38, 0xbd, 0xf8]],
+            LuminaColours::Sunset => [[0xf9, 0x73, 0x16], [0xec, 0x48, 0x99], [0x8b, 0x5c, 0xf6]],
+            LuminaColours::Ocean => [[0x06, 0xb6, 0xd4], [0x3b, 0x82, 0xf6], [0x63, 0x66, 0xf1]],
+            LuminaColours::Candy => [[0xf4, 0x72, 0xb6], [0xa7, 0x8b, 0xfa], [0x34, 0xd3, 0x99]],
+            LuminaColours::Forest => [[0x22, 0xc5, 0x5e], [0x14, 0xb8, 0xa6], [0x0e, 0xa5, 0xe9]],
+            LuminaColours::Accent | LuminaColours::Custom => return None,
+        })
+    }
+}
+
 /// Glass styling shared by every Harbor app and Fusion Desk. The fields are
 /// Fusion Desk's `glass-*` settings, so one set of values can drive the
 /// desktop shell and every app.
@@ -88,6 +117,13 @@ pub struct Glass {
     pub glare_strength: u8,
     pub shadow_strength: u8,
     pub light_strength: u8,
+    /// Lumina (style PLANNER) options: Calm (the indigo look) or Colourful
+    /// (a colour set, the system accent or a custom colour, with an intensity).
+    pub lumina: LuminaStyle,
+    pub lumina_colours: LuminaColours,
+    pub lumina_colour: [u8; 3],
+    /// Percent, 20-100.
+    pub lumina_intensity: u8,
 }
 
 impl Default for Glass {
@@ -108,6 +144,10 @@ impl Default for Glass {
             glare_strength: 100,
             shadow_strength: 100,
             light_strength: 100,
+            lumina: LuminaStyle::Calm,
+            lumina_colours: LuminaColours::Aurora,
+            lumina_colour: [0x8b, 0x5c, 0xf6],
+            lumina_intensity: 70,
         }
     }
 }
@@ -128,6 +168,10 @@ impl Glass {
         glare_strength: 100,
         shadow_strength: 100,
         light_strength: 100,
+        lumina: LuminaStyle::Calm,
+        lumina_colours: LuminaColours::Aurora,
+        lumina_colour: [0x8b, 0x5c, 0xf6],
+        lumina_intensity: 70,
     };
 
     /// Fusion Desk key names, in the order they are written.
@@ -147,6 +191,30 @@ impl Glass {
         "glass-shadow-strength",
         "glass-light-strength",
     ];
+
+    /// The Lumina keys. Written after KEYS and best effort: an older Fusion
+    /// Desk has no such settings.
+    pub const LUMINA_KEYS: [&'static str; 4] = [
+        "glass-lumina",
+        "glass-lumina-colours",
+        "glass-lumina-colour",
+        "glass-lumina-intensity",
+    ];
+
+    /// Lumina's three colours for Colourful (None = Calm). `accent` is the
+    /// GNOME accent colour for the System accent choice.
+    pub fn lumina_rgb(&self, accent: [u8; 3]) -> Option<[[u8; 3]; 3]> {
+        if self.lumina != LuminaStyle::Colourful {
+            return None;
+        }
+        self.lumina_colours.set().or_else(|| {
+            Some(triad(if self.lumina_colours == LuminaColours::Accent {
+                accent
+            } else {
+                self.lumina_colour
+            }))
+        })
+    }
 
     /// A strength as a scale (1.0 = normal).
     pub fn scale(percent: u8) -> f32 {
@@ -180,6 +248,13 @@ impl Glass {
             "glass-glare-strength" => self.glare_strength.to_string(),
             "glass-shadow-strength" => self.shadow_strength.to_string(),
             "glass-light-strength" => self.light_strength.to_string(),
+            "glass-lumina" => quote(self.lumina.key()),
+            "glass-lumina-colours" => quote(self.lumina_colours.key()),
+            "glass-lumina-colour" => {
+                let [r, g, b] = self.lumina_colour;
+                quote(&format!("#{r:02x}{g:02x}{b:02x}"))
+            }
+            "glass-lumina-intensity" => self.lumina_intensity.to_string(),
             _ => String::new(),
         }
     }
@@ -213,6 +288,29 @@ impl Glass {
             "glare" => self.glare = flag(value),
             "shadow" => self.shadow = flag(value),
             "light-follows" => self.light_follows = flag(value),
+            "lumina" => {
+                if let Some(v) = LuminaStyle::from_key(value) {
+                    self.lumina = v;
+                }
+            }
+            "lumina-colours" => {
+                if let Some(v) = LuminaColours::from_key(value) {
+                    self.lumina_colours = v;
+                }
+            }
+            "lumina-colour" => {
+                let v = value.trim_matches('\'').trim_start_matches('#');
+                if v.len() == 6 {
+                    if let Ok(n) = u32::from_str_radix(v, 16) {
+                        self.lumina_colour = [(n >> 16) as u8, (n >> 8) as u8, n as u8];
+                    }
+                }
+            }
+            "lumina-intensity" => {
+                if let Ok(v) = value.trim_matches('\'').parse::<u8>() {
+                    self.lumina_intensity = v.clamp(20, 100);
+                }
+            }
             name if name.ends_with("-strength") => {
                 let Ok(v) = value.trim_matches('\'').parse::<u16>() else {
                     return;
@@ -236,6 +334,7 @@ impl Glass {
     pub fn to_text(&self) -> String {
         Self::KEYS
             .iter()
+            .chain(Self::LUMINA_KEYS.iter())
             .map(|k| {
                 format!(
                     "{}={}\n",
@@ -276,6 +375,58 @@ impl Glass {
             }
         }
         glass
+    }
+}
+
+/// Three neighbouring hues around one colour (-32°, itself, +32°), kept bright
+/// enough to read as colour (same as planner_glass.py `triad`).
+pub fn triad(rgb: [u8; 3]) -> [[u8; 3]; 3] {
+    let [r, g, b] = rgb.map(|v| v as f32 / 255.0);
+    let (max, min) = (r.max(g).max(b), r.min(g).min(b));
+    let mut l = (max + min) / 2.0;
+    let d = max - min;
+    let mut s = if d == 0.0 { 0.0 } else { d / (1.0 - (2.0 * l - 1.0).abs()) };
+    let h = if d == 0.0 {
+        0.0
+    } else if max == r {
+        ((g - b) / d).rem_euclid(6.0) / 6.0
+    } else if max == g {
+        ((b - r) / d + 2.0) / 6.0
+    } else {
+        ((r - g) / d + 4.0) / 6.0
+    };
+    l = l.clamp(0.45, 0.62);
+    s = s.max(0.55);
+    let at = |dh: f32| {
+        let h = (h + dh).rem_euclid(1.0);
+        let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+        let x = c * (1.0 - ((h * 6.0).rem_euclid(2.0) - 1.0).abs());
+        let m = l - c / 2.0;
+        let (r, g, b) = match (h * 6.0) as u32 {
+            0 => (c, x, 0.0),
+            1 => (x, c, 0.0),
+            2 => (0.0, c, x),
+            3 => (0.0, x, c),
+            4 => (x, 0.0, c),
+            _ => (c, 0.0, x),
+        };
+        [r, g, b].map(|v| ((v + m) * 255.0).round().clamp(0.0, 255.0) as u8)
+    };
+    [at(-32.0 / 360.0), at(0.0), at(32.0 / 360.0)]
+}
+
+/// GNOME accent-color names (org.gnome.desktop.interface) as colours.
+pub fn gnome_accent(name: &str) -> [u8; 3] {
+    match name.trim().trim_matches('\'') {
+        "teal" => [0x21, 0x90, 0xa4],
+        "green" => [0x3a, 0x94, 0x4a],
+        "yellow" => [0xc8, 0x88, 0x00],
+        "orange" => [0xed, 0x5b, 0x00],
+        "red" => [0xe6, 0x2d, 0x42],
+        "pink" => [0xd5, 0x61, 0x99],
+        "purple" => [0x91, 0x41, 0xac],
+        "slate" => [0x6f, 0x83, 0x96],
+        _ => [0x35, 0x84, 0xe4],
     }
 }
 
@@ -496,6 +647,7 @@ impl Palette {
     fn planner(mut self, glass: Glass, dark: bool, see_through: bool) -> Self {
         let rgba = |r, g, b, a: f32| Color32::from_rgba_unmultiplied(r, g, b, (a * 255.0) as u8);
         let rgb = Color32::from_rgb;
+        let system = [self.accent.r(), self.accent.g(), self.accent.b()];
         self.accent = rgb(0x63, 0x66, 0xf1);
         self.on_accent = Color32::WHITE;
         if dark {
@@ -535,7 +687,13 @@ impl Palette {
             self.nav_bg = rgba(0xff, 0xff, 0xff, 0.30);
             self.tooltip = Color32::WHITE;
         }
-        let _ = (glass, see_through); // the backdrop thins itself when see-through
+        // Lumina Colourful: the main hue becomes the accent (icons, switches,
+        // selection); the backdrop tint is painted by widgets::planner_backdrop
+        if let Some([_, [r, g, b], _]) = glass.lumina_rgb(system) {
+            self.accent = rgb(r, g, b);
+            self.nav_selected = rgba(r, g, b, if dark { 0.24 } else { 0.14 });
+        }
+        let _ = see_through; // the backdrop thins itself when see-through
         self
     }
 

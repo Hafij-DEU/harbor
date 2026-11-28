@@ -71,14 +71,20 @@ pub fn set_fusion_glass(glass: &crate::theme::Glass) -> bool {
     if extra.is_empty() {
         return false;
     }
-    crate::theme::Glass::KEYS.iter().all(|key| {
+    let set = |key: &str| {
         Command::new("gsettings")
             .args(&extra)
             .args(["set", FUSION_SCHEMA, key, &glass.get(key)])
             .status()
             .map(|s| s.success())
             .unwrap_or(false)
-    })
+    };
+    let ok = crate::theme::Glass::KEYS.iter().all(|key| set(key));
+    // best effort: Fusion Desk before v49 has no Lumina settings
+    for key in crate::theme::Glass::LUMINA_KEYS {
+        set(key);
+    }
+    ok
 }
 
 /// Fusion Desk status: install it when missing, turn it on or off, open its

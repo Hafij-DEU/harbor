@@ -469,7 +469,14 @@ pub(crate) fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
                 "Start from a ready-made look; fine-tune it in Advanced settings",
                 |ui| {
                     for (name, text) in GLASS_PRESETS {
-                        let preset = crate::theme::Glass::from_text(text);
+                        // a preset keeps the Lumina options (style, colours)
+                        let preset = crate::theme::Glass {
+                            lumina: values.lumina,
+                            lumina_colours: values.lumina_colours,
+                            lumina_colour: values.lumina_colour,
+                            lumina_intensity: values.lumina_intensity,
+                            ..crate::theme::Glass::from_text(text)
+                        };
                         if segment(ui, pal, name, values.to_text() == preset.to_text()) {
                             values = preset;
                         }
@@ -491,6 +498,71 @@ pub(crate) fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
                 },
             );
         });
+        if values.on() && values.style == crate::theme::GlassStyle::Planner {
+            // Lumina's own options, global or per app like every glass value
+            spacer(ui, 10.0);
+            widgets::card(ui, pal, |ui| {
+                glass_row(
+                    ui,
+                    pal,
+                    "Lumina style",
+                    "Calm: the indigo glass. Colourful: a few headings, icons and selections in colour",
+                    |ui| {
+                        for l in crate::theme::LuminaStyle::ALL {
+                            if segment(ui, pal, l.label(), values.lumina == *l) {
+                                values.lumina = *l;
+                            }
+                        }
+                    },
+                );
+                if values.lumina != crate::theme::LuminaStyle::Colourful {
+                    return;
+                }
+                widgets::divider(ui, pal);
+                glass_row(
+                    ui,
+                    pal,
+                    "Colours",
+                    "A colour set, the system accent colour or your own colour",
+                    |ui| {
+                        for c in crate::theme::LuminaColours::ALL {
+                            if segment(ui, pal, c.label(), values.lumina_colours == *c) {
+                                values.lumina_colours = *c;
+                            }
+                        }
+                    },
+                );
+                if values.lumina_colours == crate::theme::LuminaColours::Custom {
+                    widgets::divider(ui, pal);
+                    glass_row(
+                        ui,
+                        pal,
+                        "Custom colour",
+                        "The colours sweep around this one",
+                        |ui| {
+                            let mut rgb = values.lumina_colour;
+                            if egui::widgets::color_picker::color_edit_button_srgb(ui, &mut rgb)
+                                .changed()
+                            {
+                                values.lumina_colour = rgb;
+                            }
+                        },
+                    );
+                }
+                widgets::divider(ui, pal);
+                let mut t = (values.lumina_intensity as f32 - 20.0) / 80.0;
+                if slider_row(
+                    ui,
+                    pal,
+                    Icon::Sparkle,
+                    "Colour intensity",
+                    format!("{} %", values.lumina_intensity),
+                    &mut t,
+                ) {
+                    values.lumina_intensity = ((20.0 + t * 80.0) / 5.0).round() as u8 * 5;
+                }
+            });
+        }
         if values.on() {
             let id = egui::Id::new("hb-glass-advanced");
             let mut open = ui.ctx().data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
