@@ -2725,6 +2725,10 @@ class App(Adw.Application):
         theme = common.THEME if common.THEME is not None else apply_theme()
         theme.set_style("system" if s.get("style") == "system" else "harbor")
         theme.set_app("files")
+        self._set_glossy(theme)
+        if not getattr(self, "_planner_hooked", False):
+            self._planner_hooked = True
+            theme.on_planner.append(lambda: self._set_glossy(theme) and self._refresh_windows())
         if initial and s.get("glass") != theme.glass_choice():
             s.set("glass", theme.glass_choice())
         sm = Adw.StyleManager.get_default()
@@ -2745,6 +2749,15 @@ class App(Adw.Application):
             files_tint.request(files_icons.COLOR)
         if not initial:
             self._refresh_windows()
+
+    def _set_glossy(self, theme):
+        """Glossy folder / file icons: Icons > Glossy, or Modern with Lumina Glass.
+        Returns True when the choice changed."""
+        icons = self.settings.get("icons")
+        glossy = icons == "glossy" or (icons == "modern" and theme.planner)
+        changed = glossy != files_icons.GLOSSY
+        files_icons.GLOSSY = glossy
+        return changed
 
     def _refresh_windows(self):
         for w in self.files_windows():

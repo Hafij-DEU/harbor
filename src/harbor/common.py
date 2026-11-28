@@ -611,6 +611,8 @@ class _Theme:
         self.extra = []
         self.style = "harbor"      # "harbor" (own colours) or "system"
         self.app = None            # "files" / "taskmgr": reads ~/.config/harbor/glass-<app>
+        self.planner = False       # the Lumina Glass (PLANNER) look is on
+        self.on_planner = []       # callbacks when that changes (Files: glossy icons)
         self._monitors = []
         self._fusion = None
         self.manager = Adw.StyleManager.get_default()
@@ -690,6 +692,11 @@ class _Theme:
             css += tmpl.substitute(pal)
         css += glass_css(spec, self.dark, see)
         self.provider.load_from_string(css)
+        planner = spec.get("effect") != "OFF" and spec.get("style") == "PLANNER"
+        if planner != self.planner:
+            self.planner = planner
+            for cb in list(self.on_planner):
+                cb()
 
 
 THEME = None

@@ -15,6 +15,8 @@ from . import files_tint as tint
 
 MODE = "modern"          # "modern" (bundled set) or "system" (icon theme)
 COLOR = None             # folder colour for the whole app (#rrggbb) or None = classic
+GLOSSY = False           # glossy twins (<name>-glossy) of folder/file icons: Lumina Glass
+                         # look with Modern icons, or Icons > Glossy
 
 # Customize folder (GIO metadata; metadata::custom-icon is Nautilus' key)
 ATTR_CUSTOM_ICON = "metadata::custom-icon"
@@ -380,8 +382,17 @@ def icon_name_for(content_type, name="", is_dir=False, path=None):
     return icon_for_folder(path) if is_dir else icon_for_type(content_type, name)
 
 
+def gloss(name):
+    """The glossy twin of a folder / file icon name while GLOSSY is on."""
+    if (GLOSSY and modern() and isinstance(name, str) and not name.endswith("-glossy")
+            and name.startswith(("harbor-folder", "harbor-file", "harbor-ext-"))):
+        return name + "-glossy"
+    return name
+
+
 def tinted(name, color=None, emblem=None):
     """A Harbor folder icon name in the folder colour (per-folder > app-wide)."""
+    name = gloss(name)
     if not modern() or not tint.is_folder_icon(name):
         return name
     c = color if tint.valid_hex(color) else COLOR
@@ -443,11 +454,13 @@ def item_gicon(info, path=None, is_dir=False):
     if is_dir and ct not in ("inode/directory", ""):
         # mountables and the like keep their own icon (drives in This PC etc.)
         own = info.get_icon()
-        return own or Gio.ThemedIcon.new(FOLDER)
+        return own or Gio.ThemedIcon.new(tinted(FOLDER))
     name = icon_name_for(ct, info.get_display_name() or "", is_dir, path)
     if is_dir:
         _u, _n, color, emblem = custom_of(info, path)
         name = tinted(name, color, emblem)
+    else:
+        name = gloss(name)
     return Gio.ThemedIcon.new(name)
 
 

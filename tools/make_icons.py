@@ -7,6 +7,11 @@ Nothing here is copied from another icon set. Run it again after changing a
 shape; the SVGs are checked in.
 
     python3 tools/make_icons.py
+
+It also writes a glossy twin of every folder and file icon (<name>-glossy.svg):
+the same shapes and colours (so folder colours still apply) with a curved white
+gloss on top, a thin white rim and a soft indigo drop shadow. Harbor Files uses
+them with the Lumina Glass look or Icons > Glossy.
 """
 
 import math
@@ -20,7 +25,40 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "i
                     "scalable")
 
 
+GLOSS = False      # main() sets it while writing the -glossy twins
+
+
+def glin(id_, a1, a2, x1=0, y1=0, x2=0, y2=1):
+    """White gradient from opacity a1 to a2 (the gloss layers)."""
+    return ('<linearGradient id="%s" x1="%s" y1="%s" x2="%s" y2="%s">'
+            '<stop offset="0" stop-color="#fff" stop-opacity="%s"/>'
+            '<stop offset="1" stop-color="#fff" stop-opacity="%s"/></linearGradient>'
+            % (id_, x1, y1, x2, y2, a1, a2))
+
+
+GLOSS_DEFS = (glin("hbg-top", .90, .12) + glin("hbg-chip", .72, .06)
+              + glin("hbg-sheen", .95, 0, 0, 0, 1, 1)
+              + '<filter id="hbg-blur" x="-30%" y="-200%" width="160%" height="500%">'
+              '<feGaussianBlur stdDeviation="1.4"/></filter>')
+
+
+def drop_shadow(cx, cy, rx, ry=2.4):
+    return ('<ellipse cx="%s" cy="%s" rx="%s" ry="%s" fill="#3c2f8f" opacity=".26" '
+            'filter="url(#hbg-blur)"/>' % (cx, cy, rx, ry))
+
+
+def top_gloss(x, y, w, h, r, grad="hbg-chip"):
+    """Curved gloss over the top half of a rounded rectangle."""
+    hh = h * 0.5
+    return ('<path d="M%.2f %.2fH%.2fA%.2f %.2f 0 0 1 %.2f %.2fV%.2fQ%.2f %.2f %.2f %.2fV%.2f'
+            'A%.2f %.2f 0 0 1 %.2f %.2fz" fill="url(#%s)"/>'
+            % (x + r, y, x + w - r, r, r, x + w, y + r, y + hh, x + w * .5, y + hh * .7,
+               x, y + hh * 1.12, y + r, r, r, x + r, y, grad))
+
+
 def svg(body, defs=""):
+    if GLOSS and 'id="hbg-top"' not in defs:
+        defs += GLOSS_DEFS
     return ('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">'
             "<defs>%s</defs>%s</svg>\n" % (defs, body))
 
@@ -71,13 +109,28 @@ EMBLEMS = {
 }
 
 
+FOLDER_GLOSS = (
+    # back tab catch-light, curved gloss on the front, rim, low reflection
+    '<path d="M9.4 12.4h13.4" stroke="#fff" stroke-opacity=".75" stroke-width="1.2" '
+    'stroke-linecap="round"/>'
+    '<path d="M9 21h46a3 3 0 0 1 3 3v9.6Q32 29.6 6 35.4V24a3 3 0 0 1 3-3z" fill="url(#hbg-top)"/>'
+    '<rect x="6.5" y="21.5" width="51" height="33" rx="2.6" fill="none" stroke="#fff" '
+    'stroke-opacity=".6"/>'
+    '<rect x="10" y="48.6" width="44" height="2.6" rx="1.3" fill="#fff" opacity=".22"/>')
+
+
 def folder(emblem=None):
     body = FOLDER_BACK + FOLDER_PAPER + FOLDER_FRONT
+    if GLOSS:
+        body = drop_shadow(32, 57, 24) + body + FOLDER_GLOSS
     if emblem:
         color, glyph = EMBLEMS[emblem]
-        body += ('<rect x="22" y="31.6" width="20" height="16.8" rx="4.2" fill="%s"/>'
-                 '<rect x="22" y="31.6" width="20" height="8" rx="4" fill="#fff" opacity=".12"/>'
-                 % color) + glyph
+        body += '<rect x="22" y="31.6" width="20" height="16.8" rx="4.2" fill="%s"/>' % color
+        if GLOSS:
+            body += top_gloss(22, 31.6, 20, 16.8, 4.2)
+        else:
+            body += '<rect x="22" y="31.6" width="20" height="8" rx="4" fill="#fff" opacity=".12"/>'
+        body += glyph
     return svg(body, FOLDER_DEFS)
 
 
@@ -88,6 +141,31 @@ PAGE = ('<path d="M17 5h20.8a3 3 0 0 1 2.1.9l11.2 11.2a3 3 0 0 1 .9 2.1V56a3 3 0
         'a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z" fill="url(#page)" stroke="#c3c9d2" stroke-width="1"/>'
         '<path d="M38 5.4V15a3 3 0 0 0 3 3h9.6" fill="url(#fold)" stroke="#c3c9d2" '
         'stroke-width="1" stroke-linejoin="round"/>')
+PAGE_PATH = ('M17 5h20.8a3 3 0 0 1 2.1.9l11.2 11.2a3 3 0 0 1 .9 2.1V56a3 3 0 0 1-3 3H17'
+             'a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z')
+GLOSS_PAGE_DEFS = lin("page", "#f4f6fd", "#cdd5e6") + lin("fold", "#eef1f7", "#c9d1de")
+GLOSS_PAGE = (drop_shadow(33, 60, 17, 2) +
+              '<path d="%s" fill="url(#page)" stroke="#b3bccb" stroke-width="1"/>'
+              '<clipPath id="hbg-pc"><path d="%s"/></clipPath>'
+              '<path d="M14 5h38v12Q34 24 14 44z" fill="url(#hbg-sheen)" clip-path="url(#hbg-pc)"/>'
+              '<path d="M17 5.6h20.6a2.4 2.4 0 0 1 1.7.7l11.2 11.2a2.4 2.4 0 0 1 .7 1.7V56a2.4 2.4 0 0 1'
+              '-2.4 2.4H17a2.4 2.4 0 0 1-2.4-2.4V8A2.4 2.4 0 0 1 17 5.6z" fill="none" stroke="#fff" '
+              'stroke-opacity=".7" stroke-width=".9"/>'
+              '<path d="M17.4 6.1h19.6" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>'
+              '<path d="M38 5.4V15a3 3 0 0 0 3 3h9.6" fill="url(#fold)" stroke="#b3bccb" '
+              'stroke-width="1" stroke-linejoin="round"/>'
+              '<path d="M39.4 7v8a1.6 1.6 0 0 0 1.6 1.6h8" fill="none" stroke="#fff" '
+              'stroke-opacity=".8" stroke-width="1"/>' % (PAGE_PATH, PAGE_PATH))
+
+
+def page():
+    return GLOSS_PAGE if GLOSS else PAGE
+
+
+def page_defs():
+    return GLOSS_PAGE_DEFS if GLOSS else PAGE_DEFS
+
+
 LINES = ('<path d="M21 %d h%d" stroke="%s" stroke-width="2" stroke-linecap="round"/>')
 
 
@@ -100,13 +178,17 @@ def lines(ys, color="#a3abb7", width=24, last=14):
 
 def tab_label(color, glyph):
     """Coloured label sticking out of the left edge with a white glyph."""
+    if GLOSS:
+        return ('<rect x="8" y="35" width="30" height="17" rx="3.2" fill="%s"/>%s'
+                '<rect x="8.5" y="35.5" width="29" height="16" rx="2.8" fill="none" stroke="#fff" '
+                'stroke-opacity=".35"/>%s' % (color, top_gloss(8, 35, 30, 17, 3.2), glyph))
     return ('<rect x="8" y="35" width="30" height="17" rx="3.2" fill="%s"/>'
             '<rect x="8" y="35" width="30" height="7" rx="3" fill="#fff" opacity=".14"/>%s'
             % (color, glyph))
 
 
 def file_icon(kind=None):
-    defs = PAGE_DEFS
+    defs = page_defs()
     mark = ""
     if kind == "text":
         mark = lines((26, 31, 36, 41, 46))
@@ -122,12 +204,14 @@ def file_icon(kind=None):
     elif kind == "audio":
         defs += lin("aud", "#ff9a3d", "#e8590c")
         mark = ('<circle cx="33" cy="39" r="11.5" fill="url(#aud)"/>'
+                + ('<ellipse cx="33" cy="33.4" rx="8" ry="5" fill="url(#hbg-chip)"/>' if GLOSS else "") +
                 '<path d="M34.6 44.4V32.2q4.4.9 5.6 4" fill="none" stroke="#fff" stroke-width="2.2"'
                 ' stroke-linecap="round" stroke-linejoin="round"/>'
                 '<circle cx="31.3" cy="44.6" r="3" fill="#fff"/>')
     elif kind == "video":
         defs += lin("vid", "#9575cd", "#5e35b1")
         mark = ('<rect x="19" y="28" width="28" height="21" rx="4" fill="url(#vid)"/>'
+                + (top_gloss(19, 28, 28, 21, 4) if GLOSS else "") +
                 '<path d="M30.2 33v11l9-5.5z" fill="#fff" stroke="#fff" stroke-width="1.2" '
                 'stroke-linejoin="round"/>')
     elif kind == "archive":
@@ -161,6 +245,8 @@ def file_icon(kind=None):
                 '<path d="M23.4 33l4.4 4-4.4 4" fill="none" stroke="#69f0ae" stroke-width="2.2" '
                 'stroke-linecap="round" stroke-linejoin="round"/>'
                 '<path d="M30.6 42.4h8" stroke="#eceff1" stroke-width="2.2" stroke-linecap="round"/>')
+        if GLOSS:
+            mark += top_gloss(18.5, 27, 29, 21, 3.4)
     elif kind == "diskimage":
         defs += rad("disc", "#ffffff", "#b4c0c8", .4, .35, .75)
         mark = ('<circle cx="33" cy="38.5" r="12.5" fill="url(#disc)" stroke="#8fa1ad"/>'
@@ -176,7 +262,7 @@ def file_icon(kind=None):
                 'stroke-width="2"/><ellipse cx="33" cy="38.5" rx="5" ry="12" fill="none" '
                 'stroke="#1e88e5" stroke-width="1.6"/><path d="M21 38.5h24M23 32.5h20M23 44.5h20" '
                 'stroke="#1e88e5" stroke-width="1.6"/>')
-    return svg(PAGE + mark, defs)
+    return svg(page() + mark, defs)
 
 
 # ------------------------------------------------------------------ per-extension
@@ -202,16 +288,19 @@ def ext_icon(kind, color, label):
     elif kind == "archive":
         glyph = SMALL_ARCHIVE
     else:
-        mark = full[full.index("</defs>") + 7:full.index("</svg>")][len(PAGE):]
+        mark = full[full.index("</defs>") + 7:full.index("</svg>")][len(page()):]
         glyph = '<g transform="translate(29.5 19.2) scale(.52) translate(-33 -38)">%s</g>' % mark
     ink = "#1f2328" if _luma(color) > 0.6 else "#ffffff"
     size = EXT_FONT[min(len(label), 5)]
-    badge = ('<rect x="6" y="32" width="40" height="22" rx="4" fill="%s"/>'
-             '<rect x="6" y="32" width="40" height="9" rx="4" fill="#fff" opacity=".16"/>'
+    shine = ('<rect x="6" y="32" width="40" height="9" rx="4" fill="#fff" opacity=".16"/>'
+             if not GLOSS else top_gloss(6, 32, 40, 22, 4) +
+             '<rect x="6.5" y="32.5" width="39" height="21" rx="3.6" fill="none" stroke="#fff" '
+             'stroke-opacity=".35"/>')
+    badge = ('<rect x="6" y="32" width="40" height="22" rx="4" fill="%s"/>' % color + shine +
              '<text x="26" y="%.1f" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, '
              'sans-serif" font-weight="700" font-size="%s" fill="%s">%s</text>'
-             % (color, 43 + size * 0.36, size, ink, label))
-    return svg(PAGE + glyph + badge, defs)
+             % (43 + size * 0.36, size, ink, label))
+    return svg(page() + glyph + badge, defs)
 
 
 # ------------------------------------------------------------------ places
@@ -313,6 +402,20 @@ def main():
         out[("devices", "harbor-drive" + ("" if k == "drive" else "-" + k))] = place(k)
     for k in ("network", "thispc", "trash", "trash-full", "quick-access"):
         out[("places", "harbor-" + k)] = place(k)
+    # glossy twins of every folder and file icon (Lumina Glass / Icons > Glossy)
+    global GLOSS
+    GLOSS = True
+    out[("places", "harbor-folder-glossy")] = folder()
+    for key in EMBLEMS:
+        out[("places", "harbor-folder-%s-glossy" % key)] = folder(key)
+    out[("mimetypes", "harbor-file-glossy")] = file_icon()
+    for k in ("text", "code", "image", "audio", "video", "archive", "pdf", "document",
+              "spreadsheet", "presentation", "executable", "diskimage", "font", "web"):
+        out[("mimetypes", "harbor-file-%s-glossy" % k)] = file_icon(k)
+    for row in files_icons.EXT_TABLE:
+        out[("mimetypes", "harbor-ext-%s-glossy" % row[0])] = ext_icon(
+            row[1], row[2], files_icons.ext_label(row))
+    GLOSS = False
     for (ctx, name), text in out.items():
         d = os.path.join(ROOT, ctx)
         os.makedirs(d, exist_ok=True)

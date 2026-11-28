@@ -249,8 +249,8 @@ class HomePage(Gtk.ScrolledWindow):
             row = Gtk.ListBoxRow()
             box = Gtk.Box(spacing=12, css_classes=["hbf-recent-row"])
             if files_icons.modern():
-                icon = Gio.ThemedIcon.new(files_icons.icon_for_type(
-                    info.get_mime_type() or "", os.path.basename(path)))
+                icon = Gio.ThemedIcon.new(files_icons.gloss(files_icons.icon_for_type(
+                    info.get_mime_type() or "", os.path.basename(path))))
             else:
                 icon = info.get_gicon() or Gio.ThemedIcon.new("text-x-generic")
             box.append(_image(icon, 20))

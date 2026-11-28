@@ -31,8 +31,8 @@ APPEARANCE_CHOICES = (
     ("glass", "Glass effect", "Style, opacity, rim and glare: Harbor Settings > Personalisation",
      (("harbor", "Same as all Harbor apps"), ("off", "Off"), ("soft", "Soft"),
       ("strong", "Strong"), ("planner", "Lumina Glass"), ("custom", "Custom (Harbor Settings)"))),
-    ("icons", "Icons", "Modern uses Harbor's own icon set",
-     (("modern", "Modern"), ("system", "System icon theme"))),
+    ("icons", "Icons", "Modern uses Harbor's own icon set (glossy with Lumina Glass)",
+     (("modern", "Modern"), ("glossy", "Glossy"), ("system", "System icon theme"))),
     ("folder_color", "Folder colour", "Every folder icon in the Modern set",
      (("classic", "Classic yellow"), ("accent", "Follow accent colour"))
      + tuple((k, PALETTE_LABELS[k]) for k in fc.FOLDER_PALETTE) + (("custom", "Custom"),)),
