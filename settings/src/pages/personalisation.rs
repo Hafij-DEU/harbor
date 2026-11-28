@@ -401,33 +401,38 @@ pub(crate) fn glass_section(app: &mut App, ui: &mut Ui, pal: &Palette) {
     let mut follow_change = None;
     let mut values = shown;
     widgets::card(ui, pal, |ui| {
+        // Two choices only: the desktop-wide glass, or one app's own glass.
+        // "Per app" opens a second line with the apps (All Harbor apps first).
+        let per_app = scope != GlassScope::Global;
         glass_row(
             ui,
             pal,
             "Apply to",
             "Global is the desktop: the same settings as Fusion Desk › Appearance",
             |ui| {
-                for s in &GlassScope::ALL[..5] {
-                    if segment(ui, pal, s.label(), *s == scope) {
-                        pick_scope = Some(*s);
-                    }
+                if segment(ui, pal, "Global", !per_app) {
+                    pick_scope = Some(GlassScope::Global);
+                }
+                if segment(ui, pal, "Per app", per_app) && !per_app {
+                    pick_scope = Some(GlassScope::ALL[1]);
                 }
             },
         );
-        widgets::divider(ui, pal);
-        glass_row(
-            ui,
-            pal,
-            "Other apps",
-            "App Hub, Draco, Astra Player, SysMic Recorder and Extendo read the same glass",
-            |ui| {
-                for s in &GlassScope::ALL[5..] {
-                    if segment(ui, pal, s.label(), *s == scope) {
-                        pick_scope = Some(*s);
+        if per_app {
+            glass_row(
+                ui,
+                pal,
+                "App",
+                "Each app follows the glass above it or gets its own",
+                |ui| {
+                    for s in &GlassScope::ALL[1..] {
+                        if segment(ui, pal, s.label(), *s == scope) {
+                            pick_scope = Some(*s);
+                        }
                     }
-                }
-            },
-        );
+                },
+            );
+        }
         if let Some(parent) = scope.parent() {
             widgets::divider(ui, pal);
             let mut follow = own.is_none();

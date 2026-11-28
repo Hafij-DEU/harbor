@@ -286,7 +286,12 @@ impl App {
             look: system::saved_look(),
             recent: system::saved_recent(),
             glass_scopes: system::GlassScope::ALL.map(system::scope_glass),
-            glass_edit: system::GlassScope::Global, // the desktop-wide glass opens first
+            // the desktop-wide glass opens first; WIN11_SETTINGS_GLASS_SCOPE=<index> for screenshots
+            glass_edit: std::env::var("WIN11_SETTINGS_GLASS_SCOPE")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .and_then(|i| system::GlassScope::ALL.get(i).copied())
+                .unwrap_or(system::GlassScope::Global),
             glass_window: system::glass_window(),
             frame_r: 0,
             keyboard: Default::default(),
